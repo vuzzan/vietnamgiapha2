@@ -388,9 +388,6 @@
     <Resource Include="Assets\01-Warning-icon.png" />
   </ItemGroup>
   <ItemGroup>
-    <WCFMetadata Include="Connected Services\" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\SmithHtmlEditor\SmithHtmlEditor.csproj">
       <Project>{0e7c87b5-3fe1-472a-9c75-458aca8e504a}</Project>
       <Name>SmithHtmlEditor</Name>
