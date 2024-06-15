@@ -266,17 +266,23 @@ namespace vietnamgiapha
         private void ListView_ListNguoiTrongGiaDinh_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
             PersonInfo personInfo = ((ListView)sender).SelectedItem as PersonInfo;
-            viewModel.FamilyTree.Family.SelectedPerson = personInfo;
-            viewModel.FamilyTree.Family.SelectedFamily.IsExpanded = true;
-            viewModel.FamilyTree.Family.SelectedFamily.IsSelected = true;
-            log.Info("Chọn người: " + viewModel.FamilyTree.Family.SelectedPerson.MANS_NAME_HUY);
+            if (personInfo != null)
+            {
+                viewModel.FamilyTree.Family.SelectedPerson = personInfo;
+                viewModel.FamilyTree.Family.SelectedFamily.IsExpanded = true;
+                viewModel.FamilyTree.Family.SelectedFamily.IsSelected = true;
+                log.Info("Chọn người: " + viewModel.FamilyTree.Family.SelectedPerson.MANS_NAME_HUY);
+            }
         }
 
         private void ListView_ListNguoiTrongGiaDinh_MouseDown_1(object sender, MouseButtonEventArgs e)
         {
             PersonInfo personInfo = ((ListView)sender).SelectedItem as PersonInfo;
-            viewModel.FamilyTree.Family.SelectedPerson = personInfo;
-            log.Info("Chọn người: " + viewModel.FamilyTree.Family.SelectedPerson.MANS_NAME_HUY);
+            if (personInfo != null)
+            {
+                viewModel.FamilyTree.Family.SelectedPerson = personInfo;
+                log.Info("Chọn người: " + viewModel.FamilyTree.Family.SelectedPerson.MANS_NAME_HUY);
+            }
         }
 
         private void htmlViewer_PhaKy_MouseDoubleClick(object sender, MouseButtonEventArgs e)

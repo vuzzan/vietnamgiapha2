@@ -44,6 +44,9 @@ namespace vietnamgiapha
             CutFamilyClick = new RelayCommand(CutFamilyClickFunc);
             PasteFamilyClick = new RelayCommand(PasteFamilyClickFunc);
             InsertFamilyClick = new RelayCommand(InsertFamilyClickFunc);
+            InsertFamilyAnhClick = new RelayCommand(InsertFamilyAnhClickFunc);
+            InsertFamilyEmClick = new RelayCommand(InsertFamilyEmClickFunc);
+            InsertFamilyConClick = new RelayCommand(InsertFamilyConClickFunc);
             RemoveFamilyClick = new RelayCommand(RemoveFamilyClickFunc);
             InsertPerson2FamilyClick = new RelayCommand(InsertPerson2FamilyClickFunc);
         }
@@ -58,6 +61,9 @@ namespace vietnamgiapha
         public ICommand CutFamilyClick { get; set; }
         public ICommand PasteFamilyClick { get; set; }
         public ICommand InsertFamilyClick { get; set; }
+        public ICommand InsertFamilyAnhClick { get; set; }
+        public ICommand InsertFamilyEmClick { get; set; }
+        public ICommand InsertFamilyConClick { get; set; }
         public ICommand RemoveFamilyClick { get; set; }
         public ICommand InsertPerson2FamilyClick { get; set; }
 
@@ -77,55 +83,120 @@ namespace vietnamgiapha
         }
         private void RemoveFamilyClickFunc()
         {
-            MessageBox.Show("Xóa gia đình vị trí hiện tại - " + _familyInfo.Name);
+            if (this.Parent != null)
+            {
+                if (this.Parent.Children.IndexOf(this) > -1)
+                {
+                    if (MessageBox.Show("Xác nhận xóa gia đình vị trí hiện tại, nên tất cả gia đình con của " + Name + " sẽ mất", "Xác nhận",
+                        MessageBoxButton.OKCancel) == MessageBoxResult.OK)
+                    {
+                        this.Parent.Children.Remove(this);
+                        this.Parent.IsExpanded = true;
+                        this.Parent.IsSelected = true;
+                        _objFamilyTree.OnPropertyChanged("GP");
+                    }
+                }
+            }
         }
-        private void InsertFamilyClickFunc()
+        private void InsertFamilyConClickFunc()
         {
-            //MessageBox.Show("Chèn gia đình mới vô vị trí hiện tại - " + _person.Name);
-            
-
             // 1. Thêm thông tin gia đình mới vô 
             FamilyInfo insertFamily = new FamilyInfo();
             insertFamily.FamilyId = 0;
             insertFamily.FamilyLevel = this._familyInfo.FamilyLevel;
             insertFamily.FamilyUp = this._familyInfo.FamilyUp;
             insertFamily.FamilyOrder = this._familyInfo.FamilyOrder;
-            // 3. Thêm 1 người mới tự động vô gia đình
+            // 2. Thêm 1 người mới tự động vô gia đình
             insertFamily.ListPerson = new ObservableCollection<PersonInfo>();
-            insertFamily.ListPerson.Add(new PersonInfo("Người mới", insertFamily));
+            insertFamily.ListPerson.Add(new PersonInfo("Con thứ " + (_familyListChildren.Count+1) + " của [" + Name0 + "]", insertFamily));
 
+            insertFamily.FamilyLevel = this._familyInfo.FamilyLevel + 1;
+            insertFamily.FamilyUp = this._familyInfo.FamilyId;
+            insertFamily.FamilyOrder = this._familyInfo.FamilyOrder;
+            //
+            this._familyListChildren.Add(new FamilyViewModel(insertFamily, this, _objFamilyTree));
+            this.IsExpanded = true;
+            this.IsSelected = true;
+            _objFamilyTree.OnPropertyChanged("GP");
+        }
+        private void InsertFamilyEmClickFunc()
+        {
             if (this.Parent == null)
             {
-                insertFamily.FamilyLevel = this._familyInfo.FamilyLevel+1;
-                insertFamily.FamilyUp = this._familyInfo.FamilyId;
-                insertFamily.FamilyOrder = this._familyInfo.FamilyOrder;
-
-                this._familyListChildren.Add(new FamilyViewModel(insertFamily, this, _objFamilyTree));
-                _objFamilyTree.OnPropertyChanged("GP");
                 return;
             }
-            insertFamily.FamilyChildren = new ObservableCollection<FamilyInfo>();
-            // 2. Cho gia đình hiện tại trở thành con của gia đình chèn vô
-            insertFamily.FamilyChildren.Add(this._familyInfo);
-
-            // 4. Tạo thông tin gia đình mới, liên kết với phía gia đình hiện tại (là con)
-            FamilyViewModel insert = new FamilyViewModel(insertFamily, this._familyParent, _objFamilyTree);
-
-            // 5. Tạo thông tin gia đình mới, liên kết với phía gia đình cha
-            if (this.Parent.Children.Contains(this))
+        }
+        private void InsertFamilyAnhClickFunc()
+        {
+            if (this.Parent == null)
             {
-                // 5.1 . Remove gia đình hiện tại, thêm gia đình chèn vô
-                int index = this.Parent.Children.IndexOf(this);
-                this.Parent.Children.Remove(this);
-                this.Parent.Children.Insert(index, insert);
+                return;
             }
 
             
+        }
+        private void InsertFamilyClickFunc()
+        {
+            // 1. Thêm thông tin gia đình mới vô 
+            FamilyInfo newInsertFamily = new FamilyInfo();
+            newInsertFamily.FamilyId = 0;
+            newInsertFamily.FamilyLevel = this._familyInfo.FamilyLevel;
+            newInsertFamily.FamilyUp = this._familyInfo.FamilyUp;
+            newInsertFamily.FamilyOrder = this._familyInfo.FamilyOrder;
+            // 3. Thêm 1 người mới tự động vô gia đình
+            newInsertFamily.ListPerson = new ObservableCollection<PersonInfo>();
+
+            if (this.Parent == null)
+            {
+                //MessageBox.Show("Vì là gia đình Thủy Tổ (gốc), nên sẽ thêm gia đình con - " + this.Name0);
+                
+                //insertFamily.ListPerson.Add(new PersonInfo("Con thứ " + (_familyListChildren.Count+1) + " của [" + Name0 + "]", insertFamily));
+
+                //insertFamily.FamilyLevel = this._familyInfo.FamilyLevel+1;
+                //insertFamily.FamilyUp = this._familyInfo.FamilyId;
+                //insertFamily.FamilyOrder = this._familyInfo.FamilyOrder;
+
+                //this._familyListChildren.Add(new FamilyViewModel(insertFamily, this, _objFamilyTree));
+                //_objFamilyTree.OnPropertyChanged("GP");
+                //return;
+            }
+            //
+            newInsertFamily.ListPerson.Add(new PersonInfo("Cha của [" + Name0 + "]", newInsertFamily));
+
+            newInsertFamily.FamilyChildren = new ObservableCollection<FamilyInfo>();
+            // 2. Cho gia đình hiện tại trở thành con của gia đình chèn vô
+            newInsertFamily.FamilyChildren.Add(this._familyInfo);
+
+
+            // 4. Tạo thông tin gia đình mới, liên kết với phía gia đình hiện tại (là con)
+            FamilyViewModel insert = new FamilyViewModel(newInsertFamily, this._familyParent, _objFamilyTree);
+
+            // 5. Tạo thông tin gia đình mới, liên kết với phía gia đình cha
+            if(this.Parent!=null)
+            {
+                if (this.Parent.Children.Contains(this))
+                {
+                    // 5.1 . Remove gia đình hiện tại, thêm gia đình chèn vô
+                    int index = this.Parent.Children.IndexOf(this);
+                    this.Parent.Children.Remove(this);
+                    this.Parent.Children.Insert(index, insert);
+                }
+                this.Parent = insert;
+            }
+            else
+            {
+                // Insert truoc Thuy to
+                this.Parent = insert;
+            }
+
             // 6. Update gia đình this tăng 1 bậc sâu
             UpdateLevel(this, 1);
 
             this.IsExpanded = true;
             this.IsSelected = true;
+            if (insert.Parent == null) {
+                _objFamilyTree.Family.UpdateRootPerson(insert);
+            }
             _objFamilyTree.OnPropertyChanged("GP");
         }
 
@@ -150,6 +221,11 @@ namespace vietnamgiapha
         public string Name
         {
             get { return _familyInfo.Name; }
+        }
+
+        public string Name0
+        {
+            get { return _familyInfo.Name0; }
         }
 
         public ObservableCollection<PersonInfo> ListPerson
@@ -223,6 +299,11 @@ namespace vietnamgiapha
         public FamilyViewModel Parent
         {
             get { return _familyParent; }
+
+            set {
+                _familyParent = value;
+                _objFamilyTree.OnPropertyChanged(nameof(Parent));
+            }
         }
 
         #endregion // Parent

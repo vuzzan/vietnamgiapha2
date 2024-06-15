@@ -8,7 +8,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:smith="clr-namespace:Smith.WPF.HtmlEditor;assembly=Smith.WPF.HtmlEditor"
         d:DataContext="{d:DesignInstance local:MainWindowViewModel}"
-        Title="Việt Nam Gia Phả 2.01111 - www.vietnamgiapha.com từ năm 2003" 
+        Title="Việt Nam Gia Phả 2.2024 - www.vietnamgiapha.com từ năm 2003" 
         Width="1024"
         Height="768"
         MinWidth="800"
@@ -264,11 +264,17 @@
                                     <Setter Property="ContextMenu">
                                         <Setter.Value>
                                             <ContextMenu Focusable="False">
+                                                <Separator/>
                                                 <MenuItem Command="{Binding CutFamilyClick}" Header="GD -> Cắt" />
                                                 <MenuItem Command="{Binding PasteFamilyClick}" Header="GD -> Dán" />
-                                                <MenuItem Command="{Binding InsertFamilyClick}" Header="GD -> Chèn" />
+                                                <Separator/>
+                                                <MenuItem Command="{Binding InsertFamilyClick}" Header="GD -> Chèn Trước" />
+                                                <MenuItem Command="{Binding InsertFamilyAnhClick}" Header="GD -> Thêm GD Anh" />
+                                                <MenuItem Command="{Binding InsertFamilyEmClick}" Header="GD -> Thêm GD Em" />
+                                                <MenuItem Command="{Binding InsertFamilyConClick}" Header="GD -> Thêm GD Con" />
                                                 <Separator/>
                                                 <MenuItem Command="{Binding RemoveFamilyClick}" Header="GD -> Xóa" />
+                                                <Separator/>
                                                 <MenuItem Command="{Binding InsertPerson2FamilyClick}" Header="Người: Thêm người" />
                                             </ContextMenu>
                                         </Setter.Value>

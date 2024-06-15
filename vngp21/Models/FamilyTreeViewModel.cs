@@ -16,7 +16,7 @@ namespace vietnamgiapha
     public class FamilyTreeViewModel : INotifyPropertyChanged
     {
         #region Data
-        private ObservableCollection<FamilyViewModel> _firstGeneration;
+        public ObservableCollection<FamilyViewModel> _firstGeneration;
         private FamilyViewModel _rootPerson;
         readonly ICommand _searchCommand;
         IEnumerator<FamilyViewModel> _matchingPeopleEnumerator;
@@ -25,11 +25,18 @@ namespace vietnamgiapha
         FamilyViewModel _selectedFamily;
         PersonInfo _selectedPerson;
 
-        private GiaPhaViewModel _objFamilyTree;
+        public GiaPhaViewModel _objFamilyTree;
         #endregion // Data
 
         #region Constructor
-
+        public void UpdateRootPerson(FamilyViewModel rootPerson)
+        {
+            RootPerson = rootPerson;
+            _firstGeneration.Clear();
+            _firstGeneration.Add(rootPerson);
+            SelectedFamily = RootPerson;
+            OnPropertyChanged("RootPerson");
+        }
         public FamilyTreeViewModel(FamilyInfo rootPerson, GiaPhaViewModel objFamilyTree)
         {
             _objFamilyTree = objFamilyTree;

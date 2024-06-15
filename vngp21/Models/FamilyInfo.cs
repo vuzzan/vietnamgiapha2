@@ -193,6 +193,23 @@ namespace vietnamgiapha
             }
         }
 
+        public string Name0
+        {
+            get
+            {
+                String tmp = "";
+                if (_listPerson.Count >= 1)
+                {
+                    tmp += _listPerson[0].MANS_NAME_HUY + " + ";
+                    return tmp.Substring(0, tmp.Length - 2);
+                }
+                else if (_listPerson.Count == 0)
+                {
+                }
+                return "No";
+            }
+        }
+
         public event PropertyChangedEventHandler PropertyChanged;
         public virtual void OnPropertyChanged(string propertyName)
         {
