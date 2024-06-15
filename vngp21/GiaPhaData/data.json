@@ -1,0 +1,93 @@
+[
+  1,
+  "LƯƠNG - Nam Phước",
+  [
+    [ 1, 1, 1, 0 ],
+    [ [ "Lương Trường Thọ", "", "", "", "1", "1", "1", "", "Ngày kỵ 15/4 Âm Lịch", "Mộ ông tại đất Cai Sanh, làng cũ Phước Ninh, nay xã Quế Châu, huyện Quế Sơn", "Là thủy tổ của tộc Lương. Mộ ông tại đất Cai Sanh, làng cũ Phước Ninh, nay xã Quế Châu, huyện Quế Sơn", "0" ] ],
+    [
+      [
+        [ 4, 2, 3, 1 ],
+        [ [ "Lương Văn Hào", "", "", "", "5", "4", "1", "", "", "", "", "0" ] ],
+        [ null ]
+      ],
+      [
+        [ 3, 2, 4, 1 ],
+        [
+          [ "Lương Văn Bản", "", "", "", "3", "3", "1", "", "", "Mộ ông tại Đồng Thành, Quế Châu, Quế Sơn.", "", "0" ],
+          [ "Trần Thị Thê", "", "", "", "4", "3", "0", "", "", "Mộ bà tại Đồng Thành, Quế Châu, Quế Sơn.", "", "0" ]
+        ],
+        [ null ]
+      ],
+      [
+        [ 6, 2, 5, 1 ],
+        [ [ "Lương Văn Trường", "Huý: Thăng Lộc T̗", "", "", "7", "6", "1", "", "Ngày kỵ 25/11 Âm lịc", "Mộ ông tại Đồng Thành, Quế Châu, Quế Sơn.", "", "0" ] ],
+        [
+          [
+            [ 7, 3, 7, 6 ],
+            [
+              [ "Lương Văn Trung", "", "", "", "8", "7", "1", "", "", "Mộ ông tại Đồng Thành, Quế Châu, Quế Sơn.", " ", "0" ],
+              [ "Nguyễn Thị Kha", "", "", "", "9", "7", "0", "", "", "Mộ bà tại Đồng Thành, Quế Châu, Quế Sơn.", "", "0" ]
+            ],
+            [ null ]
+          ],
+          [
+            [ 8, 3, 8, 6 ],
+            [
+              [ "Lương Văn Chánh", "", "", "", "10", "8", "1", "", "Ngày kỵ 09/5 Âm lịch", "Mộ ông tại Triều Dương, Long Châu, Duy Xuyên. Nay dời lên Nổng Bồ, Duy Trung, Duy Xuyên", "Thuỷ tổ bộ phận tộc Lương tại Nam Phước: ông Lương Văn Chánh", "0" ],
+              [ "Hà Thị Xuyến", "", "", "", "11", "8", "0", "", "Ngày kỵ 06/3 Âm lịch", "Mộ bà tại Triều Dương, Long Châu, Duy Xuyên. Nay dời lên Nổng Bồ, Duy Trung, Duy Xuyên", "Quê bà ở Quận Lư Giang", "0" ]
+            ],
+            [
+              [
+                [ 9, 4, 9, 8 ],
+                [
+                  [ "Lương Văn Lực", "", "", "", "12", "9", "1", "", "Ngày kỵ 19/7 Âm lịch", "Mộ ông tại Phù Sa, Nam Phước. Nay dời lên Nổng Bồ, Duy Trung, Duy Xuyên", "Trưởng phái nhất: ông Lương Văn Lực", "0" ],
+                  [ "Hà Thị Cũng", "", "", "", "13", "9", "0", "", "Ngày kỵ 10/02 Âm lịc", "Mộ bà tại Phù Sa, Nam Phước. Nay dời lên Nổng Bồ, Duy Trung, Duy Xuyên", "", "0" ]
+                ],
+                [ null ]
+              ],
+              [
+                [ 10, 4, 10, 8 ],
+                [
+                  [ "Lương Văn Tỵ", "", "", "", "14", "10", "1", "", "Ngày kỵ 29/8 Âm lịch", "Mộ ông tại Gò Bạc, Long Châu, Nam Phước. Nay dời lên Nổng Bồ, Duy Trung, Duy Xuyên", "Trưởng phái nhì: ông Lương Văn Tỵ ", "0" ],
+                  [ "Hà Thị Mô", "", "", "", "15", "10", "0", "", "Ngày kỵ 02/01 Âm lịc", "Mộ bà tại Gò Bạc, Long Châu, Nam Phước. Nay dời lên Nổng Bồ, Duy Trung, Duy Xuyên", "", "0" ]
+                ],
+                [ null ]
+              ],
+              [
+                [ 11, 4, 11, 8 ],
+                [ [ "Lương Văn Chiếm", "", "", "", "16", "11", "1", "", "Ngày kỵ 09/7 Âm lịch", "", "Trưởng phái ba: ông Lương Văn Chiếm", "0" ] ],
+                [ null ]
+              ],
+              [
+                [ 12, 4, 12, 8 ],
+                [
+                  [ "Lương Văn Toán", "", "", "", "17", "12", "1", "", "Ngày kỵ 15/9 Âm lịch", "Mộ ông tại Cồn Lăng, Long Trứ, Nam Phước. Nay dời lên Nổng Bồ, Duy Trung, Duy Xuyên", "Trưởng phái tư: ông Lương Văn Toán", "0" ],
+                  [ "Mai Thị Cai", "", "", "", "25", "12", "0", "", "Ngày kỵ 13/10 Âm lịc", "Mộ bà tại Cồn Lăng, Long Trứ, Nam Phước. Nay dời lên Nổng Bồ, Duy Trung, Duy Xuyên", "", "0" ]
+                ],
+                [ null ]
+              ]
+            ]
+          ],
+          [
+            [ 17, 3, 9, 6 ],
+            [ [ "Lương Văn Quế", "", "", "", "22", "17", "1", "", "", "", "", "0" ] ],
+            [ null ]
+          ],
+          [
+            [ 18, 3, 10, 6 ],
+            [
+              [ "Lương Văn Lang", "", "", "", "23", "18", "1", "", "Ngày kỵ 02/10 Âm lịc", "", "", "0" ],
+              [ "Trương Thị Việt", "", "", "", "24", "18", "0", "", "Ngày kỵ 24/02 Âm lịc", "", "Quê bà ở Quận Thanh Hà", "0" ]
+            ],
+            [ null ]
+          ]
+        ]
+      ],
+      [
+        [ 5, 2, 6, 1 ],
+        [ [ "Lương Văn Quá", "", "", "", "6", "5", "1", "", "", "", "", "0" ] ],
+        [ null ]
+      ]
+    ]
+  ]
+]
