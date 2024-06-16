@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Security.Policy;
+using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using System.Web.UI.WebControls;
@@ -119,6 +120,29 @@ namespace vietnamgiapha
                 log.Error(ex);
             }
             return false;
+        }
+        public static async Task<string> UploadWeb(string u, string p, string jsonBody)
+        {
+            try
+            {
+                var client = new HttpClient();
+                client.DefaultRequestHeaders.Accept.Clear();
+                client.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml,application/json;q=0.9,image/avif,image/webp,*/*;q=0.8");
+                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36");
+                //https://vietnamgiapha.com/export/index2c.php?u=nghia&p=shogun
+                string url = "https://vietnamgiapha.com/export/index2c.php?f=u&u=" + u + "&p=" + p;
+                log.Info("Upload " + url);
+                var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
+                var response = await client.PostAsync(url, content);
+                string responseBody = response.Content.ReadAsStringAsync().Result;
+                log.Info("Upload: " + responseBody.Length);
+                return responseBody;
+            }
+            catch (Exception ex)
+            {
+                log.Error("ERROR: Upload " + ex.Message);
+                return null;
+            }
         }
         private static async Task<string> DownloadWeb(string u, string p)
         {
@@ -297,6 +321,7 @@ namespace vietnamgiapha
                     }
                     else
                     {
+                        int countMain = 0;
                         for (int i = 0; i < family.ListPerson.Count; i++)
                         {
                             // Add first person
@@ -305,10 +330,20 @@ namespace vietnamgiapha
                                 // YES
                                 family.ListPerson[i].IsMainPerson = 1;
                                 _listPerson.Add(family.ListPerson[i]);
+                                countMain++;
                                 break;
                             }
                         }
-
+                        //
+                        // If count main =0, set defualt 1
+                        if (countMain == 0)
+                        {
+                            if (family.ListPerson.Count > 0)
+                            {
+                                family.ListPerson[0].IsMainPerson = 1;
+                                _listPerson.Add(family.ListPerson[0]);
+                            }
+                        }
                         // add other
                         for (int i = 0; i < family.ListPerson.Count; i++)
                         {
@@ -318,7 +353,12 @@ namespace vietnamgiapha
                                 family.ListPerson[i].IsMainPerson = 0;
                                 _listPerson.Add(family.ListPerson[i]);
                             }
+                            if(family.ListPerson[i].IsMainPerson==1)
+                            {
+                                countMain++;
+                            }
                         }
+                        
                     }
                     
                     //
@@ -360,7 +400,10 @@ namespace vietnamgiapha
                     familyMember.MANS_NAME_THUY = personInfoArray[3].ToString();
                     familyMember.MANS_ID = personInfoArray[4].ToString();
                     familyMember.fid = personInfoArray[5].ToString();
-                    familyMember.MANS_GENDER = Convert.ToInt16(personInfoArray[6].ToString()) == 1 ? "Nam" : "Nữ";
+                    if(personInfoArray[6].ToString().Length>0)
+                    {
+                        familyMember.MANS_GENDER = Convert.ToInt16(personInfoArray[6].ToString()) == 1 ? "Nam" : "Nữ";
+                    }
                     familyMember.MANS_DOB = personInfoArray[7].ToString();
                     familyMember.MANS_DOD = personInfoArray[8].ToString();
                     familyMember.MANS_WOD = personInfoArray[9].ToString();

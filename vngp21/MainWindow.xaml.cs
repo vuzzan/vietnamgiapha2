@@ -352,9 +352,40 @@ namespace vietnamgiapha
             await _progressDialogController.CloseAsync();
         }
 
-        private void BtnUploadGiaPha_Click(object sender, RoutedEventArgs e)
+        private async void BtnUploadGiaPha_Click(object sender, RoutedEventArgs e)
         {
+            if (viewModel.FamilyTree.Username.Trim().Length == 0 || viewModel.FamilyTree.Password.Trim().Length == 0)
+            {
+                MessageBox.Show("Nhập user name và password của trang web vietnamgiapha.com");
+                return;
+            }
+            var _progressDialogController = await this.ShowProgressAsync("Đợi upload lên web...", "Đang upload từ web vietnamgiapha.com");
+            _progressDialogController.SetProgress(0);
+            _progressDialogController.SetIndeterminate();
 
+            try
+            {
+                //BtnDownloadGiaPha.IsEnabled = false;
+                string gp = await Database.UploadWeb(
+                    viewModel.FamilyTree.Username.Trim().ToLower(), 
+                    viewModel.FamilyTree.Password.Trim(),
+                    viewModel.FamilyTree.ToJson()
+                    );
+                _progressDialogController.SetProgress(1);
+                if (gp != null)
+                {
+                    log.Info("BtnUploadGiaPha_Click: upload từ web : " + gp);
+                    MessageBox.Show(gp, "Upload");
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Lỗi upload web: " + ex.Message, "Có Lỗi");
+                log.Error("BtnUploadGiaPha_Click: Lỗi upload web: " + ex.Message);
+                log.Error(ex);
+            }
+            //BtnDownloadGiaPha.IsEnabled = true;
+            await _progressDialogController.CloseAsync();
         }
     }
 }

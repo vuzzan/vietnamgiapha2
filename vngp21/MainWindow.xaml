@@ -414,10 +414,10 @@ OnContent="Nam"
                                                     </mah:MetroHeader>
 
 
-                                                    <mah:ToggleSwitch Grid.Row="5"  Grid.Column="1" Header="Con Trai/gái - Dâu/Rể" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}"
-OffContent="Dâu/Rể"
-OnContent="Con Trai/gái"
->
+                                                    <mah:ToggleSwitch Grid.Row="5"  Grid.Column="1" Header="Con trong tộc - Dâu/Rể" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}"
+                                                        OffContent="Dâu/Rể"
+                                                        OnContent="Con Trong Tộc"
+                                                        >
                                                         <mah:ToggleSwitch.IsOn>
                                                             <Binding Path="IsMainPerson" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged" />
                                                         </mah:ToggleSwitch.IsOn>

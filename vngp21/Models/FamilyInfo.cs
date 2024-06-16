@@ -65,7 +65,40 @@ namespace vietnamgiapha
     }
     public class PersonInfo : INotifyPropertyChanged
     {
-        public int IsMainPerson { get; set; }
+        private int _IsMainPerson;
+        public int IsMainPerson {
+            get { 
+                return _IsMainPerson;
+            }
+            set {
+                _IsMainPerson = value;
+                if (_IsMainPerson == 1)
+                {
+                    // Only 1 isMainPerson
+                    foreach( var person in _familyInfo.ListPerson)
+                    {
+                        if (person != this)
+                        {
+                            person.IsMainPerson = 0;
+                        }
+                    }
+                }
+                else
+                {
+                    // Only 1 isMainPerson
+                    //foreach (var person in _familyInfo.ListPerson)
+                    //{
+                    //    if (person != this)
+                    //    {
+                    //        person.IsMainPerson = 1;
+                    //        break;
+                    //    }
+                    //}
+                }
+                OnPropertyChanged("IsMainPerson");
+                _familyInfo.OnPropertyChanged("");
+            }
+        }
         
         public FamilyInfo _familyInfo { get; set; }
 
@@ -298,5 +331,17 @@ namespace vietnamgiapha
             }
         }
 
+        public int GetMaxFamilyId(int maxFamilyId)
+        {
+            if (maxFamilyId < FamilyId)
+            {
+                maxFamilyId = FamilyId;
+            }
+            foreach(var f in _familyChildren)
+            {
+                maxFamilyId = f.GetMaxFamilyId(maxFamilyId);
+            }
+            return maxFamilyId;
+        }
     }
 }

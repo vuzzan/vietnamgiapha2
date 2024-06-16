@@ -76,7 +76,7 @@ namespace vietnamgiapha
         // MENU FUNCTION
         private void DebugFamilyClickFunc()
         {
-            string text = "Gia đình - " + this.Name0 + " | ID=[" + this._familyInfo.FamilyId +"]" + Environment.NewLine;
+            string text = "Gia đình - " + this.Name0 + " | ID=[" + this._familyInfo.FamilyId + "] UP=[" + this._familyInfo.FamilyUp  + "]" + Environment.NewLine;
             text += "    --- " + Environment.NewLine;
             if (this.Parent != null)
             {
@@ -145,7 +145,11 @@ namespace vietnamgiapha
         }
         private void InsertPerson2FamilyClickFunc()
         {
-            MessageBox.Show("Thêm người vào gia đình - " + _familyInfo.Name);
+            if( this.ListPerson.Count>=1)
+            {
+                var person = new PersonInfo("Người mới", this._familyInfo);
+                this.ListPerson.Add(person);
+            }
         }
         private void RemoveFamilyClickFunc()
         {
@@ -192,7 +196,7 @@ namespace vietnamgiapha
         {
             // 1. Thêm thông tin gia đình mới vô 
             FamilyInfo insertFamily = new FamilyInfo();
-            insertFamily.FamilyId = 0;
+            insertFamily.FamilyId = this._objFamilyTree.Family.GetMaxFamilyId()+1;
             insertFamily.FamilyLevel = this._familyInfo.FamilyLevel;
             insertFamily.FamilyUp = this._familyInfo.FamilyUp;
             insertFamily.FamilyOrder = this._familyInfo.FamilyOrder;
@@ -251,7 +255,7 @@ namespace vietnamgiapha
         {
             // 1. Thêm thông tin gia đình mới vô 
             FamilyInfo newInsertFamily = new FamilyInfo();
-            newInsertFamily.FamilyId = 0;
+            newInsertFamily.FamilyId = this._objFamilyTree.Family.GetMaxFamilyId() + 1;
             newInsertFamily.FamilyLevel = this._familyInfo.FamilyLevel;
             newInsertFamily.FamilyUp = this._familyInfo.FamilyUp;
             newInsertFamily.FamilyOrder = this._familyInfo.FamilyOrder;
@@ -489,6 +493,19 @@ namespace vietnamgiapha
             // Print end of family array
             json += "]";
             return json;
+        }
+
+        internal int GetMaxFamilyId(int max)
+        {
+            if(max < _familyInfo.FamilyId)
+            {
+                max = _familyInfo.FamilyId;
+            }
+            foreach (var item in this.Children)
+            {
+                max = item.GetMaxFamilyId(max);
+            }
+            return max;
         }
     }
 }

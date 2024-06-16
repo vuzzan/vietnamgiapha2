@@ -53,9 +53,14 @@ namespace vietnamgiapha
         #endregion // Constructor
         public string ToJson()
         {
-            return _rootPerson.ToJson();
+            return RootPerson.ToJson();
+        }
+        public int GetMaxFamilyId()
+        {
+            return _rootPerson.GetMaxFamilyId(0);
         }
         #region Properties
+
         public FamilyViewModel RootPerson
         {
             get { return _rootPerson; }
