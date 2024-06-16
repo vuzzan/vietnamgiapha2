@@ -24,6 +24,7 @@
       update to NetCore 3.0
       </PackageReleaseNotes>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <Platforms>AnyCPU;x86</Platforms>
   </PropertyGroup>
 
   <Target Name="PreBuild" BeforeTargets="PreBuildEvent">

@@ -5,22 +5,13 @@ using System.Windows.Input;
 using System.Windows.Media.Media3D;
 using System.Windows.Media;
 using System.Windows;
-using vietnamgiapha.TextSearch;
 using System;
 using System.Linq;
 using log4net.Repository;
 using System.IO;
 using System.Reflection;
-using System.Collections.Generic;
-using System.IO.Pipes;
-using System.Windows.Documents;
-using Smith.WPF.HtmlEditor;
-using System.Diagnostics;
-using System.Net;
 using AutoUpdaterDotNET;
-using System.Runtime.ConstrainedExecution;
-using System.Timers;
-using System.Threading;
+using System.Configuration;
 
 namespace vietnamgiapha
 {
@@ -36,12 +27,13 @@ namespace vietnamgiapha
             ILoggerRepository repository = log4net.LogManager.GetRepository(Assembly.GetCallingAssembly());
             var fileInfo = new FileInfo(@"log4net.config");
             log4net.Config.XmlConfigurator.Configure(repository, fileInfo);
-
+            //
             InitializeComponent();
             string ver = Assembly.GetExecutingAssembly().GetName().Version.ToString();
             log.Info("Application started...version " + ver);
             AutoUpdater.Start("https://vietnamgiapha.com/download/autoupdate.xml");
             InitEvents();
+            this.Title = this.Title + " - " + ver;
             this.viewModel = new MainWindowViewModel(DialogCoordinator.Instance, this);
             this.DataContext = this.viewModel;
             //
@@ -54,6 +46,12 @@ namespace vietnamgiapha
                 htmlEditorPhaKy.ContentHtml = viewModel.FamilyTree.PhaKy;
                 htmlEditorHuongHoa.ContentHtml = viewModel.FamilyTree.HuongHoa;
                 htmlEditorThuyto.ContentHtml = viewModel.FamilyTree.ThuyTo;
+
+                if (viewModel.FamilyTree.GP.FileName.Length == 0)
+                {
+                    string defaultSaveFolder = ConfigurationManager.AppSettings["defaultSaveFolder"];
+                    viewModel.FamilyTree.GP.FileName = defaultSaveFolder +"\\"+viewModel.FamilyTree.GP.GiaphaName.Replace(" ", "_") + "_" + ".json";
+                }
             }
         }
         void InitEvents()
@@ -294,25 +292,69 @@ namespace vietnamgiapha
         {
         }
         
-        private void MenuItem_Click_3(object sender, RoutedEventArgs e)
+        private void Button_Click(object sender, RoutedEventArgs e)
         {
 
         }
 
-        private void cmbFontFamily1_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void BtnLogin_Click(object sender, RoutedEventArgs e)
+        {
+            //this.viewModel.AddItemLogs("Begin login");
+        }
+
+        private async void BtnDownloadGiaPha_Click(object sender, RoutedEventArgs e)
+        {
+            if(viewModel.FamilyTree.Username.Trim().Length==0 || viewModel.FamilyTree.Password.Trim().Length == 0)
+            {
+                MessageBox.Show("Nhập user name và password của trang web vietnamgiapha.com");
+                return;
+            }
+            if (MessageBox.Show("Xác nhận: Download gia phả từ web vietnamgiapha." + Environment.NewLine +
+                "Khi download về, sẽ đè bẹp lên gia phả đang làm ?", "Xác nhận", MessageBoxButton.OKCancel) == MessageBoxResult.Cancel)
+            {
+                return;
+            }
+            //_progressDialogController = await _dialogCoordinator.ShowProgressAsync(this, "Please wait", null, true);
+            //_progressDialogController.SetIndeterminate();
+            //_progressDialogController.Canceled += ProgressDialogControllerCanceled;
+            //await GetResultListTask();
+            //await _progressDialogController.CloseAsync();
+            //_progressDialogController.Canceled -= ProgressDialogControllerCanceled;
+            //_progressDialogController = null;
+            var _progressDialogController = await this.ShowProgressAsync("Đợi download từ web...", "Đang download từ web vietnamgiapha.com");
+            _progressDialogController.SetProgress(0);
+            _progressDialogController.SetIndeterminate();
+            
+            try
+            {
+
+                //BtnDownloadGiaPha.IsEnabled = false;
+                GiaphaInfo gp = await Database.Download(viewModel.FamilyTree.Username.Trim().ToLower(), viewModel.FamilyTree.Password.Trim());
+                _progressDialogController.SetProgress(1);
+                if (gp != null)
+                {
+                    viewModel.UpdateGiaPha(gp);
+                    //viewModel.FamilyTree = new GiaPhaViewModel(gp);
+                    UpdateHtmlGiaPha();
+                    //viewModel.FamilyTree.OnPropertyChanged("FamilyTree");
+                    
+                    log.Info("BtnDownloadGiaPha_Click: download từ web ngon lành ");
+                    MessageBox.Show("Download từ web xong", "Ngon lành cành đào");
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Lỗi download từ web: " + ex.Message, "Có Lỗi");
+                log.Error("BtnDownloadGiaPha_Click: Lỗi download từ web");
+                log.Error(ex);
+            }
+            //BtnDownloadGiaPha.IsEnabled = true;
+            await _progressDialogController.CloseAsync();
+        }
+
+        private void BtnUploadGiaPha_Click(object sender, RoutedEventArgs e)
         {
 
         }
-
-        private void cmbFontSize1_TextChanged(object sender, TextChangedEventArgs e)
-        {
-
-        }
-
-        private void rtbEditor1_SelectionChanged(object sender, RoutedEventArgs e)
-        {
-
-        }
-
     }
 }

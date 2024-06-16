@@ -27,7 +27,7 @@ namespace vietnamgiapha
         }
 
         //[NotifyPropertyChangedInvocator]
-        protected virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        public virtual void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
             this.PropertyChanged.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }

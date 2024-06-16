@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Windows.Input;
 using System.Windows.Media;
-using vietnamgiapha.TextSearch;
 
 namespace vietnamgiapha
 {
@@ -12,6 +11,13 @@ namespace vietnamgiapha
     {
         private GiaphaInfo gp;
         private FamilyTreeViewModel _family;
+
+        private FamilyViewModel _familyCut;
+        public FamilyViewModel FamilyCut
+        {
+            get { return _familyCut; }
+            set { _familyCut = value; }
+        }
 
         public event PropertyChangedEventHandler PropertyChanged;
         public String GiaphaNameRoot
@@ -168,7 +174,9 @@ namespace vietnamgiapha
             json += "\"" + Util.Base64Encode(HuongHoa) + "\", ";      //6
             json += "\"" + (GP.RF_OTAI) + "\", ";                   //7
             json += "\"" + (GP.RF_DAYS) + "\", ";                   //8
-            json += "\"" + (GP.RF_CHANNGON) + "\" ";                //9
+            json += "\"" + (GP.RF_CHANNGON) + "\", ";                //9
+            json += "\"" + (GP.Username) + "\", ";                //9
+            json += "\"" + (GP.Password) + "\" ";                //9
             json += "]";// END 
             //
             return json;

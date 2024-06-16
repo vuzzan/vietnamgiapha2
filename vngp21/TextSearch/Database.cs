@@ -5,9 +5,13 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
+using System.Security.Policy;
 using System.Text.Json.Nodes;
+using System.Threading.Tasks;
 using System.Web.UI.WebControls;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Forms;
 using MessageBox = System.Windows.MessageBox;
 using SaveFileDialog = Microsoft.Win32.SaveFileDialog;
@@ -101,11 +105,10 @@ namespace vietnamgiapha
                 }
                 else
                 {
-                    log.Info("Không chọn được file để lưu.");
+                    //log.Info("File để lưu: " + gpView.GP.FileName);
                 }
                 log.Info("Begin save file: " + gpView.GP.FileName);
                 System.IO.File.WriteAllText(gpView.GP.FileName, gpView.ToJson());
-                //MessageBox.Show("Lưu File: " + gpView.GP.FileName, "Success");
                 log.Info("End save file: " + gpView.GP.FileName);
                 //
                 return true;
@@ -117,7 +120,100 @@ namespace vietnamgiapha
             }
             return false;
         }
+        private static async Task<string> DownloadWeb(string u, string p)
+        {
+            try
+            {
+                var client = new HttpClient();
+                client.DefaultRequestHeaders.Accept.Clear();
+                client.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
+                client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36");
+                //https://vietnamgiapha.com/export/index2c.php?u=nghia&p=shogun
+                string url = "https://vietnamgiapha.com/export/index2c.php?u="+u+"&p="+p;
+                log.Info("Download " + url);
+                var response = await client.GetAsync(url);
+                string responseBody = response.Content.ReadAsStringAsync().Result;
+                log.Info("Download: " + responseBody.Length);
+                if(responseBody.Length < 200)
+                {
+                    log.Info(responseBody);
+                }
+                return responseBody;
+            }
+            catch (Exception ex)
+            {
+                log.Error("ERROR: Download " + ex.Message);
+                return null;
+            }
+        }
+        public static async Task<GiaphaInfo> Download(string u, string p)
+        {
+            try
+            {
+                string json = await DownloadWeb(u, p);
+                JsonObject objData = (JsonObject)JsonObject.Parse(json);
+                if (Convert.ToInt32( objData["code"].ToString())!=0)
+                {
+                    // NO DATA
+                    log.Error("ERROR: Download " + objData["msg"].ToString());
+                    throw new Exception(objData["msg"].ToString());
+                }
 
+                JsonArray array = (JsonArray)objData["data"];
+
+                GiaphaInfo gp = new GiaphaInfo();
+                //RootFamily root = new RootFamily();
+                gp.GiaphaId = Convert.ToInt32(array[0].ToString());
+                gp.GiaphaName = array[1].ToString();
+                gp.GiaphaNameRoot = vietnamgiapha.Util.GetFirstWord(gp.GiaphaName);
+                gp.PhaKy = vietnamgiapha.Util.Base64Decode(array[3].ToString());
+                gp.ThuyTo = vietnamgiapha.Util.Base64Decode(array[4].ToString());
+                gp.Tocuoc = vietnamgiapha.Util.Base64Decode(array[5].ToString());
+                gp.HuongHoa = vietnamgiapha.Util.Base64Decode(array[6].ToString());
+                gp.RF_OTAI = array[7].ToString();
+                gp.RF_DAYS = array[8].ToString();
+                gp.RF_CHANNGON = array[9].ToString();
+                gp.Username = array.Count > 10 ? array[10].ToString() : "";
+                gp.Password = "";
+                if (array.Count > 11 && array[11].ToString().Length > 0)
+                {
+                    try
+                    {
+                        gp.Password = Util.Base64Decode(array[11].ToString());
+                    }
+                    catch { }
+                }
+                JsonArray arrayFamily = (JsonArray)array[2];
+
+                // THUY TO
+                FamilyInfo family = new FamilyInfo();
+                if (GetFamily(family, arrayFamily) == true)
+                {
+                    //OK
+                }
+
+                gp.familyRoot = family;
+                // Check all to get the Family Root Name
+                if (family.ListPerson.Count > 0)
+                {
+                    String firstName = family.ListPerson[0].MANS_NAME_HUY;
+                    gp.GiaphaNameRoot = vietnamgiapha.Util.GetFirstWord(firstName);
+                }
+                // Update main person
+                UpdateFamilyMain(gp.familyRoot, gp.GiaphaNameRoot);
+                log.Info("Begin load file Gia Phả. Thành công");
+                // Save file
+                //
+                return gp;
+            }
+            catch (Exception ex)
+            {
+                //MessageBox.Show("Có lỗi Download: " + ex.Message, "Có lỗi");
+                log.Error("Có lỗi Download Gia Phả.");
+                log.Error(ex);
+                throw ex;
+            }
+        }
         public static GiaphaInfo FromJson(string jsonFile)
         {
             try
@@ -138,6 +234,17 @@ namespace vietnamgiapha
                 gp.RF_OTAI = array[7].ToString();
                 gp.RF_DAYS = array[8].ToString();
                 gp.RF_CHANNGON = array[9].ToString();
+                gp.Username = array.Count>10?array[10].ToString():"";
+                gp.Password = "";
+                if (array.Count > 11 && array[11].ToString().Length > 0)
+                {
+                    try
+                    {
+                        gp.Password = Util.Base64Decode(array[11].ToString());
+                    }
+                    catch { }
+                }
+                //gp.Password = array.Count > 11 ? (array[11].ToString().Length>0? Util.Base64Decode(array[11].ToString()):"") : "";
                 JsonArray arrayFamily = (JsonArray)array[2];
 
                 // THUY TO
@@ -174,6 +281,7 @@ namespace vietnamgiapha
             try
             {
                 // Item 3: Child family
+                
                 if (family.ListPerson.Count >0)
                 {
                     ObservableCollection<PersonInfo> _listPerson = new ObservableCollection<PersonInfo>();

@@ -1,10 +1,10 @@
-﻿<mah:MetroWindow x:Class="vietnamgiapha.MainWindow"
+﻿<mah:MetroWindow xmlns:mah="http://metro.mahapps.com/winfx/xaml/controls" 
+        x:Class="vietnamgiapha.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controlzEx="urn:controlzex"
         xmlns:local="clr-namespace:vietnamgiapha"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mah="http://metro.mahapps.com/winfx/xaml/controls"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:smith="clr-namespace:Smith.WPF.HtmlEditor;assembly=Smith.WPF.HtmlEditor"
         d:DataContext="{d:DesignInstance local:MainWindowViewModel}"
@@ -105,8 +105,8 @@
     <mah:MetroWindow.RightWindowCommands>
         <mah:WindowCommands ShowLastSeparator="False">
             <Button 
-                Content="Flyouts"
-                ToolTip="Flyouts demo window" />
+                Content="Help"
+                ToolTip="Vào trang web vietnamgiapha.com để xem" />
         </mah:WindowCommands>
     </mah:MetroWindow.RightWindowCommands>
     <Grid>
@@ -121,84 +121,13 @@
       HorizontalAlignment="Left"
       VerticalAlignment="Stretch">
             <MenuItem Header="File">
-                <MenuItem Header="Open File" Command="{Binding OpenFileCommand}"/>
-                <MenuItem Header="Save File" Command="{Binding SaveFileCommand}"/>
-                <MenuItem Header="Save As..." Command="{Binding SaveAsFileCommand}"/>
+                <MenuItem Header="Mới" Command="{Binding OpenNewFileCommand}"/>
+                <Separator/>
+                <MenuItem Header="Mở File" Command="{Binding OpenFileCommand}"/>
+                <MenuItem Header="Lưu" Command="{Binding SaveFileCommand}"/>
+                <MenuItem Header="Lưu file khác...(Save As)" Command="{Binding SaveAsFileCommand}"/>
                 <Separator/>
                 <MenuItem Header="Exit" Command="{Binding ExitAppCommand}"/>
-            </MenuItem>
-            <MenuItem Header="Theme"
-              ItemContainerStyle="{StaticResource AppThemeMenuItemStyle}"
-              ItemsSource="{Binding AppThemes, Mode=OneWay}" />
-            <MenuItem Header="Accent"
-              ItemContainerStyle="{StaticResource AccentColorMenuItemStyle}"
-              ItemsSource="{Binding AccentColors, Mode=OneWay}" />
-            <MenuItem Header="ThemeManager">
-                <MenuItem Header="SyncMode"
-                  ItemContainerStyle="{StaticResource SyncModeMenuItemStyle}"
-                  ItemsSource="{Binding Source={StaticResource SyncModePreferenceEnumValues}}" />
-                <MenuItem Header="Use HSL colors?"
-                  IsCheckable="True"
-                  IsChecked="{Binding Options.UseHSL, Source={x:Static controlzEx:RuntimeThemeGenerator.Current}, Mode=TwoWay}" />
-
-                <MenuItem Command="{Binding DataContext.SyncThemeNowCommand, RelativeSource={RelativeSource AncestorType=Window}}" Header="Sync now" />
-            </MenuItem>
-            
-            <MenuItem Header="Window">
-                
-                <MenuItem Header="Glow">
-                    <MenuItem Header="PreferDWMBorderColor"
-                      IsCheckable="True"
-                      IsChecked="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type mah:MetroWindow}}, Path=PreferDWMBorderColor}" />
-                    <MenuItem Header="DWMSupportsBorderColor"
-                      IsCheckable="True"
-                      IsChecked="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type mah:MetroWindow}}, Path=DWMSupportsBorderColor}"
-                      IsEnabled="False" />
-                </MenuItem>
-                <MenuItem Header="ShowTitleBar"
-                  IsCheckable="True"
-                  IsChecked="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type mah:MetroWindow}}, Path=ShowTitleBar}" />
-                <MenuItem Header="ShowInTaskbar"
-                  IsCheckable="True"
-                  IsChecked="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type mah:MetroWindow}}, Path=ShowInTaskbar}" />
-                <MenuItem Header="Topmost"
-                  IsCheckable="True"
-                  IsChecked="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type mah:MetroWindow}}, Path=Topmost}" />
-                <MenuItem Header="Ignore taskbar on maximize"
-                  IsCheckable="True"
-                  IsChecked="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type mah:MetroWindow}}, Path=IgnoreTaskbarOnMaximize}" />
-                <MenuItem Header="Toggle FullScreen (no taskbar, window style = none)"
-                  IsCheckable="True"
-                  IsChecked="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type mah:MetroWindow}}, Path=ToggleFullScreen}" />
-                <Separator />
-                
-                <Separator />
-                <MenuItem x:Name="ShowSeparatorsMI"
-                  Header="ShowSeparators (RightWindowCommands)"
-                  IsCheckable="True"
-                  IsChecked="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type mah:MetroWindow}}, Path=RightWindowCommands.ShowSeparators}" />
-                <MenuItem Header="ShowLastSeparator in (RightWindowCommands)"
-                  IsCheckable="True"
-                  IsChecked="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type mah:MetroWindow}}, Path=RightWindowCommands.ShowLastSeparator}"
-                  IsEnabled="{Binding ElementName=ShowSeparatorsMI, Path=IsChecked, Mode=OneWay}" />
-                <Separator />
-                <MenuItem Command="{Binding ToggleIconScalingCommand}"
-                  CommandParameter="{x:Static mah:MultiFrameImageMode.ScaleDownLargerFrame}"
-                  Header="Window icon: scale down larger frame"
-                  IsCheckable="True"
-                  IsChecked="{Binding IsScaleDownLargerFrame, Mode=OneWay}" />
-                <MenuItem Command="{Binding ToggleIconScalingCommand}"
-                  CommandParameter="{x:Static mah:MultiFrameImageMode.NoScaleSmallerFrame}"
-                  Header="Window icon: no scale, smaller frame"
-                  IsCheckable="True"
-                  IsChecked="{Binding IsNoScaleSmallerFrame, Mode=OneWay}" />
-                <Separator />
-                <MenuItem Header="ShowSystemMenu"
-                  IsCheckable="True"
-                  IsChecked="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type mah:MetroWindow}}, Path=ShowSystemMenu}" />
-                <MenuItem Header="ShowSystemMenuOnRightClick"
-                  IsCheckable="True"
-                  IsChecked="{Binding RelativeSource={RelativeSource FindAncestor, AncestorType={x:Type mah:MetroWindow}}, Path=ShowSystemMenuOnRightClick}" />
             </MenuItem>
         </Menu>
         <Grid Grid.Row="1" Margin="0,0,0,0"  >
@@ -236,9 +165,9 @@
                                 <TextBox 
                               x:Name="searchTextBox"
                                 KeyDown="searchTextBox_KeyDown" 
-                              Margin="6,0"
-                              Text="{Binding FamilyTree.Family.SearchText, UpdateSourceTrigger=PropertyChanged}"
-                              Width="150"
+                                Margin="6,0"
+                                Text="{Binding FamilyTree.Family.SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                Width="150"
                               />
                                 <Button 
                               Command="{Binding FamilyTree.Family.SearchCommand}" 
@@ -269,13 +198,17 @@
                                                 <MenuItem Command="{Binding PasteFamilyClick}" Header="GD -> Dán" />
                                                 <Separator/>
                                                 <MenuItem Command="{Binding InsertFamilyClick}" Header="GD -> Chèn Trước" />
-                                                <MenuItem Command="{Binding InsertFamilyAnhClick}" Header="GD -> Thêm GD Anh" />
-                                                <MenuItem Command="{Binding InsertFamilyEmClick}" Header="GD -> Thêm GD Em" />
                                                 <MenuItem Command="{Binding InsertFamilyConClick}" Header="GD -> Thêm GD Con" />
                                                 <Separator/>
+                                                <MenuItem Command="{Binding InsertFamilyAnhClick}" Header="GD -> Up" />
+                                                <MenuItem Command="{Binding InsertFamilyEmClick}" Header="GD -> Down" />
+                                                <Separator/>
                                                 <MenuItem Command="{Binding RemoveFamilyClick}" Header="GD -> Xóa" />
+                                                <MenuItem Command="{Binding RemoveFamilyOnlyClick}" Header="GD -> Bỏ Ra" />
                                                 <Separator/>
                                                 <MenuItem Command="{Binding InsertPerson2FamilyClick}" Header="Người: Thêm người" />
+                                                <Separator/>
+                                                <MenuItem Command="{Binding DebugFamilyClick}" Header="Xem GD" />
                                             </ContextMenu>
                                         </Setter.Value>
                                     </Setter>
@@ -311,18 +244,58 @@
                                 </Grid.ColumnDefinitions>
                                 <ScrollViewer Grid.Column="1">
                                     <StackPanel Orientation="Vertical">
-                                        <mah:MetroHeader Header="Tên Gia Phả" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                            <TextBox Text="{Binding FamilyTree.GiaphaName}" />
-                                        </mah:MetroHeader>
-                                        <mah:MetroHeader Header="Tộc" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                            <TextBox Text="{Binding FamilyTree.GiaphaNameRoot}" />
-                                        </mah:MetroHeader>
-                                        <mah:MetroHeader Header="UserName" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                            <TextBox Text="{Binding FamilyTree.Username}" />
-                                        </mah:MetroHeader>
-                                        <mah:MetroHeader Header="Password" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                            <TextBox Text="{Binding FamilyTree.Password}" />
-                                        </mah:MetroHeader>
+                                        <GroupBox>
+                                            <GroupBox.Header >
+                                                <TextBlock Text=" - Thông tin gia phả" />
+                                            </GroupBox.Header>
+                                            <StackPanel>
+                                                    <mah:MetroHeader Header="Tên Gia Phả" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
+                                                        <TextBox Text="{Binding FamilyTree.GiaphaName}" />
+                                                    </mah:MetroHeader>
+                                                    <mah:MetroHeader Header="Tộc" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
+                                                        <TextBox Text="{Binding FamilyTree.GiaphaNameRoot}" />
+                                                    </mah:MetroHeader>
+                                            </StackPanel>
+                                        </GroupBox>
+                                        
+                                        <GroupBox>
+                                            <GroupBox.Header >
+                                                <TextBlock Text=" - Login vietnamgiapha.com" />
+                                            </GroupBox.Header>
+                                            <StackPanel Orientation="Horizontal" >
+                                                <StackPanel Orientation="Vertical" Margin="10">
+                                                    <mah:MetroHeader Header="UserName" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
+                                                        <TextBox Text="{Binding FamilyTree.Username}" />
+                                                    </mah:MetroHeader>
+                                                    <mah:MetroHeader Header="Password" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
+                                                        <TextBox Text="{Binding FamilyTree.Password}" />
+                                                    </mah:MetroHeader>
+                                                </StackPanel>
+                                                <StackPanel Orientation="Horizontal">
+                                                    
+                                                    <Button Width="120" Content="Download Gia phả" Name="BtnDownloadGiaPha" Click="BtnDownloadGiaPha_Click" />
+                                                    <Button Width="120" Content="Upload Gia phả" Name="BtnUploadGiaPha" Click="BtnUploadGiaPha_Click" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </GroupBox>
+
+
+                                        <!--<GroupBox>
+                                            <GroupBox.Header >
+                                                <TextBlock Text=" - Log action" />
+                                            </GroupBox.Header>
+                                            <StackPanel Orientation="Horizontal">
+                                                <ListBox Margin="1" ItemsSource="{Binding ItemsLogs}" Height="100">
+                                                    <ListBox.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <StackPanel Orientation="Horizontal">
+                                                                <TextBlock Text="{Binding}" />
+                                                            </StackPanel>
+                                                        </DataTemplate>
+                                                    </ListBox.ItemTemplate>
+                                                </ListBox>
+                                            </StackPanel>
+                                        </GroupBox>-->
                                     </StackPanel>
                                 </ScrollViewer>
                             </Grid>
@@ -345,7 +318,7 @@
                                     <ListView x:Name="ListView_ListNguoiTrongGiaDinhChaMe" Margin="0"  Width="200" BorderThickness="0" ItemsSource="{Binding FamilyTree.Family.SelectedFamily.Parent.ListPerson}" SelectedIndex="0" MouseDoubleClick="ListView_ListNguoiTrongGiaDinhChaMe_MouseDoubleClick">
                                         <ListView.View>
                                             <GridView>
-                                                <GridViewColumn DisplayMemberBinding="{Binding MANS_NAME_HUY}" Header="Cha Mẹ" />
+                                                <GridViewColumn Width="165" DisplayMemberBinding="{Binding MANS_NAME_HUY}" Header="Cha Mẹ" />
                                                 <GridViewColumn DisplayMemberBinding="{Binding MANS_GENDER}" Header="Giới" />
                                                 <GridViewColumn DisplayMemberBinding="{Binding MANS_DOB}" Header="Sinh" />
                                             </GridView>
@@ -362,7 +335,7 @@
                                         >
                                         <ListView.View>
                                             <GridView>
-                                                <GridViewColumn DisplayMemberBinding="{Binding MANS_NAME_HUY}" Header="Tên" />
+                                                <GridViewColumn Width="165" DisplayMemberBinding="{Binding MANS_NAME_HUY}" Header="Tên" />
                                                 <GridViewColumn DisplayMemberBinding="{Binding MANS_GENDER}" Header="Giới" />
                                                 <GridViewColumn DisplayMemberBinding="{Binding MANS_DOB}" Header="Sinh" />
                                             </GridView>
@@ -405,7 +378,7 @@
                                                         <TextBox Text="{Binding MANS_NAME_HUY}" FontWeight="Bold"/>
                                                     </mah:MetroHeader>
 
-                                                    <mah:MetroHeader Grid.Row="1"  Grid.Column="0" Header="Tên Tự">
+                                                    <mah:MetroHeader Grid.Row="1"  Grid.Column="0" Header="Tên Tự" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
                                                         <TextBox Text="{Binding MANS_NAME_TU}" />
                                                     </mah:MetroHeader>
 
@@ -420,11 +393,16 @@
                                                     <mah:MetroHeader Grid.Row="2"  Grid.Column="1" Header="Con thứ mấy trong gia đình" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
                                                         <TextBox Text="{Binding MANS_CONTHUMAY}" />
                                                     </mah:MetroHeader>
-                                                   
 
-                                                    <mah:MetroHeader Grid.Row="3"  Grid.Column="0" Header="Giới Tính" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                                        <TextBox Text="{Binding MANS_GENDER}" />
-                                                    </mah:MetroHeader>
+
+                                                    <mah:ToggleSwitch Grid.Row="3"  Grid.Column="0"  Header="Giới Tính" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}"
+OffContent="Nữ"
+OnContent="Nam"
+>
+                                                        <mah:ToggleSwitch.IsOn>
+                                                            <Binding Path="IsGioiTinhNam" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged" />
+                                                        </mah:ToggleSwitch.IsOn>
+                                                    </mah:ToggleSwitch>
                                                     <mah:MetroHeader Grid.Row="3"  Grid.Column="1" Header="Ngày Sinh" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
                                                         <TextBox Text="{Binding MANS_DOB}" />
                                                     </mah:MetroHeader>

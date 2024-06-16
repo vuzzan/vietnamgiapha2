@@ -28,6 +28,7 @@ namespace vietnamgiapha
                 return _FileName;
             } set {
                 _FileName = value;
+                _FileName = _FileName.Replace(" ", "").Replace("-", "");
                 OnPropertyChanged(nameof(FileName));
             } }
         public GiaphaInfo()
@@ -74,20 +75,100 @@ namespace vietnamgiapha
                 return _MANS_NAME_HUY;
             }
             set {
-                _MANS_NAME_HUY = value;
+                _MANS_NAME_HUY = Util.RemoveSpecialChar(value);
                 OnPropertyChanged("MANS_NAME_HUY");
                 _familyInfo.OnPropertyChanged("");
             } 
         }
-        public string MANS_NAME_TU { get; set; }
-        public string MANS_NAME_THUONG { get; set; }
-        public string MANS_NAME_THUY { get; set; }
+
+        private string _MANS_NAME_TU;
+        public string MANS_NAME_TU
+        {
+            get
+            {
+                return _MANS_NAME_TU;
+            }
+            set
+            {
+                _MANS_NAME_TU = Util.RemoveSpecialChar(value);
+            }
+        }
+
+        private string _MANS_NAME_THUONG;
+        public string MANS_NAME_THUONG
+        {
+            get
+            {
+                return _MANS_NAME_THUONG;
+            }
+            set
+            {
+                _MANS_NAME_THUONG = Util.RemoveSpecialChar(value);
+            }
+        }
+        private string _MANS_NAME_THUY;
+        public string MANS_NAME_THUY
+        {
+            get
+            {
+                return _MANS_NAME_THUY;
+            }
+            set
+            {
+                _MANS_NAME_THUY = Util.RemoveSpecialChar(value);
+            }
+        }
         public string MANS_ID { get; set; }
         public string fid { get; set; }
         public string MANS_GENDER { get; set; }
-        public string MANS_DOB { get; set; }
-        public string MANS_DOD { get; set; }
-        public string MANS_WOD { get; set; }
+
+        public int IsGioiTinhNam { 
+            get {
+                return MANS_GENDER == "Nam" ? 1 : 0;
+            } 
+            set
+            {
+                MANS_GENDER = value == 1 ? "Nam" : "Nữ";
+                OnPropertyChanged(nameof(MANS_GENDER));
+            }
+        }
+
+        private string _MANS_DOB;
+        public string MANS_DOB
+        {
+            get
+            {
+                return _MANS_DOB;
+            }
+            set
+            {
+                _MANS_DOB = Util.RemoveSpecialChar(value);
+            }
+        }
+        private string _MANS_DOD;
+        public string MANS_DOD
+        {
+            get
+            {
+                return _MANS_DOD;
+            }
+            set
+            {
+                _MANS_DOD = Util.RemoveSpecialChar(value);
+            }
+        }
+        private string _MANS_WOD;
+        public string MANS_WOD
+        {
+            get
+            {
+                return _MANS_WOD;
+            }
+            set
+            {
+                _MANS_WOD = Util.RemoveSpecialChar(value);
+            }
+        }
         public string MANS_DETAIL { get; set; }
         public string MANS_CONTHUMAY { get; set; }
         
@@ -100,12 +181,12 @@ namespace vietnamgiapha
             MANS_NAME_THUY = "";
             MANS_ID = "";
             fid = "";
-            MANS_GENDER = "";
+            MANS_GENDER = "Nam";
             MANS_DOB = "";
             MANS_DOD = "";
             MANS_WOD = "";
             MANS_DETAIL = "";
-            MANS_CONTHUMAY = "";
+            MANS_CONTHUMAY = ""+familyInfo.FamilyOrder;
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -120,20 +201,18 @@ namespace vietnamgiapha
         public string ToJson()
         {
             string json = "[";
-            json += "\"" + this.MANS_NAME_HUY + "\",";
-            json += "\"" + this.MANS_NAME_TU + "\",";
-            json += "\"" + this.MANS_NAME_THUONG + "\",";
-            json += "\"" + this.MANS_NAME_THUY + "\",";
+            json += "\"" + Util.RemoveSpecialChar(this.MANS_NAME_HUY) + "\",";
+            json += "\"" + Util.RemoveSpecialChar(this.MANS_NAME_TU) + "\",";
+            json += "\"" + Util.RemoveSpecialChar(this.MANS_NAME_THUONG) + "\",";
+            json += "\"" + Util.RemoveSpecialChar(this.MANS_NAME_THUY) + "\",";
             json += "\"" + this.MANS_ID + "\",";
             json += "\"" + this.fid + "\",";
-            //familyMember.MANS_GENDER = Convert.ToInt16(personInfoArray[6].ToString()) == 1 ? "Nam" : "Nữ";
             json += "\"" + (this.MANS_GENDER== "Nam"?1:0) + "\",";
-            //json += "" + this.MANS_GENDER== "Nam"?1:0 + ",";
-            json += "\"" + this.MANS_DOB + "\",";
-            json += "\"" + this.MANS_DOD + "\",";
-            json += "\"" + this.MANS_WOD + "\",";
+            json += "\"" + Util.RemoveSpecialChar(this.MANS_DOB) + "\",";
+            json += "\"" + Util.RemoveSpecialChar(this.MANS_DOD) + "\",";
+            json += "\"" + Util.RemoveSpecialChar(this.MANS_WOD) + "\",";
             json += "\"" + vietnamgiapha.Util.Base64Encode(this.MANS_DETAIL) + "\",";
-            json += "\"" + this.MANS_CONTHUMAY + "\" ";
+            json += "\"" + Util.RemoveSpecialChar(this.MANS_CONTHUMAY) + "\" ";
             // Print end of family array
             json += "]";
             return json;
@@ -178,7 +257,7 @@ namespace vietnamgiapha
                 {
                     if (item.IsMainPerson == 1)
                     {
-                        tmp += item.MANS_NAME_HUY + " + ";
+                        tmp += Util.RemoveSpecialChar(item.MANS_NAME_HUY) + " + ";
                         break;
                     }
                 }
@@ -186,7 +265,7 @@ namespace vietnamgiapha
                 {
                     if (item.IsMainPerson == 0)
                     {
-                        tmp += item.MANS_NAME_HUY + " + ";
+                        tmp += Util.RemoveSpecialChar(item.MANS_NAME_HUY) + " + ";
                     }
                 }
                 return tmp.Substring(0, tmp.Length-2);
@@ -200,7 +279,7 @@ namespace vietnamgiapha
                 String tmp = "";
                 if (_listPerson.Count >= 1)
                 {
-                    tmp += _listPerson[0].MANS_NAME_HUY + " + ";
+                    tmp += Util.RemoveSpecialChar(_listPerson[0].MANS_NAME_HUY) + " + ";
                     return tmp.Substring(0, tmp.Length - 2);
                 }
                 else if (_listPerson.Count == 0)

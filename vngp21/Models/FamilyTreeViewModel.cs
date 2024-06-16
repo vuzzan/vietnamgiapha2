@@ -198,6 +198,11 @@ namespace vietnamgiapha
 
         void PerformSearch()
         {
+            if(_searchText.Trim().Length==0)
+            {
+                MessageBox.Show("Nhập tên để tìm...");
+                return;
+            }
             if (_matchingPeopleEnumerator == null || !_matchingPeopleEnumerator.MoveNext())
                 this.VerifyMatchingPeopleEnumerator();
 

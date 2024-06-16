@@ -21,6 +21,15 @@ namespace vietnamgiapha
     public class Util
     {
         private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
+        
+        public static string RemoveSpecialChar(string text)
+        {
+            //string mystring = "abcdef@_#124";
+            //return Regex.Replace(mystring, "[^\\w\\.]", "");
+            return text.Replace("\"", "").Replace("'", "");
+            //return Regex.Replace(text, @"^[A-Za-z\u00C1\u00C9\u00CD\u00D3\u00DA\u00E1\u00E9\u00ED\u00F3\u00FA][A-Za-z\u00C1\u00C9\u00CD\u00D3\u00DA\u00E1\u00E9\u00ED\u00F3\u00FA0-9@#%&\'\-\s\.\,*]*$", "");
+        }
+
         public static string GetFirstWord(string text)
         {
             var candidate = text.Trim();

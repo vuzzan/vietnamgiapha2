@@ -75,6 +75,13 @@
   <PropertyGroup>
     <SignManifests>true</SignManifests>
   </PropertyGroup>
+  <PropertyGroup>
+    <RunPostBuildEvent>OnBuildSuccess</RunPostBuildEvent>
+  </PropertyGroup>
+  <Target Name="ZipBuild" AfterTargets="Build" Condition="'$(Configuration)'=='Release'">
+    <Message Text="ZIP File:" Importance="High" />
+    <Exec Command="powershell Compress-Archive -Path '$(OutDir)*.exe' -DestinationPath '$(OutDir)\VietNamGiaPha2.zip' -Force" />
+  </Target>
   <ItemGroup>
     <Reference Include="AutoUpdater.NET, Version=1.9.0.0, Culture=neutral, PublicKeyToken=501435c91b35f4bc, processorArchitecture=MSIL">
       <HintPath>..\packages\Autoupdater.NET.Official.1.9.0\lib\net462\AutoUpdater.NET.dll</HintPath>
@@ -191,15 +198,15 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="WindowUpload.xaml.cs">
+      <DependentUpon>WindowUpload.xaml</DependentUpon>
+    </Compile>
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
     <Compile Include="MainWindowViewModel.cs" />
     <Compile Include="TextSearch\Database.cs" />
-    <Compile Include="TextSearch\TextSearchDemoControl.xaml.cs">
-      <DependentUpon>TextSearchDemoControl.xaml</DependentUpon>
-    </Compile>
     <Compile Include="Models\FamilyInfo.cs" />
     <Compile Include="Models\FamilyTreeViewModel.cs" />
     <Compile Include="Models\FamilyViewModel.cs" />
@@ -210,9 +217,9 @@
     <Compile Include="Core\BindingProxy.cs" />
     <Compile Include="Core\SimpleCommand.cs" />
     <Compile Include="Core\ViewModelBase.cs" />
-    <Page Include="TextSearch\TextSearchDemoControl.xaml">
-      <Generator>MSBuild:Compile</Generator>
+    <Page Include="WindowUpload.xaml">
       <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
     </Page>
   </ItemGroup>
   <ItemGroup>
