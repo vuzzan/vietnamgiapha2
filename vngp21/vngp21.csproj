@@ -206,7 +206,6 @@
       <SubType>Designer</SubType>
     </Page>
     <Compile Include="MainWindowViewModel.cs" />
-    <Compile Include="TextSearch\Database.cs" />
     <Compile Include="Models\FamilyInfo.cs" />
     <Compile Include="Models\FamilyTreeViewModel.cs" />
     <Compile Include="Models\FamilyViewModel.cs" />
@@ -414,7 +413,9 @@
       <Install>false</Install>
     </BootstrapperPackage>
   </ItemGroup>
-  <ItemGroup />
+  <ItemGroup>
+    <Folder Include="TextSearch\" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="..\packages\Microsoft.Web.WebView2.1.0.2535.41\build\Microsoft.Web.WebView2.targets" Condition="Exists('..\packages\Microsoft.Web.WebView2.1.0.2535.41\build\Microsoft.Web.WebView2.targets')" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
