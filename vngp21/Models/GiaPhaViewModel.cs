@@ -50,7 +50,14 @@ namespace vietnamgiapha
             }
             set
             {
-                gp.Password = value;
+                string v = value;
+                if (Util.HasNonASCIIChars(v)==false){
+                    gp.Password = v;
+                }
+                else
+                {
+                    gp.Password = "";
+                }
             }
         }
         public String Username
@@ -180,6 +187,28 @@ namespace vietnamgiapha
             json += "]";// END 
             //
             return json;
+        }
+
+        public string CheckValid()
+        {
+            string check = "";
+            if( GP.GiaphaName.Trim().Length==0)
+            {
+                check += "Tên Gia Phả phải có. " + Environment.NewLine;
+            }
+            if (GP.RF_OTAI.Trim().Length == 0)
+            {
+                check += "Gia phả ở tại đâu phải có. " + Environment.NewLine;
+            }
+            if (GP.RF_DAYS.Trim().Length == 0)
+            {
+                check += "Ngày hội mả, cúng tế phải có. " + Environment.NewLine;
+            }
+            if (GP.RF_CHANNGON.Trim().Length == 0)
+            {
+                check += "Slogan phải có. Ví dụ: Cây có cội chi chi đó. " + Environment.NewLine;
+            }
+            return check;
         }
     }
 }

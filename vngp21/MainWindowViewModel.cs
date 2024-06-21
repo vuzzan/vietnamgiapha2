@@ -206,9 +206,9 @@ namespace vietnamgiapha
             var view = CollectionViewSource.GetDefaultView(this.ThemeResources);
             view.SortDescriptions.Add(new SortDescription(nameof(ThemeResource.Key), ListSortDirection.Ascending));
             this.UpdateThemeResources();
-
-            defaultSaveFolder = ConfigurationManager.AppSettings["defaultSaveFolder"];
-            defaultSaveName = ConfigurationManager.AppSettings["defaultSaveName"];
+            Configuration config = ConfigurationManager.OpenExeConfiguration(ConfigurationUserLevel.None);
+            defaultSaveFolder = config.AppSettings.Settings["defaultSaveFolder"].Value;
+            defaultSaveName = config.AppSettings.Settings["defaultSaveName"].Value;
             log.Info("Folder: " + defaultSaveFolder);
             log.Info("File : " + defaultSaveName);
             FamilyTree = new GiaPhaViewModel(new GiaphaInfo());
@@ -270,12 +270,20 @@ namespace vietnamgiapha
                 }
                 if(lastFile.Length> 0)
                 {
-                    long length0 = new System.IO.FileInfo(FamilyTree.GP.FileName).Length;
-                    long length1 = new System.IO.FileInfo(defaultSaveFolder + "\\backup\\" + lastFile).Length;
-                    if( length0 != length1)
+                    try
                     {
-                        log.Info("Backup Last File 1: " + length0+ " " + length1 +" " + lastFile);
-                        System.IO.File.Copy(FamilyTree.GP.FileName, defaultSaveFolder + "\\backup\\" + FamilyTree.GP.GiaphaName.Replace(" ", "_") + "_" + DateTime.Now.ToString("yyyy_dd_MM_hh_mm_ss_") + defaultSaveName);
+                        long length0 = new System.IO.FileInfo(FamilyTree.GP.FileName).Length;
+                        long length1 = new System.IO.FileInfo(defaultSaveFolder + "\\backup\\" + lastFile).Length;
+                        if (length0 != length1)
+                        {
+                            log.Info("Backup Last File 1: " + length0 + " " + length1 + " " + lastFile);
+                            System.IO.File.Copy(FamilyTree.GP.FileName, defaultSaveFolder + "\\backup\\" + FamilyTree.GP.GiaphaName.Replace(" ", "_") + "_" + DateTime.Now.ToString("yyyy_dd_MM_hh_mm_ss_") + defaultSaveName);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        log.Error("Backup " + ex.Message);
+                        log.Error(ex);
                     }
                 }
                 else {

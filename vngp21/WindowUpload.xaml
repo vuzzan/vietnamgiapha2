@@ -7,7 +7,17 @@
         mc:Ignorable="d"
         Title="WindowUpload" Height="450" Width="800">
     <Grid>
-        <ListView>
+        <ListView Margin="0" BorderThickness="0" 
+                  ItemsSource="{Binding FamilyTree.Family.SelectedFamily.ListPerson}"
+                  SelectedIndex="0" 
+                  PreviewMouseLeftButtonUp="ListView_ListGiaDinh_PreviewMouseLeftButtonUp"
+                  x:Name="ListView_ListGiaDinh">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Width="165" DisplayMemberBinding="{Binding MANS_NAME_HUY}" Header="Tên Gia Đình" />
+                    <GridViewColumn Width="165" DisplayMemberBinding="{Binding MANS_GENDER}" Header="Kết quả Upload" />
+                </GridView>
+            </ListView.View>
         </ListView>
     </Grid>
 </mah:MetroWindow>

@@ -21,7 +21,45 @@ namespace vietnamgiapha
     public class Util
     {
         private static readonly log4net.ILog log = log4net.LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
-        
+
+        public static bool HasNonASCIIChars(string str)
+        {
+            bool val = (System.Text.Encoding.UTF8.GetByteCount(str) != str.Length);
+            return val;
+        }
+
+        public static string Unicode2ASCII(string value)
+        {
+            StringBuilder sb = new StringBuilder();
+            foreach (char c in value)
+            {
+                if (c > 127)
+                {
+                    // This character is too big for ASCII
+                    string encodedValue = "\\u" + ((int)c).ToString("x4");
+                    sb.Append(encodedValue);
+                }
+                else
+                {
+                    sb.Append(c);
+                }
+            }
+            //return sb.ToString();
+            string Ascii = sb.ToString();
+            return Ascii;
+        }
+
+
+        public static string Unicode2ASCII2(string unicode)
+        {
+            // Convert Unicode to Bytes
+
+            byte[] uni = Encoding.Unicode.GetBytes(unicode);
+            // Convert to ASCII
+
+            string Ascii = Encoding.ASCII.GetString(uni);
+            return Ascii;
+        }
         public static string RemoveSpecialChar(string text)
         {
             //string mystring = "abcdef@_#124";

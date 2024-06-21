@@ -24,5 +24,10 @@ namespace vngp21
         {
             InitializeComponent();
         }
+
+        private void ListView_ListGiaDinh_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+
+        }
     }
 }

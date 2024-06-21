@@ -12,6 +12,9 @@ using System.IO;
 using System.Reflection;
 using AutoUpdaterDotNET;
 using System.Configuration;
+using System.Diagnostics;
+using System.Text.Json.Nodes;
+using System.Windows.Shapes;
 
 namespace vietnamgiapha
 {
@@ -29,6 +32,32 @@ namespace vietnamgiapha
             log4net.Config.XmlConfigurator.Configure(repository, fileInfo);
             //
             InitializeComponent();
+            //
+            try
+            {
+                Configuration config = ConfigurationManager.OpenExeConfiguration(ConfigurationUserLevel.None);
+                string path = config.AppSettings.Settings["defaultSaveFolder"].Value;
+                FileInfo f = new FileInfo(path);
+                string drive = System.IO.Path.GetPathRoot(f.FullName);
+                // check drive exist
+                if (Directory.Exists(drive))
+                {
+                    // OK
+                }
+                else
+                {
+                    // Else
+                    config.AppSettings.Settings["defaultSaveFolder"].Value = path.Replace(drive, "c:\\");
+                    config.Save(ConfigurationSaveMode.Modified);
+                    //
+                    //ConfigurationManager.AppSettings["defaultSaveFolder"] = path.Replace(drive, "c:\\");
+                }
+            }
+            catch (Exception ex)
+            {
+
+            }
+
             string ver = Assembly.GetExecutingAssembly().GetName().Version.ToString();
             log.Info("Application started...version " + ver);
             AutoUpdater.Start("https://vietnamgiapha.com/download/autoupdate.xml");
@@ -36,7 +65,7 @@ namespace vietnamgiapha
             this.Title = this.Title + " - " + ver;
             this.viewModel = new MainWindowViewModel(DialogCoordinator.Instance, this);
             this.DataContext = this.viewModel;
-            //
+            
         }
         public void UpdateHtmlGiaPha()
         {
@@ -359,6 +388,15 @@ namespace vietnamgiapha
                 MessageBox.Show("Nhập user name và password của trang web vietnamgiapha.com");
                 return;
             }
+            if (viewModel.FamilyTree.CheckValid().Length>0)
+            {
+                MessageBox.Show(viewModel.FamilyTree.CheckValid(), "Có lỗi");
+                return;
+            }
+
+            if (viewModel.FamilyTree.GP.GiaphaId == 0)
+            {
+            }
             var _progressDialogController = await this.ShowProgressAsync("Đợi upload lên web...", "Đang upload từ web vietnamgiapha.com");
             _progressDialogController.SetProgress(0);
             _progressDialogController.SetIndeterminate();
@@ -366,16 +404,36 @@ namespace vietnamgiapha
             try
             {
                 //BtnDownloadGiaPha.IsEnabled = false;
-                string gp = await Database.UploadWeb(
+                string json = await Database.UploadWeb(
                     viewModel.FamilyTree.Username.Trim().ToLower(), 
                     viewModel.FamilyTree.Password.Trim(),
                     viewModel.FamilyTree.ToJson()
                     );
+                JsonObject objData = (JsonObject)JsonObject.Parse(json);
                 _progressDialogController.SetProgress(1);
-                if (gp != null)
+                if ( Convert.ToInt32 (objData["code"].ToString()) == 0)
                 {
-                    log.Info("BtnUploadGiaPha_Click: upload từ web : " + gp);
-                    MessageBox.Show(gp, "Upload");
+                    log.Info("BtnUploadGiaPha_Click: upload lên web success: ");
+                    //MessageBox.Show(gp, "Upload");
+                    // Do reload gia phả
+                    GiaphaInfo gp = Database.ParseJsonGiaPha(objData);
+                    if (gp != null)
+                    {
+                        viewModel.UpdateGiaPha(gp);
+                        UpdateHtmlGiaPha();
+                        log.Info("BtnUploadGiaPha_Click: update lên web ngon lành ");
+                        if( MessageBox.Show("Update lên web xong, muốn coi lại không ???", "Ngon lành cành đào", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
+                        {
+                            Process.Start(new ProcessStartInfo("https://www.vietnamgiapha.com/XemPhaHe/" + viewModel.FamilyTree.GiaphaId + "/gp.html"));
+                        }
+                    }
+                }
+                else
+                {
+                    //
+                    MessageBox.Show("Lỗi upload web: " + Convert.ToInt32(objData["code"].ToString()) + Environment.NewLine +
+                        objData["msg"].ToString()
+                        , "Có Lỗi");
                 }
             }
             catch (Exception ex)
@@ -386,6 +444,50 @@ namespace vietnamgiapha
             }
             //BtnDownloadGiaPha.IsEnabled = true;
             await _progressDialogController.CloseAsync();
+        }
+
+        private void ListViewItem_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if( e.Key == Key.Delete) {
+                if (ListView_ListNguoiTrongGiaDinh.SelectedItem != null)
+                {
+                    PersonInfo obj = (PersonInfo)ListView_ListNguoiTrongGiaDinh.SelectedItem;
+                    if( MessageBox.Show("Xóa [" + obj.MANS_NAME_HUY + "] ra khỏi gia đình này ?", "Xác Nhận", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
+                    {
+                        if( obj._familyInfo.ListPerson.IndexOf(obj)>-1)
+                        {
+                            obj._familyInfo.ListPerson.Remove(obj);
+                            obj._familyInfo.OnPropertyChanged("Name");
+                            log.Info("Xóa [" + obj.MANS_NAME_HUY + "] ra khỏi gia đình");
+                        }
+                    }
+
+                }
+            }
+        }
+
+        private void Hyperlink_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+        {
+            Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri));
+            e.Handled = true;
+        }
+
+        private void Hyperlink_RequestNavigate_1(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+        {
+            try
+            {
+                if (Convert.ToInt32(viewModel.FamilyTree.GiaphaId) > 0)
+                {
+                    Process.Start(new ProcessStartInfo("https://www.vietnamgiapha.com/XemPhaHe/" + viewModel.FamilyTree.GiaphaId + "/gp.html"));
+                    e.Handled = true;
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+
+            }
+            e.Handled = false;
         }
     }
 }

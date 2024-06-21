@@ -15,12 +15,6 @@
     {
         "Entry"
         {
-        "MsmKey" = "8:_06BE5F7BDF401173900D2EE3C63C3EC6"
-        "OwnerKey" = "8:_F76AB7F332044D0183EBE0E76DD08AF6"
-        "MsmSig" = "8:_UNDEFINED"
-        }
-        "Entry"
-        {
         "MsmKey" = "8:_07331DCA5886CF76A8D3B1586F0AD1A8"
         "OwnerKey" = "8:_F76AB7F332044D0183EBE0E76DD08AF6"
         "MsmSig" = "8:_UNDEFINED"
@@ -160,7 +154,7 @@
         "Entry"
         {
         "MsmKey" = "8:_3A9137EB208A11E509A860B6AE2FF40E"
-        "OwnerKey" = "8:_8F58C07C3A27AFEB9C516095C4763075"
+        "OwnerKey" = "8:_CAD72F0F08CC6B35F36E2575BB167B80"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -227,6 +221,12 @@
         {
         "MsmKey" = "8:_437CE9DD4809CE14EBF1A6C75FC0EBA3"
         "OwnerKey" = "8:_E4C38EF8602E1F2C445C5B13D061ABB4"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_44314244C9A16535D668858EB5B118C0"
+        "OwnerKey" = "8:_F76AB7F332044D0183EBE0E76DD08AF6"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -399,6 +399,12 @@
         }
         "Entry"
         {
+        "MsmKey" = "8:_7BC6750A70124410B112EF2DFB58A5EE"
+        "OwnerKey" = "8:_UNDEFINED"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
         "MsmKey" = "8:_7E6E2F2CDB32C7B049178168EC5A323B"
         "OwnerKey" = "8:_F76AB7F332044D0183EBE0E76DD08AF6"
         "MsmSig" = "8:_UNDEFINED"
@@ -419,18 +425,6 @@
         {
         "MsmKey" = "8:_8CE43165C198447C590584546E7EE353"
         "OwnerKey" = "8:_F76AB7F332044D0183EBE0E76DD08AF6"
-        "MsmSig" = "8:_UNDEFINED"
-        }
-        "Entry"
-        {
-        "MsmKey" = "8:_8F58C07C3A27AFEB9C516095C4763075"
-        "OwnerKey" = "8:_F76AB7F332044D0183EBE0E76DD08AF6"
-        "MsmSig" = "8:_UNDEFINED"
-        }
-        "Entry"
-        {
-        "MsmKey" = "8:_8F58C07C3A27AFEB9C516095C4763075"
-        "OwnerKey" = "8:_06BE5F7BDF401173900D2EE3C63C3EC6"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -629,6 +623,18 @@
         {
         "MsmKey" = "8:_C765D519CB33FF529C0F974BC461B27E"
         "OwnerKey" = "8:_F76AB7F332044D0183EBE0E76DD08AF6"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_CAD72F0F08CC6B35F36E2575BB167B80"
+        "OwnerKey" = "8:_F76AB7F332044D0183EBE0E76DD08AF6"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_CAD72F0F08CC6B35F36E2575BB167B80"
+        "OwnerKey" = "8:_44314244C9A16535D668858EB5B118C0"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -838,12 +844,6 @@
         "Entry"
         {
         "MsmKey" = "8:_UNDEFINED"
-        "OwnerKey" = "8:_1E616E612B20274DBD88243B7C8D5179"
-        "MsmSig" = "8:_UNDEFINED"
-        }
-        "Entry"
-        {
-        "MsmKey" = "8:_UNDEFINED"
         "OwnerKey" = "8:_F76AB7F332044D0183EBE0E76DD08AF6"
         "MsmSig" = "8:_UNDEFINED"
         }
@@ -856,13 +856,13 @@
         "Entry"
         {
         "MsmKey" = "8:_UNDEFINED"
-        "OwnerKey" = "8:_06BE5F7BDF401173900D2EE3C63C3EC6"
+        "OwnerKey" = "8:_44314244C9A16535D668858EB5B118C0"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
         {
         "MsmKey" = "8:_UNDEFINED"
-        "OwnerKey" = "8:_8F58C07C3A27AFEB9C516095C4763075"
+        "OwnerKey" = "8:_CAD72F0F08CC6B35F36E2575BB167B80"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -1375,6 +1375,12 @@
         "OwnerKey" = "8:_5E6668612C859C35FCB4328D0BE70F6A"
         "MsmSig" = "8:_UNDEFINED"
         }
+        "Entry"
+        {
+        "MsmKey" = "8:_UNDEFINED"
+        "OwnerKey" = "8:_1E616E612B20274DBD88243B7C8D5179"
+        "MsmSig" = "8:_UNDEFINED"
+        }
     }
     "Configurations"
     {
@@ -1447,6 +1453,20 @@
     {
         "CustomAction"
         {
+            "{4AA51A2D-7D85-4A59-BA75-B0809FC8B380}:_10208539B7334746BA46596423BF0386"
+            {
+            "Name" = "8:NDP462-KB3151800-x86-x64-AllOS-ENU.exe"
+            "Condition" = "8:"
+            "Object" = "8:_7BC6750A70124410B112EF2DFB58A5EE"
+            "FileType" = "3:2"
+            "InstallAction" = "3:2"
+            "Arguments" = "8:/Commit"
+            "EntryPoint" = "8:"
+            "Sequence" = "3:1"
+            "Identifier" = "8:_D74B38A6_DAC5_4DDA_A07E_021F7D7A8B3F"
+            "InstallerClass" = "11:FALSE"
+            "CustomActionData" = "8:"
+            }
         }
         "DefaultFeature"
         {
@@ -1462,7 +1482,7 @@
                 {
                 "Name" = "8:.NET Framework"
                 "Message" = "8:[VSDNETMSG]"
-                "FrameworkVersion" = "8:.NETFramework,Version=v4.7.2"
+                "FrameworkVersion" = "8:.NETFramework,Version=v4.6.2"
                 "AllowLaterVersions" = "11:FALSE"
                 "InstallUrl" = "8:http://go.microsoft.com/fwlink/?LinkId=863262"
                 }
@@ -1470,37 +1490,6 @@
         }
         "File"
         {
-            "{9F6F8455-1EF1-4B85-886A-4223BCC8E7F7}:_06BE5F7BDF401173900D2EE3C63C3EC6"
-            {
-            "AssemblyRegister" = "3:1"
-            "AssemblyIsInGAC" = "11:FALSE"
-            "AssemblyAsmDisplayName" = "8:Smith.WPF.HtmlEditor, Version=1.0.0.0, Culture=neutral, processorArchitecture=x86"
-                "ScatterAssemblies"
-                {
-                    "_06BE5F7BDF401173900D2EE3C63C3EC6"
-                    {
-                    "Name" = "8:Smith.WPF.HtmlEditor.dll"
-                    "Attributes" = "3:512"
-                    }
-                }
-            "SourcePath" = "8:Smith.WPF.HtmlEditor.dll"
-            "TargetName" = "8:"
-            "Tag" = "8:"
-            "Folder" = "8:_87518D03C1C34F53B136E2584F98060F"
-            "Condition" = "8:"
-            "Transitive" = "11:FALSE"
-            "Vital" = "11:TRUE"
-            "ReadOnly" = "11:FALSE"
-            "Hidden" = "11:FALSE"
-            "System" = "11:FALSE"
-            "Permanent" = "11:FALSE"
-            "SharedLegacy" = "11:FALSE"
-            "PackageAs" = "3:1"
-            "Register" = "3:1"
-            "Exclude" = "11:FALSE"
-            "IsDependency" = "11:TRUE"
-            "IsolateTo" = "8:"
-            }
             "{9F6F8455-1EF1-4B85-886A-4223BCC8E7F7}:_07331DCA5886CF76A8D3B1586F0AD1A8"
             {
             "AssemblyRegister" = "3:1"
@@ -2172,6 +2161,37 @@
             "IsDependency" = "11:TRUE"
             "IsolateTo" = "8:"
             }
+            "{9F6F8455-1EF1-4B85-886A-4223BCC8E7F7}:_44314244C9A16535D668858EB5B118C0"
+            {
+            "AssemblyRegister" = "3:1"
+            "AssemblyIsInGAC" = "11:FALSE"
+            "AssemblyAsmDisplayName" = "8:Smith.WPF.HtmlEditor, Version=1.0.0.0, Culture=neutral, processorArchitecture=x86"
+                "ScatterAssemblies"
+                {
+                    "_44314244C9A16535D668858EB5B118C0"
+                    {
+                    "Name" = "8:Smith.WPF.HtmlEditor.dll"
+                    "Attributes" = "3:512"
+                    }
+                }
+            "SourcePath" = "8:Smith.WPF.HtmlEditor.dll"
+            "TargetName" = "8:"
+            "Tag" = "8:"
+            "Folder" = "8:_87518D03C1C34F53B136E2584F98060F"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:TRUE"
+            "IsolateTo" = "8:"
+            }
             "{9F6F8455-1EF1-4B85-886A-4223BCC8E7F7}:_48842550D59ECA7BAA25AF45FFEB1E60"
             {
             "AssemblyRegister" = "3:1"
@@ -2719,6 +2739,26 @@
             "IsDependency" = "11:TRUE"
             "IsolateTo" = "8:"
             }
+            "{1FB2D0AE-D3B9-43D4-B9DD-F88EC61E35DE}:_7BC6750A70124410B112EF2DFB58A5EE"
+            {
+            "SourcePath" = "8:..\\vngp21\\publish\\DotNetFX462\\NDP462-KB3151800-x86-x64-AllOS-ENU.exe"
+            "TargetName" = "8:NDP462-KB3151800-x86-x64-AllOS-ENU.exe"
+            "Tag" = "8:"
+            "Folder" = "8:_87518D03C1C34F53B136E2584F98060F"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:TRUE"
+            "IsDependency" = "11:FALSE"
+            "IsolateTo" = "8:"
+            }
             "{9F6F8455-1EF1-4B85-886A-4223BCC8E7F7}:_7E6E2F2CDB32C7B049178168EC5A323B"
             {
             "AssemblyRegister" = "3:1"
@@ -2795,37 +2835,6 @@
                     }
                 }
             "SourcePath" = "8:System.Threading.Timer.dll"
-            "TargetName" = "8:"
-            "Tag" = "8:"
-            "Folder" = "8:_87518D03C1C34F53B136E2584F98060F"
-            "Condition" = "8:"
-            "Transitive" = "11:FALSE"
-            "Vital" = "11:TRUE"
-            "ReadOnly" = "11:FALSE"
-            "Hidden" = "11:FALSE"
-            "System" = "11:FALSE"
-            "Permanent" = "11:FALSE"
-            "SharedLegacy" = "11:FALSE"
-            "PackageAs" = "3:1"
-            "Register" = "3:1"
-            "Exclude" = "11:FALSE"
-            "IsDependency" = "11:TRUE"
-            "IsolateTo" = "8:"
-            }
-            "{9F6F8455-1EF1-4B85-886A-4223BCC8E7F7}:_8F58C07C3A27AFEB9C516095C4763075"
-            {
-            "AssemblyRegister" = "3:1"
-            "AssemblyIsInGAC" = "11:FALSE"
-            "AssemblyAsmDisplayName" = "8:Interop.MSHTML, Version=4.0.0.0, Culture=neutral, processorArchitecture=x86"
-                "ScatterAssemblies"
-                {
-                    "_8F58C07C3A27AFEB9C516095C4763075"
-                    {
-                    "Name" = "8:Interop.MSHTML.dll"
-                    "Attributes" = "3:512"
-                    }
-                }
-            "SourcePath" = "8:Interop.MSHTML.dll"
             "TargetName" = "8:"
             "Tag" = "8:"
             "Folder" = "8:_87518D03C1C34F53B136E2584F98060F"
@@ -3618,6 +3627,37 @@
             "IsDependency" = "11:TRUE"
             "IsolateTo" = "8:"
             }
+            "{9F6F8455-1EF1-4B85-886A-4223BCC8E7F7}:_CAD72F0F08CC6B35F36E2575BB167B80"
+            {
+            "AssemblyRegister" = "3:1"
+            "AssemblyIsInGAC" = "11:FALSE"
+            "AssemblyAsmDisplayName" = "8:Interop.MSHTML, Version=4.0.0.0, Culture=neutral, processorArchitecture=x86"
+                "ScatterAssemblies"
+                {
+                    "_CAD72F0F08CC6B35F36E2575BB167B80"
+                    {
+                    "Name" = "8:Interop.MSHTML.dll"
+                    "Attributes" = "3:512"
+                    }
+                }
+            "SourcePath" = "8:Interop.MSHTML.dll"
+            "TargetName" = "8:"
+            "Tag" = "8:"
+            "Folder" = "8:_87518D03C1C34F53B136E2584F98060F"
+            "Condition" = "8:"
+            "Transitive" = "11:FALSE"
+            "Vital" = "11:TRUE"
+            "ReadOnly" = "11:FALSE"
+            "Hidden" = "11:FALSE"
+            "System" = "11:FALSE"
+            "Permanent" = "11:FALSE"
+            "SharedLegacy" = "11:FALSE"
+            "PackageAs" = "3:1"
+            "Register" = "3:1"
+            "Exclude" = "11:FALSE"
+            "IsDependency" = "11:TRUE"
+            "IsolateTo" = "8:"
+            }
             "{9F6F8455-1EF1-4B85-886A-4223BCC8E7F7}:_CCCE431927D14E0ED78DD879A9B351E5"
             {
             "AssemblyRegister" = "3:1"
@@ -4388,7 +4428,7 @@
         "Name" = "8:Microsoft Visual Studio"
         "ProductName" = "8:VietNamGiaPha"
         "ProductCode" = "8:{DEDE9A86-1B39-4A9E-8FE0-26416A155E4C}"
-        "PackageCode" = "8:{B493F71F-FBB2-4C3E-9689-A218C47E9E7E}"
+        "PackageCode" = "8:{BA1C265A-E81E-410E-B995-7620ED0FDAD0}"
         "UpgradeCode" = "8:{22167E8F-4123-434F-A7CE-3535AA80C9CC}"
         "AspNetVersion" = "8:2.0.50727.0"
         "RestartWWWService" = "11:FALSE"

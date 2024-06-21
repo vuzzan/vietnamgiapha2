@@ -248,14 +248,28 @@
                                             <GroupBox.Header >
                                                 <TextBlock Text=" - Thông tin gia phả" />
                                             </GroupBox.Header>
-                                            <StackPanel>
-                                                    <mah:MetroHeader Header="Tên Gia Phả" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                                        <TextBox Text="{Binding FamilyTree.GiaphaName}" />
-                                                    </mah:MetroHeader>
-                                                    <mah:MetroHeader Header="Tộc" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                                        <TextBox Text="{Binding FamilyTree.GiaphaNameRoot}" />
-                                                    </mah:MetroHeader>
-                                            </StackPanel>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="*" />
+                                                    <RowDefinition Height="*" />
+                                                </Grid.RowDefinitions>
+                                                <mah:MetroHeader Grid.Row="0" Grid.Column="0" Header="Tên Gia Phả" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
+                                                    <TextBox Text="{Binding FamilyTree.GP.GiaphaName}" />
+                                                </mah:MetroHeader>
+                                                <mah:MetroHeader Grid.Row="0" Grid.Column="1" Header="Ở tại" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
+                                                    <TextBox Text="{Binding FamilyTree.GP.RF_OTAI}" />
+                                                </mah:MetroHeader>
+                                                <mah:MetroHeader Grid.Row="1" Grid.Column="0" Header="Ngày hội mả|Tế Thu" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
+                                                    <TextBox Text="{Binding FamilyTree.GP.RF_DAYS}" />
+                                                </mah:MetroHeader>
+                                                <mah:MetroHeader Grid.Row="1" Grid.Column="1" Header="Slogan" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
+                                                    <TextBox Text="{Binding FamilyTree.GP.RF_CHANNGON}" />
+                                                </mah:MetroHeader>
+                                            </Grid>
                                         </GroupBox>
                                         
                                         <GroupBox>
@@ -333,6 +347,11 @@
                                               PreviewMouseLeftButtonUp="ListView_ListNguoiTrongGiaDinh_MouseDoubleClick"
                                             x:Name="ListView_ListNguoiTrongGiaDinh"
                                         >
+                                        <ListView.ItemContainerStyle>
+                                            <Style TargetType="ListViewItem">
+                                                <EventSetter Event="PreviewKeyDown" Handler="ListViewItem_PreviewKeyDown" />
+                                            </Style>
+                                        </ListView.ItemContainerStyle>
                                         <ListView.View>
                                             <GridView>
                                                 <GridViewColumn Width="165" DisplayMemberBinding="{Binding MANS_NAME_HUY}" Header="Tên" />
@@ -489,18 +508,45 @@ SelectedIndex="0"
         </Grid>
         <!--BOTTOM STATUS BAR -->
         <StatusBar Grid.Row="2">
-            <StatusBarItem>
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="Lưu: "></TextBlock>
-                    <TextBlock Text="{Binding FamilyTree.GP.FileName}"></TextBlock>
-                </StackPanel>
-            </StatusBarItem>
+            
             <StatusBarItem>
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="Liên hệ: Nghĩa (0908594239)"></TextBlock>
                 </StackPanel>
             </StatusBarItem>
-            
+            <StatusBarItem>
+                <StackPanel Orientation="Horizontal" Margin="5">
+                    <TextBlock>
+                        <Hyperlink NavigateUri="https://www.vietnamgiapha.com" RequestNavigate="Hyperlink_RequestNavigate">
+                            Website Việt Nam Gia Phả
+                        </Hyperlink>    
+                    </TextBlock>
+                </StackPanel>
+            </StatusBarItem>
+            <StatusBarItem>
+                <StackPanel Orientation="Horizontal" Margin="5">
+                    <TextBlock>           
+                    <Hyperlink NavigateUri="https://www.facebook.com/groups/vietnamgiapha" RequestNavigate="Hyperlink_RequestNavigate">
+                        Nhóm FB Việt Nam Gia Phả
+                    </Hyperlink>
+                    </TextBlock>
+                </StackPanel>
+            </StatusBarItem>
+            <StatusBarItem>
+                <StackPanel Orientation="Horizontal" Margin="5">
+                    <TextBlock>           
+                        <Hyperlink NavigateUri="https://www.vietnamgiapha" RequestNavigate="Hyperlink_RequestNavigate_1" >
+                            <TextBlock Text="{Binding FamilyTree.GiaphaName}"/>
+                            </Hyperlink>
+                    </TextBlock>
+                </StackPanel>
+            </StatusBarItem>
+            <StatusBarItem>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="File: "></TextBlock>
+                    <TextBlock Text="{Binding FamilyTree.GP.FileName}"></TextBlock>
+                </StackPanel>
+            </StatusBarItem>
         </StatusBar>
     </Grid>
 </mah:MetroWindow>

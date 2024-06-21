@@ -37,8 +37,8 @@ namespace vietnamgiapha
             GiaphaId = 0;
             Username = "";
             Password = "";
-            GiaphaName = "Gia phả mẫu";
-            GiaphaNameRoot = "Gia phả";
+            GiaphaName = "";
+            GiaphaNameRoot = "";
             PhaKy = "";
             Tocuoc = "";
             ThuyTo = "";
@@ -51,6 +51,7 @@ namespace vietnamgiapha
             familyRoot.FamilyUp = 0;
             familyRoot.FamilyLevel = 1;
             familyRoot.FamilyOrder = 1;
+            familyRoot.FamilyNew = 1;
             familyRoot.ListPerson.Add(new PersonInfo("Thủy tổ", familyRoot));
         }
 
@@ -240,7 +241,7 @@ namespace vietnamgiapha
             json += "\"" + Util.RemoveSpecialChar(this.MANS_NAME_THUY) + "\",";
             json += "\"" + this.MANS_ID + "\",";
             json += "\"" + this.fid + "\",";
-            json += "\"" + (this.MANS_GENDER== "Nam"?1:0) + "\",";
+            json += "\"" + (this.MANS_GENDER== "Nam"?1:0) + "\",";//6
             json += "\"" + Util.RemoveSpecialChar(this.MANS_DOB) + "\",";
             json += "\"" + Util.RemoveSpecialChar(this.MANS_DOD) + "\",";
             json += "\"" + Util.RemoveSpecialChar(this.MANS_WOD) + "\",";
@@ -258,7 +259,11 @@ namespace vietnamgiapha
         public int FamilyUp { get; set; }
         public int FamilyOrder { get; set; }
         public int FamilyLevel { get; set; }
-
+        public int FamilyNew { get; set; }
+        public FamilyInfo()
+        {
+            FamilyNew = 1;
+        }
         // LIST CHILD FAMILY IN FAMILY
         ObservableCollection<FamilyInfo> _familyChildren = new ObservableCollection<FamilyInfo>();
         public ObservableCollection<FamilyInfo> FamilyChildren
@@ -301,7 +306,13 @@ namespace vietnamgiapha
                         tmp += Util.RemoveSpecialChar(item.MANS_NAME_HUY) + " + ";
                     }
                 }
-                return tmp.Substring(0, tmp.Length-2);
+
+                tmp = tmp.Substring(0, tmp.Length-2);
+                if( FamilyNew == 1)
+                {
+                    tmp += "*";
+                }
+                return tmp;
             }
         }
 
@@ -313,7 +324,12 @@ namespace vietnamgiapha
                 if (_listPerson.Count >= 1)
                 {
                     tmp += Util.RemoveSpecialChar(_listPerson[0].MANS_NAME_HUY) + " + ";
-                    return tmp.Substring(0, tmp.Length - 2);
+                    tmp = tmp.Substring(0, tmp.Length - 2);
+                    if (FamilyNew == 1)
+                    {
+                        //tmp += "*";
+                    }
+                    return tmp;
                 }
                 else if (_listPerson.Count == 0)
                 {

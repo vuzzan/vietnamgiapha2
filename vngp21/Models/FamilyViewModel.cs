@@ -72,7 +72,19 @@ namespace vietnamgiapha
         public ICommand RemoveFamilyClick { get; set; }
         public ICommand RemoveFamilyOnlyClick { get; set; }
         public ICommand InsertPerson2FamilyClick { get; set; }
-
+        public void MakeOrderChild()
+        {
+            if( Children.Count > 0 )
+            {
+                //
+                for(int i=0; i< Children.Count; i++)
+                {
+                    Children[i]._familyInfo.FamilyOrder = (i + 1);
+                }
+                //
+                //Children.OrderBy(i => i._familyInfo.FamilyOrder);
+            }
+        }
         // MENU FUNCTION
         private void DebugFamilyClickFunc()
         {
@@ -209,8 +221,6 @@ namespace vietnamgiapha
             insertFamily.FamilyUp = this._familyInfo.FamilyId;
             insertFamily.FamilyOrder = this._familyInfo.FamilyOrder;
             //
-            //
-
             this.AddFamilyChild(insertFamily);
             this.IsExpanded = true;
             this.IsSelected = true;
@@ -237,6 +247,8 @@ namespace vietnamgiapha
             {
                 this.Parent.Children.Move(indexThis, indexThis + 1);
             }
+
+            this.Parent.MakeOrderChild();
         }
         private void InsertFamilyAnhClickFunc()
         {
@@ -249,7 +261,7 @@ namespace vietnamgiapha
             {
                 this.Parent.Children.Move(indexThis, indexThis-1);
             }
-
+            this.Parent.MakeOrderChild();
         }
         private void InsertFamilyClickFunc()
         {
@@ -288,6 +300,7 @@ namespace vietnamgiapha
             {
                 // Insert truoc Thuy to
                 this.Parent = insert;
+                this._familyInfo.FamilyUp = insert._familyInfo.FamilyId;
             }
 
             // 6. Update gia đình this tăng 1 bậc sâu
@@ -464,7 +477,7 @@ namespace vietnamgiapha
             string json = "[";
             // Item 1 : Family info 
             json += "[";
-            json += this._familyInfo.FamilyId + "," + this._familyInfo.FamilyLevel + "," + this._familyInfo.FamilyOrder + "," + this._familyInfo.FamilyUp;
+            json += this._familyInfo.FamilyId + "," + this._familyInfo.FamilyLevel + "," + this._familyInfo.FamilyOrder + "," + this._familyInfo.FamilyUp + "," + this._familyInfo.FamilyNew;
             json += "],";
             // Item 2: List Person name
             json += "[";
