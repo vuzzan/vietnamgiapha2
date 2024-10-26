@@ -187,7 +187,6 @@
                         >
                             <TreeView.ItemContainerStyle>
                                 <Style TargetType="{x:Type TreeViewItem}" BasedOn="{StaticResource {x:Type TreeViewItem}}">
-
                                     <EventSetter Event="RequestBringIntoView" Handler="TreeViewItem_RequestBringIntoView"/>
                                     <EventSetter Event="Selected" Handler="OnSelected"/>
                                     <Setter Property="ContextMenu">
@@ -209,6 +208,7 @@
                                                 <MenuItem Command="{Binding InsertPerson2FamilyClick}" Header="Người: Thêm người" />
                                                 <Separator/>
                                                 <MenuItem Command="{Binding DebugFamilyClick}" Header="Xem GD" />
+                                                <MenuItem Command="{Binding CheckFamilyClick}" Header="Kiểm Tra" />
                                             </ContextMenu>
                                         </Setter.Value>
                                     </Setter>
@@ -226,7 +226,9 @@
 
                             <TreeView.ItemTemplate>
                                 <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-                                    <TextBlock Text="{Binding Name}" />
+                                    <ContentControl MouseDoubleClick="Treeview_Family_MouseDoubleClick">
+                                        <TextBlock Text="{Binding Name}" />
+                                    </ContentControl>
                                 </HierarchicalDataTemplate>
                             </TreeView.ItemTemplate>
                         </TreeView>
@@ -340,12 +342,13 @@
                                     </ListView>
                                 </GroupBox>
 
-                                <GroupBox Grid.Row="1" Header="Gia Đình Đang Chọn" Background="Cyan" >
+                                <GroupBox Grid.Row="1" Header="Gia Đình Đang Chọn" Background="Cyan" ToolTip="** Thay đổi thứ tự vợ con trong gia đình->Click chuột vào người đó, bấm SHILF+Up cho lên, SHILF+Down xuống">
                                     <ListView Margin="0" Width="300"
                                         BorderThickness="0" ItemsSource="{Binding FamilyTree.Family.SelectedFamily.ListPerson}"
                                         SelectedIndex="0" 
                                               PreviewMouseLeftButtonUp="ListView_ListNguoiTrongGiaDinh_MouseDoubleClick"
                                             x:Name="ListView_ListNguoiTrongGiaDinh"
+                                              ToolTip="** Thay đổi thứ tự vợ con trong gia đình->Click chuột vào người đó, bấm SHILF+Up cho lên, SHILF+Down xuống"
                                         >
                                         <ListView.ItemContainerStyle>
                                             <Style TargetType="ListViewItem">
@@ -354,7 +357,7 @@
                                         </ListView.ItemContainerStyle>
                                         <ListView.View>
                                             <GridView>
-                                                <GridViewColumn Width="165" DisplayMemberBinding="{Binding MANS_NAME_HUY}" Header="Tên" />
+                                                <GridViewColumn Width="165" DisplayMemberBinding="{Binding NAMEHUY}" Header="Tên"/>
                                                 <GridViewColumn DisplayMemberBinding="{Binding MANS_GENDER}" Header="Giới" />
                                                 <GridViewColumn DisplayMemberBinding="{Binding MANS_DOB}" Header="Sinh" />
                                             </GridView>
@@ -390,7 +393,7 @@
 
 
 
-                                                    <mah:MetroHeader Grid.Row="0" Grid.ColumnSpan="2"  Header="Tên Húy (Tên thiệt)" 
+                                                    <mah:MetroHeader Grid.Row="0" Grid.ColumnSpan="2"  Header="Tên Húy (Tên thiệt)" ToolTip="Tên thiệt là theo giọng miền Nam, tên thật là của Bắc Thành"
                                                                      mah:HeaderedControlHelper.HeaderFontWeight="Bold" 
                                                                      mah:HeaderedControlHelper.HeaderFontSize="25"
                                                                      mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
@@ -412,35 +415,42 @@
                                                     <mah:MetroHeader Grid.Row="2"  Grid.Column="1" Header="Con thứ mấy trong gia đình" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
                                                         <TextBox Text="{Binding MANS_CONTHUMAY}" />
                                                     </mah:MetroHeader>
-
-
-                                                    <mah:ToggleSwitch Grid.Row="3"  Grid.Column="0"  Header="Giới Tính" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}"
-OffContent="Nữ"
-OnContent="Nam"
->
-                                                        <mah:ToggleSwitch.IsOn>
-                                                            <Binding Path="IsGioiTinhNam" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged" />
-                                                        </mah:ToggleSwitch.IsOn>
-                                                    </mah:ToggleSwitch>
-                                                    <mah:MetroHeader Grid.Row="3"  Grid.Column="1" Header="Ngày Sinh" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                                        <TextBox Text="{Binding MANS_DOB}" />
-                                                    </mah:MetroHeader>
-                                                    <mah:MetroHeader Grid.Row="4"  Grid.Column="0" Header="Ngày Chết" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                                        <TextBox Text="{Binding MANS_DOD}" />
-                                                    </mah:MetroHeader>
-                                                    <mah:MetroHeader Grid.Row="4"  Grid.Column="1" Header="Nơi chôn" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                                        <TextBox Text="{Binding MANS_WOD}" />
-                                                    </mah:MetroHeader>
-
-
-                                                    <mah:ToggleSwitch Grid.Row="5"  Grid.Column="1" Header="Con trong tộc - Dâu/Rể" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}"
-                                                        OffContent="Dâu/Rể"
-                                                        OnContent="Con Trong Tộc"
-                                                        >
+                                                    <mah:ToggleSwitch Grid.Row="3"  Grid.Column="0" 
+                                                                      Header="Con trong tộc - Dâu/Rể" mah:HeaderedControlHelper.HeaderFontWeight="Bold" 
+                                                                      mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}"
+    OffContent="Dâu/Rể"
+    OnContent="Con Trong Tộc" ToolTip="Con trong tộc là con gái / con trai thuộc dòng họ"
+              Toggled="ToggleSwitch_Toggled"                                                      
+    >
                                                         <mah:ToggleSwitch.IsOn>
                                                             <Binding Path="IsMainPerson" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged" />
                                                         </mah:ToggleSwitch.IsOn>
                                                     </mah:ToggleSwitch>
+
+                                                    <mah:ToggleSwitch Grid.Row="3"  Grid.Column="1"  
+                                                                      Header="Giới Tính" 
+                                                                      mah:HeaderedControlHelper.HeaderFontWeight="Bold" 
+                                                                      mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}"
+OffContent="Nữ"
+OnContent="Nam"
+Toggled="ToggleSwitch_GioiTinh_Toggled"
+>
+                                                        <mah:ToggleSwitch.IsOn >
+                                                            <Binding Path="IsGioiTinhNam" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged" />
+                                                        </mah:ToggleSwitch.IsOn>
+                                                    </mah:ToggleSwitch>
+                                                    <mah:MetroHeader Grid.Row="4"  Grid.Column="0" Header="Ngày Sinh" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
+                                                        <TextBox Text="{Binding MANS_DOB}" />
+                                                    </mah:MetroHeader>
+                                                    <mah:MetroHeader Grid.Row="5"  Grid.Column="0" Header="Ngày Chết" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
+                                                        <TextBox Text="{Binding MANS_DOD}" />
+                                                    </mah:MetroHeader>
+                                                    <mah:MetroHeader Grid.Row="5"  Grid.Column="1" Header="Nơi chôn" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
+                                                        <TextBox Text="{Binding MANS_WOD}" />
+                                                    </mah:MetroHeader>
+
+
+                                                    
 
                                                     
                                                 </Grid>
@@ -448,6 +458,8 @@ OnContent="Nam"
                                                 <mah:MetroHeader Header="Chi tiết người này" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
                                                     <TextBox Text="{Binding MANS_DETAIL}" MinLines="4"/>
                                                 </mah:MetroHeader>
+
+                                                <TextBlock Text="** Thay đổi thứ tự vợ con trong gia đình->Click chuột vào người đó, bấm SHILF+Up cho lên, SHILF+Down xuống"/>
 
                                             </StackPanel>
                                         </ScrollViewer>

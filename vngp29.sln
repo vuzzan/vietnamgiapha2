@@ -12,6 +12,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "vngp21", "vngp21\vngp21.csp
 EndProject
 Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "VietNamGiaPha", "VietNamGiaPha\VietNamGiaPha.vdproj", "{AB6FEDD8-9F54-422E-A85C-135B03196D8D}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "WpfDraw", "..\WpfDraw\WpfDraw.csproj", "{86DA8D89-3B99-469C-A925-5136D2BBFA88}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		All|Any CPU = All|Any CPU
@@ -56,6 +58,18 @@ Global
 		{AB6FEDD8-9F54-422E-A85C-135B03196D8D}.Release|Any CPU.ActiveCfg = Release
 		{AB6FEDD8-9F54-422E-A85C-135B03196D8D}.Release|x86.ActiveCfg = Release
 		{AB6FEDD8-9F54-422E-A85C-135B03196D8D}.Release|x86.Build.0 = Release
+		{86DA8D89-3B99-469C-A925-5136D2BBFA88}.All|Any CPU.ActiveCfg = Debug|Any CPU
+		{86DA8D89-3B99-469C-A925-5136D2BBFA88}.All|Any CPU.Build.0 = Debug|Any CPU
+		{86DA8D89-3B99-469C-A925-5136D2BBFA88}.All|x86.ActiveCfg = Debug|Any CPU
+		{86DA8D89-3B99-469C-A925-5136D2BBFA88}.All|x86.Build.0 = Debug|Any CPU
+		{86DA8D89-3B99-469C-A925-5136D2BBFA88}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{86DA8D89-3B99-469C-A925-5136D2BBFA88}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{86DA8D89-3B99-469C-A925-5136D2BBFA88}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{86DA8D89-3B99-469C-A925-5136D2BBFA88}.Debug|x86.Build.0 = Debug|Any CPU
+		{86DA8D89-3B99-469C-A925-5136D2BBFA88}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{86DA8D89-3B99-469C-A925-5136D2BBFA88}.Release|Any CPU.Build.0 = Release|Any CPU
+		{86DA8D89-3B99-469C-A925-5136D2BBFA88}.Release|x86.ActiveCfg = Release|Any CPU
+		{86DA8D89-3B99-469C-A925-5136D2BBFA88}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

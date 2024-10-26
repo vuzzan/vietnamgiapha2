@@ -6,6 +6,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Input;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace vietnamgiapha
 {
@@ -43,6 +44,7 @@ namespace vietnamgiapha
                      .ToList<FamilyViewModel>());
 
             // MENU FUNCTION
+            CheckFamilyClick = new RelayCommand(CheckFamilyClickFunc);
             DebugFamilyClick = new RelayCommand(DebugFamilyClickFunc);
             CutFamilyClick = new RelayCommand(CutFamilyClickFunc);
             PasteFamilyClick = new RelayCommand(PasteFamilyClickFunc);
@@ -62,6 +64,7 @@ namespace vietnamgiapha
         }
 
         // MENU FUNCTION
+        public ICommand CheckFamilyClick { get; set; }
         public ICommand DebugFamilyClick { get; set; }
         public ICommand CutFamilyClick { get; set; }
         public ICommand PasteFamilyClick { get; set; }
@@ -86,33 +89,112 @@ namespace vietnamgiapha
             }
         }
         // MENU FUNCTION
-        private void DebugFamilyClickFunc()
+        public static bool CheckValid(FamilyViewModel root, ref string errorMessage)
         {
-            string text = "Gia đình - " + this.Name0 + " | ID=[" + this._familyInfo.FamilyId + "] UP=[" + this._familyInfo.FamilyUp  + "]" + Environment.NewLine;
-            text += "    --- " + Environment.NewLine;
-            if (this.Parent != null)
+            if( root == null)
             {
-                text += "    Gia đình cha - " + this.Parent.Name0 + Environment.NewLine;
+                errorMessage = "Check NULL";
+                return false;
             }
-            else
+            if (root.Parent != null)
             {
-                text += "    Gia đình cha - ROOT" + Environment.NewLine;
-            }
-            text += "    --- " + Environment.NewLine;
-            if ( this.Children.Count > 0)
-            {
-                foreach( var child in this.Children)
+                if (root.Parent._familyInfo.FamilyId == root._familyInfo.FamilyUp)
                 {
-                    text += "    Gia đình con - " + child.Name0 + Environment.NewLine;
+                    // ok
+                }
+                else
+                {
+                    // sai
+                    errorMessage += "Sai ID cha giữa gd con [" + root.Name0 + "] và [" + root.Parent.Name0 + "]" + Environment.NewLine;
+                    if( MessageBox.Show("Tự động sửa ??", "Xác nhận", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
+                    {
+                        root._familyInfo.FamilyUp = root.Parent._familyInfo.FamilyId;
+                    }
+                }
+            }
+            if (root.Children.Count > 0)
+            {
+                foreach (var child in root.Children)
+                {
+                    if (child._familyInfo.FamilyUp != root._familyInfo.FamilyId)
+                    {
+                        errorMessage += "- Sai ID cha giữa gd con [" + child.Name0 + "] và [" + root.Name0 + "] " + Environment.NewLine;
+                        if (MessageBox.Show("Tự động sửa ??", "Xác nhận", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
+                        {
+                            child._familyInfo.FamilyUp = root._familyInfo.FamilyId;
+                        }
+                    }
+                    CheckValid(child, ref errorMessage);
                 }
             }
             else
             {
-                text += "    Không con " + Environment.NewLine;
+            }
+
+            return errorMessage.Length==0;
+        }
+        private void CheckFamilyClickFunc()
+        {
+            string errorMessage = "";
+            CheckValid(this, ref errorMessage);
+            if (errorMessage.Length > 0)
+            {
+                MessageBox.Show(errorMessage, "Có lỗi");
+            }
+        }
+        public void DebugFamilyClickFunc()
+        {
+            string text = "Gia đình - " + this.Name0 + " | ID=[" + this._familyInfo.FamilyId + "] ID GD CHA=[" + this._familyInfo.FamilyUp  + "]" + Environment.NewLine;
+            text += "--- " + Environment.NewLine;
+            if (this.Parent != null)
+            {
+                text += "Gia đình cha - " + this.Parent.Name0 + " ID=[" + this.Parent._familyInfo.FamilyId + "]" + Environment.NewLine;
+                if(this.Parent._familyInfo.FamilyId== this._familyInfo.FamilyUp)
+                {
+                    // ok
+                }
+                else
+                {
+                    // sai
+                    MessageBox.Show("Sai ID cha giữa gd con ["+ this.Name0+ "] và [" + this.Parent.Name0 +"] ", "Có lỗi");
+                    if (MessageBox.Show("Tự động sửa ??", "Xác nhận", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
+                    {
+                        this._familyInfo.FamilyUp = this.Parent._familyInfo.FamilyId;
+                    }
+                }
+            }
+            else
+            {
+                text += "Gia đình cha - ROOT" + Environment.NewLine;
+            }
+            text += "GĐ CON:" + Environment.NewLine;
+            string checkError = "";
+            if ( this.Children.Count > 0)
+            {
+                foreach( var child in this.Children)
+                {
+                    text += "Gia đình con - " + child.Name0 + " ID=[" + child._familyInfo.FamilyId + "] Up=[" + this._familyInfo.FamilyId  + "]" + Environment.NewLine;
+                    if (child._familyInfo.FamilyUp != this._familyInfo.FamilyId)
+                    {
+                        string tempError = "- Sai ID cha giữa gd con [" + child.Name0 + "] và [" + this.Name0 + "] " + Environment.NewLine;
+                        checkError += tempError;
+                        if (MessageBox.Show(tempError + "Tự động sửa ??", "Xác nhận", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
+                        {
+                            child._familyInfo.FamilyUp = this._familyInfo.FamilyId;
+                        }
+                    }
+                }
+                if( checkError.Length> 0 ) {
+                    MessageBox.Show(checkError, "Có lỗi");
+                }
+            }
+            else
+            {
+                text += "Không con " + Environment.NewLine;
             }
             
             MessageBox.Show(
-                text
+                text, "Chi tiết gia đình: " + this.Name0
                 );
         }
         private void CutFamilyClickFunc()
@@ -149,6 +231,9 @@ namespace vietnamgiapha
                     this.Parent.Children.Insert(index+1, _objFamilyTree.FamilyCut);
                     // set gia đình cha cho gd cắt
                     _objFamilyTree.FamilyCut.Parent = this.Parent;
+                    // Update lại ID Gia đình cha, cho gia đình dán
+                    _objFamilyTree.FamilyCut._familyInfo.FamilyUp = this._familyInfo.FamilyUp;
+
                     // 6. Update gia đình lấy bậc là bậc gia đình PASTE
                     UpdateLevel(_objFamilyTree.FamilyCut, this._familyInfo.FamilyLevel- _objFamilyTree.FamilyCut._familyInfo.FamilyLevel);
                 }
@@ -160,6 +245,22 @@ namespace vietnamgiapha
             if( this.ListPerson.Count>=1)
             {
                 var person = new PersonInfo("Người mới", this._familyInfo);
+                foreach(var item in this.ListPerson )
+                {
+                    if (item.IsMainPerson == 1)
+                    {
+                        if (item.IsGioiTinhNam == 1)
+                        {
+                            // person - gt = nu
+                            person.MANS_GENDER = "Nữ";
+                        }
+                        else
+                        {
+                            // person - gt = nam
+                            person.MANS_GENDER = "Nam";
+                        }
+                    }
+                }
                 this.ListPerson.Add(person);
             }
         }
@@ -331,6 +432,10 @@ namespace vietnamgiapha
         #endregion // Constructors
 
         #region Person Properties
+        public override string ToString()
+        {
+            return Name0 + " ID=" + this._familyInfo.FamilyId + " Up=" + this._familyInfo.FamilyUp;
+        }
         public ObservableCollection<FamilyViewModel> Children
         {
             get { return _familyListChildren; }

@@ -208,6 +208,12 @@ namespace vietnamgiapha
             {
                 check += "Slogan phải có. Ví dụ: Cây có cội chi chi đó. " + Environment.NewLine;
             }
+            string errorMessage = "";
+            if( FamilyViewModel.CheckValid(this.Family.RootPerson, ref errorMessage) ==false)
+            {
+                check += errorMessage;
+            }
+
             return check;
         }
     }

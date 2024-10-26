@@ -445,7 +445,15 @@ namespace vietnamgiapha
                     familyMember.MANS_DETAIL = vietnamgiapha.Util.Base64Decode(personInfoArray[10].ToString());
                     familyMember.MANS_CONTHUMAY = personInfoArray[11].ToString();
                     familyMember.IsMainPerson = 0;
-
+                    // Correct gender
+                    if(familyMember.MANS_NAME_HUY.ToUpper().Contains(" VĂN "))
+                    {
+                        familyMember.MANS_GENDER = "Nam";
+                    }
+                    else if (familyMember.MANS_NAME_HUY.ToUpper().Contains(" THỊ "))
+                    {
+                        //familyMember.MANS_GENDER = "Nữ";
+                    }
                     family.ListPerson.Add(familyMember);
                 }
                 // 

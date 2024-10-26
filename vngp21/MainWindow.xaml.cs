@@ -65,7 +65,6 @@ namespace vietnamgiapha
             this.Title = this.Title + " - " + ver;
             this.viewModel = new MainWindowViewModel(DialogCoordinator.Instance, this);
             this.DataContext = this.viewModel;
-            
         }
         public void UpdateHtmlGiaPha()
         {
@@ -258,7 +257,14 @@ namespace vietnamgiapha
 
             return source;
         }
-
+        private void Treeview_Family_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            // Auto select người trong gia đình
+            if (viewModel.FamilyTree.Family.SelectedFamily != null )
+            {
+                viewModel.FamilyTree.Family.SelectedFamily.DebugFamilyClickFunc();
+            }
+        }
         private void ListView_ListGiaDinhCon_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
             if (((ListView)sender).SelectedItem==null)
@@ -448,24 +454,62 @@ namespace vietnamgiapha
 
         private void ListViewItem_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if( e.Key == Key.Delete) {
+            if (e.Key == Key.Delete)
+            {
+                // XOA
                 if (ListView_ListNguoiTrongGiaDinh.SelectedItem != null)
                 {
                     PersonInfo obj = (PersonInfo)ListView_ListNguoiTrongGiaDinh.SelectedItem;
-                    if( MessageBox.Show("Xóa [" + obj.MANS_NAME_HUY + "] ra khỏi gia đình này ?", "Xác Nhận", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
+                    if (MessageBox.Show("Xóa [" + obj.MANS_NAME_HUY + "] ra khỏi gia đình này ?", "Xác Nhận", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
                     {
-                        if( obj._familyInfo.ListPerson.IndexOf(obj)>-1)
+                        if (obj._familyInfo.ListPerson.IndexOf(obj) > -1)
                         {
                             obj._familyInfo.ListPerson.Remove(obj);
                             obj._familyInfo.OnPropertyChanged("Name");
                             log.Info("Xóa [" + obj.MANS_NAME_HUY + "] ra khỏi gia đình");
                         }
                     }
+                }
+            }
+            else if ((Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift)))
+            {
 
+                if (e.Key == Key.Up)
+                {
+                    // SHILF UP//
+                    if (ListView_ListNguoiTrongGiaDinh.SelectedItem != null)
+                    {
+                        // Chọn người
+                        PersonInfo obj = (PersonInfo)ListView_ListNguoiTrongGiaDinh.SelectedItem;
+                        // XOa người ra khỏi list
+                        int index = obj._familyInfo.ListPerson.IndexOf(obj);
+                        if (index > 1 && index < obj._familyInfo.ListPerson.Count)
+                        {
+                            obj._familyInfo.ListPerson.Remove(obj);
+                            //Thêm vô phía trên
+                            obj._familyInfo.ListPerson.Insert(index - 1, obj);
+                        }
+                    }
+                }
+                else if (e.Key == Key.Down)
+                {
+                    // DOWN
+                    if (ListView_ListNguoiTrongGiaDinh.SelectedItem != null)
+                    {
+                        // Chọn người
+                        PersonInfo obj = (PersonInfo)ListView_ListNguoiTrongGiaDinh.SelectedItem;
+                        // XOa người ra khỏi list
+                        int index = obj._familyInfo.ListPerson.IndexOf(obj);
+                        if (index > 0 && index< obj._familyInfo.ListPerson.Count)
+                        {
+                            obj._familyInfo.ListPerson.Remove(obj);
+                            //Thêm vô phía trên
+                            obj._familyInfo.ListPerson.Insert(index + 1, obj);
+                        }
+                    }
                 }
             }
         }
-
         private void Hyperlink_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
         {
             Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri));
@@ -488,6 +532,78 @@ namespace vietnamgiapha
 
             }
             e.Handled = false;
+        }
+
+        private void ToggleSwitch_DataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
+        {
+            log.Error("OKOK");
+        }
+
+        private void ToggleSwitch_DataContextChanged_1(object sender, DependencyPropertyChangedEventArgs e)
+        {
+
+        }
+
+        private void ToggleSwitch_Toggled(object sender, RoutedEventArgs e)
+        {
+            //log.Error("OKOK");
+            PersonInfo personInfo = ((ToggleSwitch)sender).DataContext as PersonInfo;
+            if (personInfo.IsMainPerson == 0)
+            {
+                if (personInfo._familyInfo != null && personInfo._familyInfo.ListPerson != null)
+                {
+                    int countMain = 0;
+                    for (int i = 0; i < personInfo._familyInfo.ListPerson.Count; i++)
+                    {
+                        countMain += personInfo._familyInfo.ListPerson[i].IsMainPerson;
+                    }
+                    if (countMain == 0)
+                    {
+                        // NO main person
+                        personInfo.IsMainPerson = 1;
+                    }
+                }
+                return;
+            }
+            if( personInfo._familyInfo!=null && personInfo._familyInfo.ListPerson!=null)
+            {
+                int countMain = 0;
+                foreach (var person in personInfo._familyInfo.ListPerson)
+                {
+                    if( person.IsMainPerson==1)
+                    {
+                        countMain++;
+                    }
+                }
+
+                var list = personInfo._familyInfo.ListPerson.OrderByDescending(v=> v.IsMainPerson).ToList();
+                personInfo._familyInfo.ListPerson.Clear();
+                for(int i=0;i<list.Count; i++)
+                {
+                    if( i==0)
+                    {
+                        personInfo._familyInfo.ListPerson.Add(list[i]);
+                    }
+                    else
+                    {
+                        list[i].MANS_GENDER = list[0].IsGioiTinhNam == 1 ? "Nữ" : "Nam";
+                        personInfo._familyInfo.ListPerson.Add(list[i]);
+                    }
+                }
+            }
+        }
+
+        private void ToggleSwitch_GioiTinh_Toggled(object sender, RoutedEventArgs e)
+        {
+            //log.Error("OKOK");
+            PersonInfo personInfo = ((ToggleSwitch)sender).DataContext as PersonInfo;
+            if (personInfo.IsMainPerson==1 && personInfo._familyInfo != null && personInfo._familyInfo.ListPerson != null)
+            {
+                for (int i = 1; i < personInfo._familyInfo.ListPerson.Count; i++)
+                {
+                    personInfo._familyInfo.ListPerson[i].MANS_GENDER = personInfo.IsGioiTinhNam == 1 ? "Nữ" : "Nam";
+                }
+            }
         }
     }
 }

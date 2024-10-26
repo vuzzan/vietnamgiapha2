@@ -73,7 +73,7 @@
     <GenerateManifests>true</GenerateManifests>
   </PropertyGroup>
   <PropertyGroup>
-    <SignManifests>true</SignManifests>
+    <SignManifests>false</SignManifests>
   </PropertyGroup>
   <PropertyGroup>
     <RunPostBuildEvent>OnBuildSuccess</RunPostBuildEvent>
@@ -198,6 +198,8 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Models\GiaphaInfo.cs" />
+    <Compile Include="Models\PersonInfo.cs" />
     <Compile Include="TextSearch\Database.cs" />
     <Compile Include="WindowUpload.xaml.cs">
       <DependentUpon>WindowUpload.xaml</DependentUpon>
