@@ -177,6 +177,7 @@ namespace vietnamgiapha
                 p = Util.Unicode2ASCII(p);
                 string json = await DownloadWeb(u, p);
                 //
+                log.Info("Download json: " + json);
                 JsonObject objData = (JsonObject)JsonObject.Parse(json);
                 GiaphaInfo gp = ParseJsonGiaPha(objData);
                 // Save file
@@ -452,7 +453,7 @@ namespace vietnamgiapha
                     }
                     else if (familyMember.MANS_NAME_HUY.ToUpper().Contains(" THỊ "))
                     {
-                        //familyMember.MANS_GENDER = "Nữ";
+                        familyMember.MANS_GENDER = "Nữ";
                     }
                     family.ListPerson.Add(familyMember);
                 }

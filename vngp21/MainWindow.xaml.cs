@@ -262,7 +262,7 @@ namespace vietnamgiapha
             // Auto select người trong gia đình
             if (viewModel.FamilyTree.Family.SelectedFamily != null )
             {
-                viewModel.FamilyTree.Family.SelectedFamily.DebugFamilyClickFunc();
+                //viewModel.FamilyTree.Family.SelectedFamily.DebugFamilyClickFunc();
             }
         }
         private void ListView_ListGiaDinhCon_MouseDoubleClick(object sender, MouseButtonEventArgs e)

@@ -4,8 +4,10 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Input;
+using vietnamgiapha.ValueConverter;
 using static System.Net.Mime.MediaTypeNames;
 
 namespace vietnamgiapha
@@ -34,6 +36,7 @@ namespace vietnamgiapha
         #region Constructors
         public FamilyViewModel(FamilyInfo familyInfo, FamilyViewModel parent, GiaPhaViewModel objFamilyTree)
         {
+
             _familyInfo = familyInfo;
             _familyInfo.PropertyChanged += _familyInfo_PropertyChanged;
             _familyParent = parent;
@@ -141,6 +144,127 @@ namespace vietnamgiapha
             {
                 MessageBox.Show(errorMessage, "Có lỗi");
             }
+            // Auto corerct 
+
+            errorMessage = "";
+            //AutoCorrect(this, ref errorMessage);
+        }
+        public static bool AutoCorrect(FamilyViewModel root, ref string errorMessage)
+        {
+            if (root == null)
+            {
+                errorMessage = "Check NULL";
+                return false;
+            }
+            bool isMain = false;
+            int countNam = 0;
+            int countNu = 0;
+            int countSameHo = 0;
+            string THEO_HO = "NGUYỄN";
+            THEO_HO = THEO_HO.ToUpper();
+            foreach (var mans in root.ListPerson)
+            {
+                if(mans.MANS_NAME_HUY.ToUpper().Contains(THEO_HO + " "))
+                {
+                    // COUNT 2 NGUOI CUNG 1 HO
+                    countSameHo++;
+                    // NGUOI TRONG GIA ĐÌNH
+                    if (isMain == false || mans.IsMainPerson == 0)
+                    {
+                        mans.IsMainPerson = 1;
+                        isMain = true;
+                    }
+                }
+                if (mans.MANS_NAME_HUY.ToUpper().Contains(" VĂN "))
+                {
+                    mans.MANS_GENDER = "Nam";
+                }
+                if (mans.MANS_NAME_HUY.ToUpper().Contains(" THỊ "))
+                {
+                    mans.MANS_GENDER = "Nữ";
+                }
+
+                if(mans.MANS_GENDER == "Nam")
+                {
+                    countNam++;
+                }
+                else if (mans.MANS_GENDER == "Nữ")
+                {
+                    countNu++;
+                }
+            }
+            // NEU 1 NAM + NHIEU NU -> LAY NAM LÀM MAIN
+            if( countNam==1 && countNu > 1)
+            {
+                // LAY NAM LAM MAIN
+                foreach (var mans in root.ListPerson)
+                {
+                    if (mans.MANS_GENDER == "Nam")
+                    {
+                        mans.IsMainPerson = 1;
+                    }
+                    else
+                    {
+                        mans.IsMainPerson = 0;
+                    }
+                }
+            }
+            if (countSameHo>1)
+            {
+                foreach (var mans in root.ListPerson)
+                {
+                    // UU TIEN NGUOI CO 11.2..
+                    if (mans.MANS_NAME_HUY.ToUpper().IndexOf(THEO_HO + " ")>1)
+                    {
+                        mans.IsMainPerson = 1;
+                    }
+                    else
+                    {
+                        mans.IsMainPerson = 0;
+                    }
+                }
+            }
+            // SORT BY MAIN
+            var list = root._familyInfo.ListPerson.OrderByDescending(v => v.IsMainPerson).ToList();
+            root._familyInfo.ListPerson.Clear();
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (i == 0)
+                {
+                    root._familyInfo.ListPerson.Add(list[i]);
+                }
+                else
+                {
+                    list[i].MANS_GENDER = list[0].IsGioiTinhNam == 1 ? "Nữ" : "Nam";
+                    root._familyInfo.ListPerson.Add(list[i]);
+                }
+            }
+
+
+            int countManMain = 0;
+            foreach (var mans in root.ListPerson)
+            {
+                if (mans.IsMainPerson == 1)
+                {
+                    countManMain++;
+                }
+            }
+            if (countManMain > 1)
+            {
+                errorMessage += "Sai nhieu nguoi chính ở GD: " + root.Name0 +"  " + Environment.NewLine;
+            }
+            if (root.Children.Count > 0)
+            {
+                foreach (var child in root.Children)
+                {
+                    AutoCorrect(child, ref errorMessage);
+                }
+            }
+            else
+            {
+            }
+
+            return errorMessage.Length == 0;
         }
         public void DebugFamilyClickFunc()
         {

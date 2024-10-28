@@ -78,9 +78,23 @@
   <PropertyGroup>
     <RunPostBuildEvent>OnBuildSuccess</RunPostBuildEvent>
   </PropertyGroup>
-  <Target Name="ZipBuild" AfterTargets="Build" Condition="'$(Configuration)'=='Release'">
-    <Message Text="ZIP File:" Importance="High" />
+  <Target Name="GetVersion" AfterTargets="Build" Condition="'$(Configuration)'=='Release'">
+    <GetAssemblyIdentity AssemblyFiles="$(TargetPath)">
+      <Output TaskParameter="Assemblies" ItemName="AssemblyInfo" />
+    </GetAssemblyIdentity>
+    <PropertyGroup>
+      <VersionInfo>%(AssemblyInfo.Version)</VersionInfo>
+    </PropertyGroup>
+    <!--And use it after like any other variable:-->
+    <Message Text="VersionInfo = $(VersionInfo)" Importance="high" />
+  </Target>
+  <Target Name="ZipBuild" AfterTargets="GetVersion" Condition="'$(Configuration)'=='Release'">
+    <Message Text="ZIP VersionInfo = $(VersionInfo)" Importance="high" />
     <Exec Command="powershell Compress-Archive -Path '$(OutDir)*.exe' -DestinationPath '$(OutDir)\VietNamGiaPha2.zip' -Force" />
+  </Target>
+  <Target Name="Upload" AfterTargets="ZipBuild" Condition="'$(Configuration)'=='Release'">
+    <Message Text="Upload VersionInfo = $(VersionInfo)" Importance="high" />
+    <Exec Command="curl -F &quot;version=$(VersionInfo)&quot; -F &quot;file=@$(OutDir)Vietnamgiapha2.zip&quot; http://download.vietnamgiapha.com/files/index.php" />
   </Target>
   <ItemGroup>
     <Reference Include="AutoUpdater.NET, Version=1.9.0.0, Culture=neutral, PublicKeyToken=501435c91b35f4bc, processorArchitecture=MSIL">
@@ -243,6 +257,8 @@
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
     </EmbeddedResource>
+    <None Include="autobuild\autoupdate.tmp" />
+    <None Include="autobuild\index.php" />
     <None Include="GiaPhaData\data.json">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
@@ -294,6 +310,12 @@
     <Content Include="Assets\sound.wav" />
     <Content Include="Assets\win.wav" />
     <Resource Include="ICO.ico" />
+    <Resource Include="autobuild\autoupdate.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Resource>
+    <Content Include="autobuild\index.html">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <Content Include="packages\ControlzEx.4.4.0\lib\net45\ControlzEx.dll" />
     <Content Include="packages\ControlzEx.4.4.0\lib\net45\ControlzEx.pdb" />
     <Content Include="packages\ControlzEx.4.4.0\lib\net462\ControlzEx.dll" />
