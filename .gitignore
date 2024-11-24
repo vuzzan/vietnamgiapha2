@@ -364,3 +364,11 @@ FodyWeavers.xsd
 /AI Setup Project1
 /VietNamGiaPha/Release.zip
 /vngp21/TextSearch/Database_backup.cs
+/Setup
+/SetupProjectVNGP2
+/SetupVNGP2
+/VietNamGiaPha/32_Release
+*.zip
+/VietNamGiaPha/VietNamGiaPha.vdproj
+/vngp21/publish_del
+/vngp21/publish_old
