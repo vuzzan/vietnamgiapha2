@@ -1,6 +1,7 @@
 ﻿using ControlzEx.Theming;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -18,6 +19,24 @@ namespace vietnamgiapha
             get { return _familyCut; }
             set { _familyCut = value; }
         }
+        
+        private ObservableCollection<string> _listStringUserAction;
+        public ObservableCollection<string> listStringUserAction
+        {
+            get
+            {
+                if(_listStringUserAction== null)
+                {
+                    _listStringUserAction = new ObservableCollection<string>();
+                }
+                return this._listStringUserAction;
+            }
+        }
+        public void AddUserAction(string action)
+        {
+            listStringUserAction.Add(action);
+            this.OnPropertyChanged("listStringUserAction");
+        }
 
         public event PropertyChangedEventHandler PropertyChanged;
         public String GiaphaNameRoot
@@ -29,6 +48,31 @@ namespace vietnamgiapha
             set
             {
                 gp.GiaphaNameRoot = value;
+            }
+        }
+        private string _GiaphaWebHtml;
+        public String GiaphaWebHtml
+        {
+            get
+            {
+                return _GiaphaWebHtml;
+            }
+            set
+            {
+                _GiaphaWebHtml = value;
+            }
+        }
+
+        private string _GiaphaDrawIo;
+        public String GiaphaDrawIo
+        {
+            get
+            {
+                return _GiaphaDrawIo;
+            }
+            set
+            {
+                _GiaphaDrawIo = value;
             }
         }
         public String GiaphaName
@@ -97,6 +141,10 @@ namespace vietnamgiapha
         public String PhaKy
         {
             get{
+                if (gp.PhaKy == null)
+                {
+                    gp.PhaKy = "";
+                }
                 return gp.PhaKy.Replace("\n", "\r\n");
             }
             set {
@@ -107,6 +155,10 @@ namespace vietnamgiapha
         {
             get
             {
+                if (gp.Tocuoc == null)
+                {
+                    gp.Tocuoc = "";
+                }
                 return gp.Tocuoc;
             }
             set
@@ -118,6 +170,10 @@ namespace vietnamgiapha
         {
             get
             {
+                if (gp.ThuyTo == null)
+                {
+                    gp.ThuyTo = "";
+                }
                 return gp.ThuyTo;
             }
             set
@@ -129,6 +185,10 @@ namespace vietnamgiapha
         {
             get
             {
+                if (gp.HuongHoa == null)
+                {
+                    gp.HuongHoa = "";
+                }
                 return gp.HuongHoa;
             }
             set
@@ -147,6 +207,14 @@ namespace vietnamgiapha
                 this.OnPropertyChanged("Family");
             }
         }
+
+        public FamilyViewModel FamilyViewModelRoot {
+            get
+            {
+                return _family.RootPerson;
+            }
+        }
+
         public GiaPhaViewModel(GiaphaInfo gp)
         {
             if(gp == null)
@@ -156,6 +224,7 @@ namespace vietnamgiapha
             }
             GP = gp;
             _family = new FamilyTreeViewModel(gp.familyRoot, this);
+            _GiaphaWebHtml = "";
         }
 
         public virtual void OnPropertyChanged(string propertyName)

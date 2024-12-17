@@ -622,6 +622,10 @@ namespace vietnamgiapha
         }
         public static string Base64Encode(string plainText)
         {
+            if (plainText== null)
+            {
+                return "";
+            }
             if (plainText.Length == 0)
             {
                 return plainText;
@@ -637,6 +641,11 @@ namespace vietnamgiapha
             }
             var base64EncodedBytes = System.Convert.FromBase64String(base64EncodedData);
             return System.Text.Encoding.UTF8.GetString(base64EncodedBytes);
+        }
+
+        public static string StripHTML(string input)
+        {
+            return Regex.Replace(input, "<.*?>", String.Empty);
         }
     }
 }

@@ -32,7 +32,7 @@
                 <!-- Theme setting -->
                 <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Themes/Light.Orange.xaml" />
             </ResourceDictionary.MergedDictionaries>
-            
+
             <ObjectDataProvider x:Key="SyncModePreferenceEnumValues"
                             MethodName="GetValues"
                             ObjectType="{x:Type controlzEx:ThemeSyncMode}">
@@ -43,7 +43,7 @@
 
             <Style x:Key="AppThemeMenuItemStyle"
                 BasedOn="{StaticResource MahApps.Styles.MenuItem}"
-                TargetType="{x:Type MenuItem}">  
+                TargetType="{x:Type MenuItem}">
                 <Setter Property="Command" Value="{Binding ChangeAccentCommand}" />
                 <Setter Property="CommandParameter" Value="{Binding Name, Mode=OneWay}" />
                 <Setter Property="Header" Value="{Binding Name, Mode=OneWay}" />
@@ -142,40 +142,11 @@
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
-                            <RowDefinition Height="30" />
-                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="40" />
+                            <RowDefinition Height="250" />
                         </Grid.RowDefinitions>
 
-                        <Border Grid.Row="1"
-                          BorderBrush="Gray" 
-                          BorderThickness="1,0,1,1"
-                          >
-                            <Border.Background>
-                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
-                                    <GradientStop Color="#33000000" Offset="0" />
-                                    <GradientStop Color="#11000000" Offset="1" />
-                                </LinearGradientBrush>
-                            </Border.Background>
 
-                            <StackPanel 
-                                HorizontalAlignment="Left" 
-                                Margin="3" 
-                                Orientation="Horizontal"
-                                >
-                                <TextBox 
-                              x:Name="searchTextBox"
-                                KeyDown="searchTextBox_KeyDown" 
-                                Margin="6,0"
-                                Text="{Binding FamilyTree.Family.SearchText, UpdateSourceTrigger=PropertyChanged}"
-                                Width="150"
-                              />
-                                <Button 
-                              Command="{Binding FamilyTree.Family.SearchCommand}" 
-                              Content="TÌM TÊN" 
-                              Padding="8,0" 
-                              />
-                            </StackPanel>
-                        </Border>
                         <TreeView Grid.Row="0" 
                                   Name="treeViewGiaPha"
                             ItemsSource="{Binding FamilyTree.Family.FirstGeneration}" 
@@ -194,7 +165,8 @@
                                             <ContextMenu Focusable="False">
                                                 <Separator/>
                                                 <MenuItem Command="{Binding CutFamilyClick}" Header="GD -> Cắt" />
-                                                <MenuItem Command="{Binding PasteFamilyClick}" Header="GD -> Dán" />
+                                                <MenuItem Command="{Binding PasteFamilyEmClick}" Header="GD -> Dán Em" />
+                                                <MenuItem Command="{Binding PasteFamilyConClick}" Header="GD -> Dán Con" />
                                                 <Separator/>
                                                 <MenuItem Command="{Binding InsertFamilyClick}" Header="GD -> Chèn Trước" />
                                                 <MenuItem Command="{Binding InsertFamilyConClick}" Header="GD -> Thêm GD Con" />
@@ -227,12 +199,35 @@
                             <TreeView.ItemTemplate>
                                 <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                                     <ContentControl MouseDoubleClick="Treeview_Family_MouseDoubleClick">
-                                        <TextBlock Text="{Binding Name}" />
+                                        <TextBlock Text="{Binding Name}" FontSize="16" />
                                     </ContentControl>
                                 </HierarchicalDataTemplate>
                             </TreeView.ItemTemplate>
                         </TreeView>
+                        <Border Grid.Row="1" BorderBrush="Gray" BorderThickness="1,0,1,1">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                    <GradientStop Color="#33000000" Offset="0" />
+                                    <GradientStop Color="#11000000" Offset="1" />
+                                </LinearGradientBrush>
+                            </Border.Background>
 
+                            <StackPanel HorizontalAlignment="Left" Margin="3" Orientation="Horizontal">
+                                <TextBox x:Name="searchTextBox" KeyDown="searchTextBox_KeyDown" mah:TextBoxHelper.Watermark="Nhập tên vào tìm"
+                                         Text="{Binding FamilyTree.Family.SearchText, UpdateSourceTrigger=PropertyChanged}" Width="220" FontSize="16" mah:ControlsHelper.CornerRadius="8"/>
+                                <Button Command="{Binding FamilyTree.Family.SearchCommand}" Content="TÌM TÊN NGƯỜI" Margin="5 0 0 0" Padding="8,0" FontSize="12" mah:ControlsHelper.CornerRadius="8" Style="{StaticResource MahApps.Styles.Button.Square.Accent}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <ListBox Grid.Row="2" ItemsSource="{Binding listStringUserAction}" Height="Auto" Width="Auto">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="{Binding}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
                     </Grid>
                 </mah:SplitView.Pane>
                 <Grid >
@@ -260,48 +255,60 @@
                                                     <RowDefinition Height="*" />
                                                 </Grid.RowDefinitions>
                                                 <mah:MetroHeader Grid.Row="0" Grid.Column="0" Header="Tên Gia Phả" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                                    <TextBox Text="{Binding FamilyTree.GP.GiaphaName}" />
+                                                    <TextBox Margin="0 5 5 0" Text="{Binding FamilyTree.GP.GiaphaName}" MaxLength="32" FontSize="20" mah:ControlsHelper.CornerRadius="8"/>
                                                 </mah:MetroHeader>
                                                 <mah:MetroHeader Grid.Row="0" Grid.Column="1" Header="Ở tại" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                                    <TextBox Text="{Binding FamilyTree.GP.RF_OTAI}" />
+                                                    <TextBox Margin="0 5 5 0" Text="{Binding FamilyTree.GP.RF_OTAI}" MaxLength="128" FontSize="20" mah:ControlsHelper.CornerRadius="8"/>
                                                 </mah:MetroHeader>
                                                 <mah:MetroHeader Grid.Row="1" Grid.Column="0" Header="Ngày hội mả|Tế Thu" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                                    <TextBox Text="{Binding FamilyTree.GP.RF_DAYS}" />
+                                                    <TextBox Margin="0 5 5 0" Text="{Binding FamilyTree.GP.RF_DAYS}" MaxLength="128" FontSize="20" mah:ControlsHelper.CornerRadius="8"/>
                                                 </mah:MetroHeader>
                                                 <mah:MetroHeader Grid.Row="1" Grid.Column="1" Header="Slogan" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                                    <TextBox Text="{Binding FamilyTree.GP.RF_CHANNGON}" />
+                                                    <TextBox Margin="0 5 5 0" Text="{Binding FamilyTree.GP.RF_CHANNGON}" MaxLength="128" FontSize="20" mah:ControlsHelper.CornerRadius="8"/>
                                                 </mah:MetroHeader>
                                             </Grid>
                                         </GroupBox>
-                                        
-                                        <GroupBox>
-                                            <GroupBox.Header >
-                                                <TextBlock Text=" - Login vietnamgiapha.com" />
-                                            </GroupBox.Header>
-                                            <StackPanel Orientation="Horizontal" >
-                                                <StackPanel Orientation="Vertical" Margin="10">
-                                                    <mah:MetroHeader Header="UserName" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                                        <TextBox Text="{Binding FamilyTree.Username}" />
-                                                    </mah:MetroHeader>
-                                                    <mah:MetroHeader Header="Password" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                                        <TextBox Text="{Binding FamilyTree.Password}" />
-                                                    </mah:MetroHeader>
+
+                                        <StackPanel Orientation="Horizontal" >
+                                            <GroupBox>
+                                                <GroupBox.Header >
+                                                    <TextBlock Text=" - Login vietnamgiapha.com" />
+                                                </GroupBox.Header>
+                                                <StackPanel Orientation="Horizontal" >
+                                                    <StackPanel Orientation="Vertical" Width="200">
+                                                        <TextBox Margin="0 5 5 9" Text="{Binding FamilyTree.Username}" mah:TextBoxHelper.Watermark="ID hay EMAIL"  MaxLength="32" FontSize="20" mah:ControlsHelper.CornerRadius="8"/>
+                                                        <TextBox Margin="0 5 5 0" Text="{Binding FamilyTree.Password}" mah:TextBoxHelper.Watermark="Password"  MaxLength="32" FontSize="20" mah:ControlsHelper.CornerRadius="8"/>
+                                                    </StackPanel>
+                                                    <StackPanel Orientation="Horizontal" Width="200">
+                                                        <StackPanel Orientation="Vertical" >
+                                                            <Button Content="Download Gia phả" Margin="0 5 0 5" Name="BtnDownloadGiaPha" Click="BtnDownloadGiaPha_Click" FontSize="20"  mah:ControlsHelper.CornerRadius="8" Style="{StaticResource MahApps.Styles.Button.Square.Accent}"/>
+                                                            <Button Content="Upload Gia phả" Margin="0 5 0 5" Name="BtnUploadGiaPha" Click="BtnUploadGiaPha_Click" FontSize="20" mah:ControlsHelper.CornerRadius="8" Style="{StaticResource MahApps.Styles.Button.Square.Accent}"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
                                                 </StackPanel>
-                                                <StackPanel Orientation="Horizontal">
-                                                    
-                                                    <Button Width="120" Content="Download Gia phả" Name="BtnDownloadGiaPha" Click="BtnDownloadGiaPha_Click" />
-                                                    <Button Width="120" Content="Upload Gia phả" Name="BtnUploadGiaPha" Click="BtnUploadGiaPha_Click" />
-                                                </StackPanel>
-                                            </StackPanel>
-                                        </GroupBox>
+                                            </GroupBox>
+                                        </StackPanel>
 
 
-                                        <!--<GroupBox>
+                                        <GroupBox Height="288">
                                             <GroupBox.Header >
-                                                <TextBlock Text=" - Log action" />
+                                                <TextBlock Text=" Tự động chỉnh" />
                                             </GroupBox.Header>
                                             <StackPanel Orientation="Horizontal">
-                                                <ListBox Margin="1" ItemsSource="{Binding ItemsLogs}" Height="100">
+                                                <StackPanel Orientation="Vertical" Width="250">
+                                                    <StackPanel Orientation="Horizontal" >
+                                                        <mah:MetroHeader Header="Tộc họ" Margin="5 0 5 0" Width="150" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
+                                                            <TextBox x:Name="TOCHO_AUTO" Text="{Binding StringAutoName}"></TextBox>
+                                                        </mah:MetroHeader>
+                                                        <Button Name="commandAutoChinh" Click="commandAutoChinh_Click">
+                                                            <TextBlock Text="{Binding StringAutoNameButton}" />
+                                                        </Button>
+                                                    </StackPanel>
+
+                                                    <TextBlock TextWrapping="WrapWithOverflow"  
+                                                               Text="** Chức năng này sẽ tự động chỉnh: (1) Căn cứ theo Tộc họ, ví dụ là Nguyễn, sẽ tự chỉnh tất cả người nào họ Nguyễn thành người trong tộc họ. (2) Tự động sửa giới tính theo kiểu Văn nam, Thị nữ. (3) 1 Gd có 2 người cùng họ, sẽ chỉnh người Nam thành người trong gia tộc. (4) 1 người trong gia tộc là Nam, sẽ chỉnh tất cả người con lại là Nữ" />
+                                                </StackPanel>
+                                                <ListBox Margin="1" ItemsSource="{Binding listStringAutoName}" Height="Auto" Width="400">
                                                     <ListBox.ItemTemplate>
                                                         <DataTemplate>
                                                             <StackPanel Orientation="Horizontal">
@@ -311,7 +318,7 @@
                                                     </ListBox.ItemTemplate>
                                                 </ListBox>
                                             </StackPanel>
-                                        </GroupBox>-->
+                                        </GroupBox>
                                     </StackPanel>
                                 </ScrollViewer>
                             </Grid>
@@ -332,6 +339,8 @@
                                         <TextBlock Text=" Thông tin gia đình cha mẹ" />
                                     </GroupBox.Header>
                                     <ListView x:Name="ListView_ListNguoiTrongGiaDinhChaMe" Margin="0"  Width="200" BorderThickness="0" ItemsSource="{Binding FamilyTree.Family.SelectedFamily.Parent.ListPerson}" SelectedIndex="0" MouseDoubleClick="ListView_ListNguoiTrongGiaDinhChaMe_MouseDoubleClick">
+                                       
+
                                         <ListView.View>
                                             <GridView>
                                                 <GridViewColumn Width="165" DisplayMemberBinding="{Binding MANS_NAME_HUY}" Header="Cha Mẹ" />
@@ -350,6 +359,14 @@
                                             x:Name="ListView_ListNguoiTrongGiaDinh"
                                               ToolTip="** Thay đổi thứ tự vợ con trong gia đình->Click chuột vào người đó, bấm SHILF+Up cho lên, SHILF+Down xuống"
                                         >
+                                        <ListView.ContextMenu>
+                                            <ContextMenu>
+                                                <MenuItem Command="{Binding InsertPerson2FamilyClick}" Header="Thêm người (Insert)" />
+                                                <MenuItem Command="{Binding InsertPerson2FamilyClick}" Header="Xóa người (Del)" />
+                                                <MenuItem Command="{Binding InsertPerson2FamilyClick}" Header="Lên Trên (Up)" />
+                                                <MenuItem Command="{Binding InsertPerson2FamilyClick}" Header="Xuống Dưới (Down)" />
+                                            </ContextMenu>
+                                        </ListView.ContextMenu>
                                         <ListView.ItemContainerStyle>
                                             <Style TargetType="ListViewItem">
                                                 <EventSetter Event="PreviewKeyDown" Handler="ListViewItem_PreviewKeyDown" />
@@ -374,7 +391,7 @@
                                         </Grid.ColumnDefinitions>
                                         <ScrollViewer Grid.Column="1" DataContext="{Binding FamilyTree.Family.SelectedPerson, Mode=TwoWay}">
                                             <StackPanel Orientation="Vertical">
-                                                <Grid>
+                                                <Grid >
                                                     <!-- Define Columns -->
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*"/>
@@ -397,24 +414,18 @@
                                                                      mah:HeaderedControlHelper.HeaderFontWeight="Bold" 
                                                                      mah:HeaderedControlHelper.HeaderFontSize="25"
                                                                      mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                                        <TextBox Text="{Binding MANS_NAME_HUY}" FontWeight="Bold"/>
+                                                        <TextBox mah:TextBoxHelper.Watermark="Tên Húy" Text="{Binding MANS_NAME_HUY}" MaxLength="96" FontSize="20" mah:ControlsHelper.CornerRadius="8"/>
                                                     </mah:MetroHeader>
 
-                                                    <mah:MetroHeader Grid.Row="1"  Grid.Column="0" Header="Tên Tự" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                                        <TextBox Text="{Binding MANS_NAME_TU}" />
-                                                    </mah:MetroHeader>
 
-                                                    <mah:MetroHeader Grid.Row="1"  Grid.Column="1" Header="Tên Thường" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                                        <TextBox Text="{Binding MANS_NAME_THUONG}" />
-                                                    </mah:MetroHeader>
+                                                    <TextBox Grid.Row="1"  Grid.Column="0" Margin="0 5 5 0" mah:TextBoxHelper.Watermark="Tên Tự" Text="{Binding MANS_NAME_TU}" MaxLength="32" FontSize="20" mah:ControlsHelper.CornerRadius="8"/>
 
-                                                    <mah:MetroHeader Grid.Row="2"  Grid.Column="0" Header="Tên Thụy" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                                        <TextBox Text="{Binding MANS_NAME_THUY}" />
-                                                    </mah:MetroHeader>
+                                                    <TextBox Grid.Row="1"  Grid.Column="1"  Margin="0 5 5 0" mah:TextBoxHelper.Watermark="Tên Thường" Text="{Binding MANS_NAME_THUONG}" MaxLength="32" FontSize="20" mah:ControlsHelper.CornerRadius="8"/>
 
-                                                    <mah:MetroHeader Grid.Row="2"  Grid.Column="1" Header="Con thứ mấy trong gia đình" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                                        <TextBox Text="{Binding MANS_CONTHUMAY}" />
-                                                    </mah:MetroHeader>
+                                                    <TextBox Grid.Row="2"  Grid.Column="0"  Margin="0 5 5 0" mah:TextBoxHelper.Watermark="Tên Thụy" Text="{Binding MANS_NAME_THUY}" MaxLength="96" FontSize="20" mah:ControlsHelper.CornerRadius="8"/>
+
+                                                    <TextBox Grid.Row="2"  Grid.Column="1" Margin="0 5 5 0" Text="{Binding MANS_CONTHUMAY}" MaxLength="2" FontSize="20" mah:ControlsHelper.CornerRadius="8" mah:TextBoxHelper.Watermark="Con thứ mấy trong gia đình"/>
+
                                                     <mah:ToggleSwitch Grid.Row="3"  Grid.Column="0" 
                                                                       Header="Con trong tộc - Dâu/Rể" mah:HeaderedControlHelper.HeaderFontWeight="Bold" 
                                                                       mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}"
@@ -439,24 +450,13 @@ Toggled="ToggleSwitch_GioiTinh_Toggled"
                                                             <Binding Path="IsGioiTinhNam" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged" />
                                                         </mah:ToggleSwitch.IsOn>
                                                     </mah:ToggleSwitch>
-                                                    <mah:MetroHeader Grid.Row="4"  Grid.Column="0" Header="Ngày Sinh" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                                        <TextBox Text="{Binding MANS_DOB}" />
-                                                    </mah:MetroHeader>
-                                                    <mah:MetroHeader Grid.Row="5"  Grid.Column="0" Header="Ngày Chết" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                                        <TextBox Text="{Binding MANS_DOD}" />
-                                                    </mah:MetroHeader>
-                                                    <mah:MetroHeader Grid.Row="5"  Grid.Column="1" Header="Nơi chôn" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                                        <TextBox Text="{Binding MANS_WOD}" />
-                                                    </mah:MetroHeader>
-
-
-                                                    
-
-                                                    
+                                                    <TextBox Grid.Row="4" Grid.Column="0"  Margin="0 5 5 0" Text="{Binding MANS_DOB}" MaxLength="32" FontSize="20" mah:ControlsHelper.CornerRadius="8" mah:TextBoxHelper.Watermark="Ngày Sinh"/>
+                                                    <TextBox Grid.Row="5" Grid.Column="0"  Margin="0 5 5 0" Text="{Binding MANS_DOD}" MaxLength="32" FontSize="20" mah:ControlsHelper.CornerRadius="8" mah:TextBoxHelper.Watermark="Ngày Chết"/>
+                                                    <TextBox Grid.Row="5" Grid.Column="1"  Margin="0 5 5 0" Text="{Binding MANS_WOD}" MaxLength="255" FontSize="20" mah:ControlsHelper.CornerRadius="8" mah:TextBoxHelper.Watermark="Nơi chôn"/>
                                                 </Grid>
 
                                                 <mah:MetroHeader Header="Chi tiết người này" mah:HeaderedControlHelper.HeaderFontWeight="Bold" mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}">
-                                                    <TextBox Text="{Binding MANS_DETAIL}" MinLines="4"/>
+                                                    <TextBox Text="{Binding MANS_DETAIL}" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" Height="200" MaxLength="65534" FontSize="18" mah:ControlsHelper.CornerRadius="10"  />
                                                 </mah:MetroHeader>
 
                                                 <TextBlock Text="** Thay đổi thứ tự vợ con trong gia đình->Click chuột vào người đó, bấm SHILF+Up cho lên, SHILF+Down xuống"/>
@@ -512,7 +512,73 @@ SelectedIndex="0"
                             <smith:HtmlEditor x:Name="htmlEditorHuongHoa"  LostFocus="htmlEditorHuongHoa_LostFocus"/>
                         </TabItem>
                         <TabItem Header="7.Phả đồ">
-                        
+                            <Grid Background="White">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="40"  />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal">
+                                    <Button Margin="0 0 5 0" Content="Setting" Click="Button_Click_2" Style="{DynamicResource MahApps.Styles.Button.Dialogs.Accent}"/>
+                                    <TextBlock Text="Cao: "/>
+                                    <TextBox Width="50" Text="{Binding data.HEIGHT_LENGTH}"/>
+                                    <TextBlock Text="Khoảng cách: "/>
+                                    <TextBox Width="50" Text="{Binding data.MARGIN_WIDTH}"/>
+                                    <mah:ToggleSwitch mah:HeaderedControlHelper.HeaderForeground="{DynamicResource MahApps.Brushes.Accent}"
+                                            OffContent="Không"
+                                            OnContent="Chỉnh Tự động"
+                                            >
+                                        <mah:ToggleSwitch.IsOn >
+                                            <Binding Path="data.AUTO_SIZE" Mode="TwoWay" UpdateSourceTrigger="PropertyChanged" />
+                                        </mah:ToggleSwitch.IsOn>
+                                    </mah:ToggleSwitch>
+                                    <Button Margin="0 0 5 0" Content="Vẽ phả đồ" Click="Button_Click_1" Style="{DynamicResource MahApps.Styles.Button.Dialogs.Accent}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Button Margin="0 0 5 0" Content="Xuất Ra File Web" Click="ExportToHhtmlWeb" Style="{DynamicResource MahApps.Styles.Button.Dialogs.Accent}"/>
+                                    <Button Margin="0 0 5 0" Content="Xuất Ra File Mx" Click="ExportToVectorMxFile" Style="{DynamicResource MahApps.Styles.Button.Dialogs.Accent}"/>
+                                </StackPanel>
+                                <ScrollViewer Grid.Row="1" Grid.ColumnSpan="2" HorizontalScrollBarVisibility="Visible" VerticalScrollBarVisibility="Visible">
+                                    <Canvas x:Name="theCanvas" Background="AntiqueWhite"/>
+                                </ScrollViewer>
+                               
+                                <!--<StackPanel Grid.Row="2" Orientation="Vertical">
+                                    
+                                    <StackPanel  Orientation="Horizontal" HorizontalAlignment="Right">
+                                         <TextBlock Margin="0 5 0 0" Text="Lưu ý: Chức năng vẫn chưa hoàn chỉnh, đang hoàn thiện."/> 
+                                        <TextBlock Margin="5 5 10 0" >           
+    <Hyperlink NavigateUri="{Binding FamilyTree.GiaphaName}" RequestNavigate="Hyperlink_RequestNavigate_2" >
+        <TextBlock Margin="0 0 0 0" Text="Xem Phả Đồ "/>
+        <TextBlock Margin="0 0 0 0" Text="{Binding FamilyTree.GiaphaName}"/>
+        </Hyperlink>
+</TextBlock>
+                                        
+                                        <TextBlock Margin="0 5 0 0" Text="Hình ảnh: Width: "/>
+                                        <TextBox Width="50"  Text="{Binding bounds.Width}"/>
+                                        <TextBlock Margin="0 5 0 0" Text="px. Height: "/>
+                                        <TextBox Width="50" Text="{Binding bounds.Height}"/>
+                                        <TextBlock Margin="5 5 0 0" Text="px."/>
+                                        <Button Content="Xuất Ra Web" Click="Button_Click_2" Style="{DynamicResource MahApps.Styles.Button.Dialogs.Accent}"/>
+                                        <Button Content="Xuất Ra Vector" Click="ExportToVectorMxFile" Style="{DynamicResource MahApps.Styles.Button.Dialogs.Accent}"/>
+                                    </StackPanel>
+
+                                    <StackPanel  Orientation="Horizontal">
+                                        <TextBlock Margin="0 5 0 0" Text="Ngang: "/>
+                                        <TextBox Width="50"  Text="{Binding data.maxWidthCount, Mode=OneWay}"/>
+                                        <TextBlock Margin="0 5 0 0" Text="node. Max Cao: "/>
+                                        <TextBox Width="50" Text="{Binding data.NodeHeight, Mode=OneWay}"/>
+                                        <TextBlock Margin="0 5 0 0" Text=" đời. Level max"/>
+                                        <TextBox Width="50" Text="{Binding data.maxAtLevel, Mode=OneWay}"/>
+                                        <TextBlock Text="Hướng dẫn nhanh: Chọn cao 300, khoảng cách: 20, bật chỉnh tự động, Vẽ phả đồ. Xong xuất ra hình ảnh" />
+                                    </StackPanel>
+                                    
+                                </StackPanel>-->
+                               
+                            </Grid>
+
                         </TabItem>
                     </mah:MetroTabControl>
                 </Grid>
@@ -520,9 +586,10 @@ SelectedIndex="0"
         </Grid>
         <!--BOTTOM STATUS BAR -->
         <StatusBar Grid.Row="2">
-            
+
             <StatusBarItem>
                 <StackPanel Orientation="Horizontal">
+                    <Button Content="Update" Click="Button_Click_3"/>
                     <TextBlock Text="Liên hệ: Nghĩa (0908594239)"></TextBlock>
                 </StackPanel>
             </StatusBarItem>
@@ -531,7 +598,7 @@ SelectedIndex="0"
                     <TextBlock>
                         <Hyperlink NavigateUri="https://www.vietnamgiapha.com" RequestNavigate="Hyperlink_RequestNavigate">
                             Website Việt Nam Gia Phả
-                        </Hyperlink>    
+                        </Hyperlink>
                     </TextBlock>
                 </StackPanel>
             </StatusBarItem>
@@ -557,6 +624,8 @@ SelectedIndex="0"
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="File: "></TextBlock>
                     <TextBlock Text="{Binding FamilyTree.GP.FileName}"></TextBlock>
+                    <TextBlock Text=" Lưu lần cuối lúc: "></TextBlock>
+                    <TextBlock Text="{Binding FamilyTree.GP.FileNameUpdate}"></TextBlock>
                 </StackPanel>
             </StatusBarItem>
         </StatusBar>

@@ -18,14 +18,31 @@ namespace vietnamgiapha
         public String RF_DAYS { get; set; }
         public String RF_CHANNGON { get; set; }
         public FamilyInfo familyRoot { get; set; }
+
+        private DateTime _FileNameUpdate = DateTime.Now;
+        public DateTime FileNameUpdate
+        {
+            get
+            {
+                return _FileNameUpdate;
+            }
+            set
+            {
+                _FileNameUpdate = value;
+                OnPropertyChanged(nameof(FileNameUpdate));
+            }
+        }
+
         private string _FileName = "";
         public String FileName { get { 
                 return _FileName;
-            } set {
+            } 
+            set {
                 _FileName = value;
-                _FileName = _FileName.Replace(" ", "").Replace("-", "");
+                //_FileName = _FileName.Replace(" ", "").Replace("-", "");
                 OnPropertyChanged(nameof(FileName));
-            } }
+            } 
+        }
         public GiaphaInfo()
         {
             FileName = "";

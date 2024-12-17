@@ -15,6 +15,14 @@ using System.Configuration;
 using System.Diagnostics;
 using System.Text.Json.Nodes;
 using System.Windows.Shapes;
+using System.Collections.ObjectModel;
+using System.Xml.Linq;
+using WpfDraw.Class;
+using System.Collections.Generic;
+using System.Windows.Markup;
+using System.Windows.Media.Imaging;
+using vngp21.Draw;
+using System.Net;
 
 namespace vietnamgiapha
 {
@@ -27,11 +35,19 @@ namespace vietnamgiapha
         private readonly MainWindowViewModel viewModel;
         public MainWindow()
         {
+            
+
             ILoggerRepository repository = log4net.LogManager.GetRepository(Assembly.GetCallingAssembly());
             var fileInfo = new FileInfo(@"log4net.config");
             log4net.Config.XmlConfigurator.Configure(repository, fileInfo);
             //
             InitializeComponent();
+
+            log.Info("Application started...SecurityProtocol ");
+            System.Net.ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 |
+            SecurityProtocolType.Tls11 |
+            SecurityProtocolType.Tls;
+            log.Info("Application started...version END ");
             //
             try
             {
@@ -60,7 +76,7 @@ namespace vietnamgiapha
 
             string ver = Assembly.GetExecutingAssembly().GetName().Version.ToString();
             log.Info("Application started...version " + ver);
-            AutoUpdater.Start("https://vietnamgiapha.com/download/autoupdate.xml");
+            AutoUpdater.Start("http://download.vietnamgiapha.com/files/autoupdate.xml");
             InitEvents();
             this.Title = this.Title + " - " + ver;
             this.viewModel = new MainWindowViewModel(DialogCoordinator.Instance, this);
@@ -78,7 +94,8 @@ namespace vietnamgiapha
                 if (viewModel.FamilyTree.GP.FileName.Length == 0)
                 {
                     string defaultSaveFolder = ConfigurationManager.AppSettings["defaultSaveFolder"];
-                    viewModel.FamilyTree.GP.FileName = defaultSaveFolder +"\\"+viewModel.FamilyTree.GP.GiaphaName.Replace(" ", "_") + "_" + ".json";
+                    //viewModel.FamilyTree.GP.FileName = defaultSaveFolder +"\\"+viewModel.FamilyTree.GP.GiaphaName.Replace(" ", "_") + "_" + ".json";
+                    viewModel.FamilyTree.GP.FileName = defaultSaveFolder + "\\" + viewModel.FamilyTree.GP.Username.Replace(" ", "_") + "_" + ".json";
                 }
             }
         }
@@ -375,6 +392,7 @@ namespace vietnamgiapha
                     
                     log.Info("BtnDownloadGiaPha_Click: download từ web ngon lành ");
                     MessageBox.Show("Download từ web xong", "Ngon lành cành đào");
+                    viewModel.AddUserAction("Download gia phả xong, ngon lành");
                 }
             }
             catch (Exception ex)
@@ -428,7 +446,8 @@ namespace vietnamgiapha
                         viewModel.UpdateGiaPha(gp);
                         UpdateHtmlGiaPha();
                         log.Info("BtnUploadGiaPha_Click: update lên web ngon lành ");
-                        if( MessageBox.Show("Update lên web xong, muốn coi lại không ???", "Ngon lành cành đào", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
+                        viewModel.AddUserAction("Update gia phả xong, ngon lành");
+                        if ( MessageBox.Show("Update lên web xong, muốn coi lại không ???", "Ngon lành cành đào", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
                         {
                             Process.Start(new ProcessStartInfo("https://www.vietnamgiapha.com/XemPhaHe/" + viewModel.FamilyTree.GiaphaId + "/gp.html"));
                         }
@@ -454,61 +473,76 @@ namespace vietnamgiapha
 
         private void ListViewItem_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Delete)
+            try
             {
-                // XOA
-                if (ListView_ListNguoiTrongGiaDinh.SelectedItem != null)
+                if (e.Key == Key.Delete)
                 {
-                    PersonInfo obj = (PersonInfo)ListView_ListNguoiTrongGiaDinh.SelectedItem;
-                    if (MessageBox.Show("Xóa [" + obj.MANS_NAME_HUY + "] ra khỏi gia đình này ?", "Xác Nhận", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
+                    // XOA
+                    if (ListView_ListNguoiTrongGiaDinh.SelectedItem != null)
                     {
-                        if (obj._familyInfo.ListPerson.IndexOf(obj) > -1)
+                        PersonInfo obj = (PersonInfo)ListView_ListNguoiTrongGiaDinh.SelectedItem;
+                        if (MessageBox.Show("Xóa [" + obj.MANS_NAME_HUY + "] ra khỏi gia đình này ?", "Xác Nhận", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
                         {
-                            obj._familyInfo.ListPerson.Remove(obj);
-                            obj._familyInfo.OnPropertyChanged("Name");
-                            log.Info("Xóa [" + obj.MANS_NAME_HUY + "] ra khỏi gia đình");
+                            if (obj._familyInfo.ListPerson.IndexOf(obj) > -1)
+                            {
+                                obj._familyInfo.ListPerson.Remove(obj);
+                                obj._familyInfo.OnPropertyChanged("Name");
+                                log.Info("Xóa [" + obj.MANS_NAME_HUY + "] ra khỏi gia đình");
+                                viewModel.AddUserAction("Xóa [" + obj.MANS_NAME_HUY + "] ra khỏi gia đình " + obj._familyInfo.Name0);
+                            }
                         }
                     }
                 }
-            }
-            else if ((Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift)))
-            {
+                else if ((Keyboard.IsKeyDown(Key.LeftShift) || Keyboard.IsKeyDown(Key.RightShift)))
+                {
 
-                if (e.Key == Key.Up)
-                {
-                    // SHILF UP//
-                    if (ListView_ListNguoiTrongGiaDinh.SelectedItem != null)
+                    if (e.Key == Key.Up)
                     {
-                        // Chọn người
-                        PersonInfo obj = (PersonInfo)ListView_ListNguoiTrongGiaDinh.SelectedItem;
-                        // XOa người ra khỏi list
-                        int index = obj._familyInfo.ListPerson.IndexOf(obj);
-                        if (index > 1 && index < obj._familyInfo.ListPerson.Count)
+                        // SHILF UP//
+                        if (ListView_ListNguoiTrongGiaDinh.SelectedItem != null)
                         {
-                            obj._familyInfo.ListPerson.Remove(obj);
-                            //Thêm vô phía trên
-                            obj._familyInfo.ListPerson.Insert(index - 1, obj);
+                            // Chọn người
+                            PersonInfo obj = (PersonInfo)ListView_ListNguoiTrongGiaDinh.SelectedItem;
+                            // XOa người ra khỏi list
+                            int index = obj._familyInfo.ListPerson.IndexOf(obj);
+                            if (index > 1 && index < obj._familyInfo.ListPerson.Count)
+                            {
+                                obj._familyInfo.ListPerson.Remove(obj);
+                                //Thêm vô phía trên
+                                obj._familyInfo.ListPerson.Insert(index - 1, obj);
+
+                                viewModel.AddUserAction("Chỉnh lên trước [" + obj.MANS_NAME_HUY + "] " + obj._familyInfo.Name0);
+                            }
+                        }
+                    }
+                    else if (e.Key == Key.Down)
+                    {
+                        // DOWN
+                        if (ListView_ListNguoiTrongGiaDinh.SelectedItem != null)
+                        {
+                            // Chọn người
+                            PersonInfo obj = (PersonInfo)ListView_ListNguoiTrongGiaDinh.SelectedItem;
+                            // XOa người ra khỏi list
+                            int index = obj._familyInfo.ListPerson.IndexOf(obj);
+                            if (index > 0 && index < obj._familyInfo.ListPerson.Count)
+                            {
+                                obj._familyInfo.ListPerson.Remove(obj);
+                                //Thêm vô phía trên
+                                obj._familyInfo.ListPerson.Insert(index + 1, obj);
+
+                                viewModel.AddUserAction("Chỉnh xuống dưới [" + obj.MANS_NAME_HUY + "] " + obj._familyInfo.Name0);
+                            }
                         }
                     }
                 }
-                else if (e.Key == Key.Down)
-                {
-                    // DOWN
-                    if (ListView_ListNguoiTrongGiaDinh.SelectedItem != null)
-                    {
-                        // Chọn người
-                        PersonInfo obj = (PersonInfo)ListView_ListNguoiTrongGiaDinh.SelectedItem;
-                        // XOa người ra khỏi list
-                        int index = obj._familyInfo.ListPerson.IndexOf(obj);
-                        if (index > 0 && index< obj._familyInfo.ListPerson.Count)
-                        {
-                            obj._familyInfo.ListPerson.Remove(obj);
-                            //Thêm vô phía trên
-                            obj._familyInfo.ListPerson.Insert(index + 1, obj);
-                        }
-                    }
-                }
+
             }
+            catch (Exception ex)
+            {
+                log.Error("ListViewItem_PreviewKeyDown: " + ex.Message);
+                log.Error(ex);
+            }
+            
         }
         private void Hyperlink_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
         {
@@ -591,12 +625,18 @@ namespace vietnamgiapha
                     }
                 }
             }
+
+            // "Nữ" + "Nam" 
         }
 
         private void ToggleSwitch_GioiTinh_Toggled(object sender, RoutedEventArgs e)
         {
             //log.Error("OKOK");
             PersonInfo personInfo = ((ToggleSwitch)sender).DataContext as PersonInfo;
+            if (personInfo == null)
+            {
+                return;
+            }
             if (personInfo.IsMainPerson==1 && personInfo._familyInfo != null && personInfo._familyInfo.ListPerson != null)
             {
                 for (int i = 1; i < personInfo._familyInfo.ListPerson.Count; i++)
@@ -604,6 +644,158 @@ namespace vietnamgiapha
                     personInfo._familyInfo.ListPerson[i].MANS_GENDER = personInfo.IsGioiTinhNam == 1 ? "Nữ" : "Nam";
                 }
             }
+        }
+
+        private void commandAutoChinh_Click(object sender, RoutedEventArgs e)
+        {
+            if(viewModel.StringAutoNameButton == "Undo Chỉnh")
+            {
+                // UNDO
+                string defaultSaveFolder = ConfigurationManager.AppSettings["defaultSaveFolder"];
+                string undo_filename = defaultSaveFolder + "\\auto_undo.json";
+                try
+                {
+                    GiaphaInfo gp = Database.FromJson(undo_filename);
+                    if (gp != null)
+                    {
+                        viewModel.UpdateGiaPha(gp);
+                        log.Info("OpenFileCommandFunc: Mở file UNDO xong: " + undo_filename);
+                        MessageBox.Show("Đã UNDO tác vụ chỉnh tự động. Mọi thay đổi đã hoàn tác");
+                        viewModel.StringAutoNameButton = "Tự Động Chỉnh";
+                    }
+                    else
+                    {
+                        MessageBox.Show("Lỗi mở file : " + undo_filename, "Có Lỗi");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Lỗi mở file : " + ex.Message, "Có Lỗi");
+                    log.Error("OpenFileCommandFunc: Lỗi file: " + undo_filename);
+                    log.Error(ex);
+                }
+            }
+            else
+            {
+                if (viewModel.StringAutoName != null && viewModel.StringAutoName.Length > 0)
+                {
+                    viewModel.listStringAutoName.Clear();
+                    // Do search
+                    // Save undo file
+                    Database.SaveJson(viewModel.FamilyTree, "auto_undo.json");
+                    string message = "";
+                    FamilyViewModel.AutoCorrect(viewModel.FamilyTree.FamilyViewModelRoot, ref message, viewModel.StringAutoName);
+                    if (message.Length > 0)
+                    {
+                        viewModel.listStringAutoName = new ObservableCollection<string>(message.Split(new string[] { Environment.NewLine }, StringSplitOptions.None).ToList());
+                        //
+                        viewModel.StringAutoNameButton = "Undo Chỉnh";
+                        MessageBox.Show("Đã tự động điều chỉnh, kiếm tra nếu có sai nhiều quá, thì bấm [Undo Chỉnh]. Hoặc mở lại file [auto_undo.json]");
+
+                        viewModel.AddUserAction("Chạy xong tự động chỉnh");
+                    }
+                    else
+                    {
+
+                    }
+                }
+                else
+                {
+                    viewModel.listStringAutoName.Insert(0, "Có lỗi: Nhập tên tộc họ");
+                }
+            }
+        }
+
+        private async void Button_Click_1(object sender, RoutedEventArgs e)
+        {
+            var _progressDialogController = await this.ShowProgressAsync("Đợi vẽ...", "Đang tính toán và vẽ phả hệ");
+            _progressDialogController.SetProgress(0);
+            _progressDialogController.SetIndeterminate();
+            try
+            {
+                viewModel.Draw(theCanvas);
+                viewModel.AddUserAction("Vẽ phả hệ xong..." + viewModel.WidthHeight);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Lỗi vẽ phả hệ: " + ex.Message, "Có Lỗi");
+                log.Error("vẽ phả hệ");
+                log.Error(ex);
+            }
+            //BtnDownloadGiaPha.IsEnabled = true;
+            await _progressDialogController.CloseAsync();
+        }
+        
+        private async void ExportToHhtmlWeb(object sender, RoutedEventArgs e)
+        {
+            var _progressDialogController = await this.ShowProgressAsync("Đợi...", "Đang tính toán và xuất file WEB");
+            _progressDialogController.SetProgress(0);
+            _progressDialogController.SetIndeterminate();
+            try
+            {
+                _progressDialogController.SetProgress(1);
+                viewModel.ExportHtmlMxFile();
+                viewModel.AddUserAction("Xuất file web xong..." + viewModel.FamilyTree.GiaphaWebHtml);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Lỗi vẽ phả hệ: " + ex.Message, "Có Lỗi");
+                log.Error("vẽ phả hệ");
+                log.Error(ex);
+            }
+            //BtnDownloadGiaPha.IsEnabled = true;
+            await _progressDialogController.CloseAsync();
+
+        }
+
+        private void Hyperlink_RequestNavigate_2(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+        {
+            try
+            {
+                if (Convert.ToInt32(viewModel.FamilyTree.GiaphaId) > 0)
+                {
+                    Process.Start(new ProcessStartInfo("file://"+ viewModel.FamilyTree.GiaphaWebHtml));
+                    e.Handled = true;
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+
+            }
+            e.Handled = false;
+        }
+
+        private void Button_Click_3(object sender, RoutedEventArgs e)
+        {
+            // Check Update 
+            AutoUpdater.Start("http://download.vietnamgiapha.com/files/autoupdate.xml");
+        }
+
+        private async void ExportToVectorMxFile(object sender, RoutedEventArgs e)
+        {
+            var _progressDialogController = await this.ShowProgressAsync("Đợi...", "Đang tính toán và xuất file Vector MX");
+            _progressDialogController.SetProgress(0);
+            _progressDialogController.SetIndeterminate();
+            try
+            {
+                _progressDialogController.SetProgress(1);
+                viewModel.ExportDrawioFile();
+                viewModel.AddUserAction("Xuất file mx xong..." + viewModel.FamilyTree.GiaphaDrawIo);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Lỗi vẽ phả hệ: " + ex.Message, "Có Lỗi");
+                log.Error("vẽ phả hệ");
+                log.Error(ex);
+            }
+            //BtnDownloadGiaPha.IsEnabled = true;
+            await _progressDialogController.CloseAsync();
+        }
+
+        private void Button_Click_2(object sender, RoutedEventArgs e)
+        {
+
         }
     }
 }

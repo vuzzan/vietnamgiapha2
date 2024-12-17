@@ -8,6 +8,7 @@ using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Input;
 using vietnamgiapha.ValueConverter;
+using WpfDraw.Class;
 using static System.Net.Mime.MediaTypeNames;
 
 namespace vietnamgiapha
@@ -18,7 +19,17 @@ namespace vietnamgiapha
     public class FamilyViewModel :  INotifyPropertyChanged
     {
         private static readonly log4net.ILog log = log4net.LogManager.GetLogger("m0");
-
+        #region for Graph
+        private Node _node;
+        public Node Node
+        {
+            get
+            {
+                
+                return _node;
+            }
+        }
+        #endregion for Graph
         #region Data
 
         private ObservableCollection<FamilyViewModel> _familyListChildren;
@@ -36,7 +47,6 @@ namespace vietnamgiapha
         #region Constructors
         public FamilyViewModel(FamilyInfo familyInfo, FamilyViewModel parent, GiaPhaViewModel objFamilyTree)
         {
-
             _familyInfo = familyInfo;
             _familyInfo.PropertyChanged += _familyInfo_PropertyChanged;
             _familyParent = parent;
@@ -45,12 +55,14 @@ namespace vietnamgiapha
                     (from child in _familyInfo.FamilyChildren
                      select new FamilyViewModel(child, this, _objFamilyTree))
                      .ToList<FamilyViewModel>());
-
+            _node = new Node(this, _familyInfo.X, _familyInfo.Y);
+            _node.UpdateNodeSize += _node_UpdateNodeSize;
             // MENU FUNCTION
             CheckFamilyClick = new RelayCommand(CheckFamilyClickFunc);
             DebugFamilyClick = new RelayCommand(DebugFamilyClickFunc);
             CutFamilyClick = new RelayCommand(CutFamilyClickFunc);
-            PasteFamilyClick = new RelayCommand(PasteFamilyClickFunc);
+            PasteFamilyEmClick = new RelayCommand(PasteFamilyEmClickFunc);
+            PasteFamilyConClick = new RelayCommand(PasteFamilyConClickFunc);
             InsertFamilyClick = new RelayCommand(InsertFamilyClickFunc);
             InsertFamilyAnhClick = new RelayCommand(InsertFamilyAnhClickFunc);
             InsertFamilyEmClick = new RelayCommand(InsertFamilyEmClickFunc);
@@ -58,6 +70,22 @@ namespace vietnamgiapha
             RemoveFamilyClick = new RelayCommand(RemoveFamilyClickFunc);
             RemoveFamilyOnlyClick = new RelayCommand(RemoveFamilyOnlyClickFunc);
             InsertPerson2FamilyClick = new RelayCommand(InsertPerson2FamilyClickFunc);
+        }
+
+        private void _node_SelectedNodeEvent(double x, double y, double w, double h)
+        {
+            throw new NotImplementedException();
+        }
+
+        private void _node_UpdateNodeSize(double x, double y, double w, double h)
+        {
+            if( _familyInfo != null)
+            {
+                _familyInfo.X = (int)x;
+                _familyInfo.Y = (int)y;
+                _familyInfo.Width = (int)w;
+                _familyInfo.Height = (int)h;
+            }
         }
 
         private void _familyInfo_PropertyChanged(object sender, PropertyChangedEventArgs e)
@@ -70,7 +98,8 @@ namespace vietnamgiapha
         public ICommand CheckFamilyClick { get; set; }
         public ICommand DebugFamilyClick { get; set; }
         public ICommand CutFamilyClick { get; set; }
-        public ICommand PasteFamilyClick { get; set; }
+        public ICommand PasteFamilyEmClick { get; set; }
+        public ICommand PasteFamilyConClick { get; set; }
         public ICommand InsertFamilyClick { get; set; }
         public ICommand InsertFamilyAnhClick { get; set; }
         public ICommand InsertFamilyEmClick { get; set; }
@@ -92,6 +121,13 @@ namespace vietnamgiapha
             }
         }
         // MENU FUNCTION
+        public void AddUserAction(string action)
+        {
+            if (_objFamilyTree != null)
+            {
+                _objFamilyTree.AddUserAction(action);
+            }
+        }
         public static bool CheckValid(FamilyViewModel root, ref string errorMessage)
         {
             if( root == null)
@@ -148,8 +184,12 @@ namespace vietnamgiapha
 
             errorMessage = "";
             //AutoCorrect(this, ref errorMessage);
+            //if (errorMessage.Length > 0)
+            //{
+            //    MessageBox.Show(errorMessage, "Tự động chỉnh");
+            //}
         }
-        public static bool AutoCorrect(FamilyViewModel root, ref string errorMessage)
+        public static bool AutoCorrect(FamilyViewModel root, ref string errorMessage, string THEO_HO = "NGUYỄN")
         {
             if (root == null)
             {
@@ -160,7 +200,7 @@ namespace vietnamgiapha
             int countNam = 0;
             int countNu = 0;
             int countSameHo = 0;
-            string THEO_HO = "NGUYỄN";
+            //string THEO_HO = "NGUYỄN";
             THEO_HO = THEO_HO.ToUpper();
             foreach (var mans in root.ListPerson)
             {
@@ -173,18 +213,21 @@ namespace vietnamgiapha
                     {
                         mans.IsMainPerson = 1;
                         isMain = true;
+                        errorMessage += mans.MANS_NAME_HUY + ": thành người thuộc tộc họ. " + Environment.NewLine;
                     }
                 }
                 if (mans.MANS_NAME_HUY.ToUpper().Contains(" VĂN "))
                 {
                     mans.MANS_GENDER = "Nam";
+                    errorMessage += mans.MANS_NAME_HUY + ": Giới tính -> Nam" + Environment.NewLine;
                 }
                 if (mans.MANS_NAME_HUY.ToUpper().Contains(" THỊ "))
                 {
                     mans.MANS_GENDER = "Nữ";
+                    errorMessage += mans.MANS_NAME_HUY + ": Giới tính -> Nữ" + Environment.NewLine;
                 }
 
-                if(mans.MANS_GENDER == "Nam")
+                if (mans.MANS_GENDER == "Nam")
                 {
                     countNam++;
                 }
@@ -202,6 +245,7 @@ namespace vietnamgiapha
                     if (mans.MANS_GENDER == "Nam")
                     {
                         mans.IsMainPerson = 1;
+                        errorMessage += mans.MANS_NAME_HUY + ": thành người thuộc tộc họ." + Environment.NewLine;
                     }
                     else
                     {
@@ -217,6 +261,7 @@ namespace vietnamgiapha
                     if (mans.MANS_NAME_HUY.ToUpper().IndexOf(THEO_HO + " ")>1)
                     {
                         mans.IsMainPerson = 1;
+                        errorMessage += mans.MANS_NAME_HUY + ": thành người thuộc tộc họ." + Environment.NewLine;
                     }
                     else
                     {
@@ -251,13 +296,13 @@ namespace vietnamgiapha
             }
             if (countManMain > 1)
             {
-                errorMessage += "Sai nhieu nguoi chính ở GD: " + root.Name0 +"  " + Environment.NewLine;
+                //errorMessage += "Sai nhieu nguoi chính ở GD: " + root.Name0 +"  " + Environment.NewLine;
             }
             if (root.Children.Count > 0)
             {
                 foreach (var child in root.Children)
                 {
-                    AutoCorrect(child, ref errorMessage);
+                    AutoCorrect(child, ref errorMessage, THEO_HO);
                 }
             }
             else
@@ -327,13 +372,9 @@ namespace vietnamgiapha
             // Lấy gia đình dán, lấy cha
             int index = this.Parent.Children.IndexOf(this);
             this.Parent.Children.Remove(this);
-            //
-            //MessageBox.Show("Đã chọn cắt nguyên nhánh của gia đình - " + _familyInfo.Name + Environment.NewLine 
-            //    + "Chọn 1 ví trí gia đình khác, và dán vào." + Environment.NewLine
-            //    + "Gia đình cắt sẽ năm ở vị trí con của Gia đình chọn dán"
-            //    );
+            AddUserAction("Cắt GD " + this.Name0);
         }
-        private void PasteFamilyClickFunc()
+        private void PasteFamilyEmClickFunc()
         {
             if (_objFamilyTree.FamilyCut == null)
             {
@@ -360,6 +401,39 @@ namespace vietnamgiapha
 
                     // 6. Update gia đình lấy bậc là bậc gia đình PASTE
                     UpdateLevel(_objFamilyTree.FamilyCut, this._familyInfo.FamilyLevel- _objFamilyTree.FamilyCut._familyInfo.FamilyLevel);
+
+                    AddUserAction("Dán gia đình đã cắt " + _objFamilyTree.FamilyCut.Name0 + " vào dưới gia đình " + this.Name0);
+                }
+                _objFamilyTree.FamilyCut = null;
+            }
+        }
+
+        private void PasteFamilyConClickFunc()
+        {
+            if (_objFamilyTree.FamilyCut == null)
+            {
+                MessageBox.Show("Chọn cắt nguyên nhánh của gia đình nào đó, rồi mới dán được");
+                return;
+            }
+            if (MessageBox.Show("Dán gia đình đã cắt " + _objFamilyTree.FamilyCut.Name0 + Environment.NewLine +
+                "Vào làm gia đình con của gia đình " + this.Name0
+                , "Dán", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
+            {
+                // 1. remove gia đình ra khỏi cha
+                if (_objFamilyTree.FamilyCut.Parent != null)
+                {
+                    // Lấy gia đình cha, list đám con, bỏ ra gia đình CUT
+                    _objFamilyTree.FamilyCut.Parent.Children.Remove(_objFamilyTree.FamilyCut);
+                    // Thêm gia đình CUT list gia đình con của this
+                    this.Children.Insert(0, _objFamilyTree.FamilyCut);
+                    // set gia đình cha cho gd cắt
+                    _objFamilyTree.FamilyCut.Parent = this;
+                    // Update lại ID Gia đình cha, cho gia đình dán
+                    _objFamilyTree.FamilyCut._familyInfo.FamilyUp = this._familyInfo.FamilyId;
+                    // 6. Update gia đình lấy bậc là bậc gia đình PASTE
+                    UpdateLevel(_objFamilyTree.FamilyCut, this._familyInfo.FamilyLevel - _objFamilyTree.FamilyCut._familyInfo.FamilyLevel + 1);
+
+                    AddUserAction("Dán gia đình đã cắt " + _objFamilyTree.FamilyCut.Name0 + " vào làm gia đình con của gia đình " + this.Name0);
                 }
                 _objFamilyTree.FamilyCut = null;
             }
@@ -401,6 +475,8 @@ namespace vietnamgiapha
                         this.Parent.IsExpanded = true;
                         this.Parent.IsSelected = true;
                         _objFamilyTree.OnPropertyChanged("GP");
+
+                        AddUserAction("Xóa gia đình " + Name0 + ", tất cả gia đình con");
                     }
                 }
             }
@@ -423,6 +499,8 @@ namespace vietnamgiapha
                             this.Children[0].Parent = this.Parent;
                             this.Parent.IsExpanded = true;
                             this.Parent.IsSelected = true;
+
+                            AddUserAction("Xóa gia đình " + Name0 + ", đưa con là " + this.Children[0].Name0 + " thay vào vị trí này");
                             _objFamilyTree.OnPropertyChanged("GP");
                         }
                     }
@@ -449,6 +527,7 @@ namespace vietnamgiapha
             this.AddFamilyChild(insertFamily);
             this.IsExpanded = true;
             this.IsSelected = true;
+            AddUserAction("Thêm gia đình con " + Name0);
             log.Info("======================= newChildFamily =======================");
             log.Info(this.Debug0);
             log.Info("======================= END =======================");
@@ -474,6 +553,7 @@ namespace vietnamgiapha
             }
 
             this.Parent.MakeOrderChild();
+            AddUserAction("Thêm gia đình em " + Name0);
         }
         private void InsertFamilyAnhClickFunc()
         {
@@ -487,6 +567,7 @@ namespace vietnamgiapha
                 this.Parent.Children.Move(indexThis, indexThis-1);
             }
             this.Parent.MakeOrderChild();
+            AddUserAction("Thêm gia đình anh " + Name0);
         }
         private void InsertFamilyClickFunc()
         {
@@ -536,7 +617,7 @@ namespace vietnamgiapha
             if (insert.Parent == null) {
                 _objFamilyTree.Family.UpdateRootPerson(insert);
             }
-
+            AddUserAction("Thêm gia đình " + Name0);
             log.Info("======================= newInsertFamily =======================");
             log.Info(insert.Debug0);
             log.Info("======================= END =======================");
@@ -563,6 +644,11 @@ namespace vietnamgiapha
         public ObservableCollection<FamilyViewModel> Children
         {
             get { return _familyListChildren; }
+        }
+
+        public FamilyInfo familyInfo
+        {
+            get { return _familyInfo; }
         }
 
         public string Name
@@ -706,7 +792,9 @@ namespace vietnamgiapha
             string json = "[";
             // Item 1 : Family info 
             json += "[";
-            json += this._familyInfo.FamilyId + "," + this._familyInfo.FamilyLevel + "," + this._familyInfo.FamilyOrder + "," + this._familyInfo.FamilyUp + "," + this._familyInfo.FamilyNew;
+            //json += this._familyInfo.FamilyId + "," + this._familyInfo.FamilyLevel + "," + this._familyInfo.FamilyOrder + "," + this._familyInfo.FamilyUp + "," + this._familyInfo.FamilyNew;
+            json += this._familyInfo.FamilyId + "," + this._familyInfo.FamilyLevel + "," + this._familyInfo.FamilyOrder + "," + this._familyInfo.FamilyUp + "," + this._familyInfo.FamilyNew 
+                + ",\"" + _familyInfo.X + "\",\"" + _familyInfo.Y + "\",\"" + _familyInfo.Width + "\",\"" + _familyInfo.Height + "\"";
             json += "],";
             // Item 2: List Person name
             json += "[";
