@@ -23,6 +23,7 @@ using System.Windows.Markup;
 using System.Windows.Media.Imaging;
 using vngp21.Draw;
 using System.Net;
+using GalaSoft.MvvmLight.Command;
 
 namespace vietnamgiapha
 {
@@ -81,6 +82,9 @@ namespace vietnamgiapha
             this.Title = this.Title + " - " + ver;
             this.viewModel = new MainWindowViewModel(DialogCoordinator.Instance, this);
             this.DataContext = this.viewModel;
+
+            DeletePersonFromFamilyClick = new RelayCommand(DeletePersonFromFamilyClickFunc);
+
         }
         public void UpdateHtmlGiaPha()
         {
@@ -797,5 +801,97 @@ namespace vietnamgiapha
         {
 
         }
+        public ICommand DeletePersonFromFamilyClick { get; set; }
+        private void DeletePersonFromFamilyClickFunc()
+        {
+            // XOA
+            if (ListView_ListNguoiTrongGiaDinh.SelectedItem != null)
+            {
+                PersonInfo obj = (PersonInfo)ListView_ListNguoiTrongGiaDinh.SelectedItem;
+                if (MessageBox.Show("Xóa [" + obj.MANS_NAME_HUY + "] ra khỏi gia đình này ?", "Xác Nhận", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
+                {
+                    if (obj._familyInfo.ListPerson.IndexOf(obj) > -1)
+                    {
+                        obj._familyInfo.ListPerson.Remove(obj);
+                        obj._familyInfo.OnPropertyChanged("Name");
+                        log.Info("Xóa [" + obj.MANS_NAME_HUY + "] ra khỏi gia đình");
+                        viewModel.AddUserAction("Xóa [" + obj.MANS_NAME_HUY + "] ra khỏi gia đình " + obj._familyInfo.Name0);
+                    }
+                }
+            }
+        }
+        //
+        private void Button_Click_Add_Person(object sender, RoutedEventArgs e)
+        {
+            if (ListView_ListNguoiTrongGiaDinh.Items.Count>0)
+            {
+                PersonInfo obj = (PersonInfo)ListView_ListNguoiTrongGiaDinh.Items.GetItemAt(0);
+                var person = new PersonInfo("Người mới", obj._familyInfo);
+                int countIsmain = 0;
+                foreach (var item in obj._familyInfo.ListPerson)
+                {
+                    if (item.IsMainPerson == 1)
+                    {
+                        countIsmain++;
+                        if (item.IsGioiTinhNam == 1)
+                        {
+                            // person - gt = nu
+                            person.MANS_GENDER = "Nữ";
+                        }
+                        else
+                        {
+                            // person - gt = nam
+                            person.MANS_GENDER = "Nam";
+                        }
+                    }
+                }
+                if (countIsmain == 0)
+                {
+                    obj._familyInfo.ListPerson[0].IsMainPerson = 1;
+                    foreach (var item in obj._familyInfo.ListPerson)
+                    {
+                        if (item.IsMainPerson == 1)
+                        {
+                            countIsmain++;
+                            if (item.IsGioiTinhNam == 1)
+                            {
+                                // person - gt = nu
+                                person.MANS_GENDER = "Nữ";
+                            }
+                            else
+                            {
+                                // person - gt = nam
+                                person.MANS_GENDER = "Nam";
+                            }
+                        }
+                    }
+                }
+                obj._familyInfo.ListPerson.Add(person);
+                log.Info("Thêm [" + obj.MANS_NAME_HUY + "] vào gia đình");
+                viewModel.AddUserAction("Thêm [" + obj.MANS_NAME_HUY + "] vào gia đình " + obj._familyInfo.Name0);
+            }
+        }
+        private void Button_Click_Delete_Person(object sender, RoutedEventArgs e)
+        {
+            if (ListView_ListNguoiTrongGiaDinh.SelectedItem != null)
+            {
+                PersonInfo obj = (PersonInfo)ListView_ListNguoiTrongGiaDinh.SelectedItem;
+                if(obj._familyInfo.ListPerson.Count>1)
+                {
+                    if (MessageBox.Show("Xóa [" + obj.MANS_NAME_HUY + "] ra khỏi gia đình này ?", "Xác Nhận", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
+                    {
+                        if (obj._familyInfo.ListPerson.IndexOf(obj) > -1)
+                        {
+                            obj._familyInfo.ListPerson.Remove(obj);
+                            obj._familyInfo.OnPropertyChanged("Name");
+                            log.Info("Xóa [" + obj.MANS_NAME_HUY + "] ra khỏi gia đình");
+                            viewModel.AddUserAction("Xóa [" + obj.MANS_NAME_HUY + "] ra khỏi gia đình " + obj._familyInfo.Name0);
+                        }
+                    }
+                }
+            }
+        }
+        
+        //
     }
 }

@@ -70,6 +70,7 @@ namespace vietnamgiapha
             RemoveFamilyClick = new RelayCommand(RemoveFamilyClickFunc);
             RemoveFamilyOnlyClick = new RelayCommand(RemoveFamilyOnlyClickFunc);
             InsertPerson2FamilyClick = new RelayCommand(InsertPerson2FamilyClickFunc);
+            //DeletePersonFromFamilyClick = new RelayCommand(DeletePersonFromFamilyClickFunc);
         }
 
         private void _node_SelectedNodeEvent(double x, double y, double w, double h)
@@ -107,6 +108,7 @@ namespace vietnamgiapha
         public ICommand RemoveFamilyClick { get; set; }
         public ICommand RemoveFamilyOnlyClick { get; set; }
         public ICommand InsertPerson2FamilyClick { get; set; }
+        
         public void MakeOrderChild()
         {
             if( Children.Count > 0 )
@@ -462,6 +464,9 @@ namespace vietnamgiapha
                 this.ListPerson.Add(person);
             }
         }
+
+
+
         private void RemoveFamilyClickFunc()
         {
             if (this.Parent != null)

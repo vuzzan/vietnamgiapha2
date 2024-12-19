@@ -176,8 +176,8 @@
                                                 <Separator/>
                                                 <MenuItem Command="{Binding RemoveFamilyClick}" Header="GD -> Xóa" />
                                                 <MenuItem Command="{Binding RemoveFamilyOnlyClick}" Header="GD -> Bỏ Ra" />
-                                                <Separator/>
-                                                <MenuItem Command="{Binding InsertPerson2FamilyClick}" Header="Người: Thêm người" />
+                                                <!--<Separator/>
+                                                <MenuItem Command="{Binding InsertPerson2FamilyClick}" Header="Người: Thêm người" />-->
                                                 <Separator/>
                                                 <MenuItem Command="{Binding DebugFamilyClick}" Header="Xem GD" />
                                                 <MenuItem Command="{Binding CheckFamilyClick}" Header="Kiểm Tra" />
@@ -351,7 +351,18 @@
                                     </ListView>
                                 </GroupBox>
 
-                                <GroupBox Grid.Row="1" Header="Gia Đình Đang Chọn" Background="Cyan" ToolTip="** Thay đổi thứ tự vợ con trong gia đình->Click chuột vào người đó, bấm SHILF+Up cho lên, SHILF+Down xuống">
+                                <GroupBox Grid.Row="1" Background="Aqua" ToolTip="** Thay đổi thứ tự vợ con trong gia đình->Click chuột vào người đó, bấm SHILF+Up cho lên, SHILF+Down xuống">
+                                    <GroupBox.Header >
+                                        <StackPanel HorizontalAlignment="Left" Orientation="Horizontal">
+                                            <TextBlock Text="GĐ Hiện Tại" Margin="5 5 30 0"/>
+                                            <Button Height="10" Click="Button_Click_Add_Person" Margin="0 0 10 0">
+                                                <TextBlock Text="Thêm"  ToolTip="Thêm 1 người vào gia đình hiện tại"/>
+                                            </Button>
+                                            <Button Height="10" Click="Button_Click_Delete_Person" ToolTip="Xóa 1 người ra khỏi gia đình hiện tại">
+                                                <TextBlock Text="Xóa" />
+                                            </Button>
+                                        </StackPanel>
+                                    </GroupBox.Header>
                                     <ListView Margin="0" Width="300"
                                         BorderThickness="0" ItemsSource="{Binding FamilyTree.Family.SelectedFamily.ListPerson}"
                                         SelectedIndex="0" 
@@ -362,9 +373,7 @@
                                         <ListView.ContextMenu>
                                             <ContextMenu>
                                                 <MenuItem Command="{Binding InsertPerson2FamilyClick}" Header="Thêm người (Insert)" />
-                                                <MenuItem Command="{Binding InsertPerson2FamilyClick}" Header="Xóa người (Del)" />
-                                                <MenuItem Command="{Binding InsertPerson2FamilyClick}" Header="Lên Trên (Up)" />
-                                                <MenuItem Command="{Binding InsertPerson2FamilyClick}" Header="Xuống Dưới (Down)" />
+                                                <MenuItem Command="{Binding DeletePersonFromFamilyClick}" Header="Xóa người (Del)" />
                                             </ContextMenu>
                                         </ListView.ContextMenu>
                                         <ListView.ItemContainerStyle>
