@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using vietnamgiapha.GiaPhaRender;
 
 namespace vietnamgiapha
 {
@@ -18,6 +20,10 @@ namespace vietnamgiapha
         public String RF_DAYS { get; set; }
         public String RF_CHANNGON { get; set; }
         public FamilyInfo familyRoot { get; set; }
+
+        /// <summary>Catalog svgId → SVG Base64 + viewBox (lưu ở index 12 file .json).</summary>
+        public Dictionary<string, PhaDoSvgShape> SvgShapesById { get; set; }
+            = new Dictionary<string, PhaDoSvgShape>(StringComparer.Ordinal);
 
         private DateTime _FileNameUpdate = DateTime.Now;
         public DateTime FileNameUpdate

@@ -1,0 +1,196 @@
+<mah:MetroWindow x:Class="vietnamgiapha.SettingsDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mah="http://metro.mahapps.com/winfx/xaml/controls"
+        Title="Cài đặt phả đồ"
+        Height="720"
+        Width="560"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResizeWithGrip"
+        MinHeight="520"
+        MinWidth="480"
+        ShowInTaskbar="False">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Controls.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Fonts.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Themes/Light.Orange.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <Style x:Key="SettingLabelStyle" TargetType="TextBlock">
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="Margin" Value="0,0,8,6"/>
+                <Setter Property="TextWrapping" Value="Wrap"/>
+            </Style>
+            <Style x:Key="SettingBoxStyle" TargetType="TextBox" BasedOn="{StaticResource MahApps.Styles.TextBox}">
+                <Setter Property="Margin" Value="0,0,0,6"/>
+                <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            </Style>
+            <Style x:Key="SectionHeaderStyle" TargetType="TextBlock">
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="FontSize" Value="13"/>
+                <Setter Property="Margin" Value="0,12,0,8"/>
+                <Setter Property="Foreground" Value="#C45C00"/>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <TextBlock Text="Khoảng cách &amp; layout (đơn vị cm, trừ khi ghi chú)" Style="{StaticResource SectionHeaderStyle}" Margin="0,0,0,8"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="220"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="36"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Lề trang" Style="{StaticResource SettingLabelStyle}"/>
+                    <TextBox x:Name="marginCmBox" Grid.Row="0" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
+                    <TextBlock Grid.Row="0" Grid.Column="2" Text="cm" VerticalAlignment="Center" Margin="4,0,0,6"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Khoảng cách ngang giữa các ô" Style="{StaticResource SettingLabelStyle}"/>
+                    <TextBox x:Name="horizontalGapCmBox" Grid.Row="1" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
+                    <TextBlock Grid.Row="1" Grid.Column="2" Text="cm" VerticalAlignment="Center" Margin="4,0,0,6"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Khoảng cách giữa các đời (dọc)" Style="{StaticResource SettingLabelStyle}"/>
+                    <TextBox x:Name="generationGapCmBox" Grid.Row="2" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
+                    <TextBlock Grid.Row="2" Grid.Column="2" Text="cm" VerticalAlignment="Center" Margin="4,0,0,6"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Khoảng bus (đường nối dọc)" Style="{StaticResource SettingLabelStyle}"/>
+                    <TextBox x:Name="busLineGapCmBox" Grid.Row="3" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
+                    <TextBlock Grid.Row="3" Grid.Column="2" Text="cm" VerticalAlignment="Center" Margin="4,0,0,6"/>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Độ dài bus ngang tối thiểu" Style="{StaticResource SettingLabelStyle}"/>
+                    <TextBox x:Name="minBusSpanCmBox" Grid.Row="4" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
+                    <TextBlock Grid.Row="4" Grid.Column="2" Text="cm" VerticalAlignment="Center" Margin="4,0,0,6"/>
+                </Grid>
+
+                <TextBlock Text="Ô gia đình — kiểu ngang (cm)" Style="{StaticResource SectionHeaderStyle}"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="220"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="36"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Rộng tối thiểu ô" Style="{StaticResource SettingLabelStyle}"/>
+                    <TextBox x:Name="cardMinWidthCmBox" Grid.Row="0" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
+                    <TextBlock Grid.Row="0" Grid.Column="2" Text="cm" VerticalAlignment="Center" Margin="4,0,0,6"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Rộng tối đa ô" Style="{StaticResource SettingLabelStyle}"/>
+                    <TextBox x:Name="cardMaxWidthCmBox" Grid.Row="1" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
+                    <TextBlock Grid.Row="1" Grid.Column="2" Text="cm" VerticalAlignment="Center" Margin="4,0,0,6"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Padding trong ô" Style="{StaticResource SettingLabelStyle}"/>
+                    <TextBox x:Name="cardPaddingCmBox" Grid.Row="2" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
+                    <TextBlock Grid.Row="2" Grid.Column="2" Text="cm" VerticalAlignment="Center" Margin="4,0,0,6"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Chiều cao một dòng chữ" Style="{StaticResource SettingLabelStyle}"/>
+                    <TextBox x:Name="cardLineHeightCmBox" Grid.Row="3" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
+                    <TextBlock Grid.Row="3" Grid.Column="2" Text="cm" VerticalAlignment="Center" Margin="4,0,0,6"/>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Chiều cao vùng nhãn Đời" Style="{StaticResource SettingLabelStyle}"/>
+                    <TextBox x:Name="cardHeaderHeightCmBox" Grid.Row="4" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
+                    <TextBlock Grid.Row="4" Grid.Column="2" Text="cm" VerticalAlignment="Center" Margin="4,0,0,6"/>
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Padding đáy ô" Style="{StaticResource SettingLabelStyle}"/>
+                    <TextBox x:Name="cardBottomPaddingCmBox" Grid.Row="5" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
+                    <TextBlock Grid.Row="5" Grid.Column="2" Text="cm" VerticalAlignment="Center" Margin="4,0,0,6"/>
+
+                    <TextBlock Grid.Row="6" Grid.Column="0" Text="Hệ số thu rộng theo chữ" Style="{StaticResource SettingLabelStyle}"
+                               ToolTip="0,3–1,0 — nhỏ hơn = ô hẹp hơn so với độ dài tên"/>
+                    <TextBox x:Name="cardWidthTextFactorBox" Grid.Row="6" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
+                    <TextBlock Grid.Row="6" Grid.Column="2" Text="×" VerticalAlignment="Center" Margin="4,0,0,6"/>
+
+                    <TextBlock Grid.Row="7" Grid.Column="0" Text="Hệ số cao an toàn" Style="{StaticResource SettingLabelStyle}"
+                               ToolTip="Nhân thêm chiều cao hàng đời khi xếp cây"/>
+                    <TextBox x:Name="cardHeightSafetyFactorBox" Grid.Row="7" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
+                    <TextBlock Grid.Row="7" Grid.Column="2" Text="×" VerticalAlignment="Center" Margin="4,0,0,6"/>
+                </Grid>
+
+                <TextBlock Text="Ô gia đình — kiểu dọc (cm)" Style="{StaticResource SectionHeaderStyle}"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="220"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="36"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Rộng tối thiểu (dọc)" Style="{StaticResource SettingLabelStyle}"/>
+                    <TextBox x:Name="cardVerticalMinWidthCmBox" Grid.Row="0" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
+                    <TextBlock Grid.Row="0" Grid.Column="2" Text="cm" VerticalAlignment="Center" Margin="4,0,0,6"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Rộng tối đa (dọc)" Style="{StaticResource SettingLabelStyle}"/>
+                    <TextBox x:Name="cardVerticalMaxWidthCmBox" Grid.Row="1" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
+                    <TextBlock Grid.Row="1" Grid.Column="2" Text="cm" VerticalAlignment="Center" Margin="4,0,0,6"/>
+                </Grid>
+
+                <TextBlock Text="Chữ &amp; hiển thị" Style="{StaticResource SectionHeaderStyle}"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="220"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="36"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Cỡ chữ nhãn Đời (header)" Style="{StaticResource SettingLabelStyle}"/>
+                    <TextBox x:Name="headerFontPtBox" Grid.Row="0" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
+                    <TextBlock Grid.Row="0" Grid.Column="2" Text="pt" VerticalAlignment="Center" Margin="4,0,0,6"/>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Cỡ chữ người chính" Style="{StaticResource SettingLabelStyle}"/>
+                    <TextBox x:Name="mainNameFontPtBox" Grid.Row="1" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
+                    <TextBlock Grid.Row="1" Grid.Column="2" Text="pt" VerticalAlignment="Center" Margin="4,0,0,6"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Cỡ chữ người phối" Style="{StaticResource SettingLabelStyle}"/>
+                    <TextBox x:Name="spouseFontPtBox" Grid.Row="2" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
+                    <TextBlock Grid.Row="2" Grid.Column="2" Text="pt" VerticalAlignment="Center" Margin="4,0,0,6"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Cỡ chữ nhãn Đời (thẻ dọc)" Style="{StaticResource SettingLabelStyle}"/>
+                    <TextBox x:Name="verticalGenFontPtBox" Grid.Row="3" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
+                    <TextBlock Grid.Row="3" Grid.Column="2" Text="pt" VerticalAlignment="Center" Margin="4,0,0,6"/>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Số dòng phối tối đa trong ô" Style="{StaticResource SettingLabelStyle}"/>
+                    <TextBox x:Name="maxSpouseLinesBox" Grid.Row="4" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
+                    <TextBlock Grid.Row="4" Grid.Column="2" Text="#" VerticalAlignment="Center" Margin="4,0,0,6"/>
+                </Grid>
+            </StackPanel>
+        </ScrollViewer>
+        <TextBlock x:Name="statusText" Grid.Row="1" Margin="0,8,0,4" Foreground="DarkRed" TextWrapping="Wrap"/>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Mặc định" Width="88" Margin="0,0,8,0" Click="ResetDefaults_Click"/>
+            <Button Content="Lưu" Width="80" Margin="0,0,8,0" Click="Save_Click" IsDefault="True"
+                    Style="{StaticResource MahApps.Styles.Button.Square.Accent}"/>
+            <Button Content="Hủy" Width="72" IsCancel="True"/>
+        </StackPanel>
+    </Grid>
+</mah:MetroWindow>

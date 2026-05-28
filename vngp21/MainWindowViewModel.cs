@@ -24,6 +24,7 @@ using WpfDraw.Class;
 using vngp21.Draw;
 using System.Diagnostics;
 using System.Windows.Controls;
+using System.Threading.Tasks;
 
 namespace vietnamgiapha
 {
@@ -64,10 +65,20 @@ namespace vietnamgiapha
         private readonly IDialogCoordinator _dialogCoordinator;
 
         System.Threading.Timer myTimer;
+        private int _isLoadingGiaPha;
+        private int _isAutoSaving;
         public string defaultSaveFolder = "";
         public string defaultSaveName = "";
         //int _integerGreater10Property = 2;
         //private bool _animateOnPositionChange = true;
+
+        private string _phaDoSelectedBoxSizeText = "";
+        /// <summary>Kích thước ô phả đồ đang chọn (cm, theo mm in).</summary>
+        public string PhaDoSelectedBoxSizeText
+        {
+            get => _phaDoSelectedBoxSizeText;
+            set => Set(ref _phaDoSelectedBoxSizeText, value);
+        }
 
         private string _StringAutoNameButton;
         public string StringAutoNameButton
@@ -184,9 +195,12 @@ namespace vietnamgiapha
             SaveFileCommandFunc();
             log.Info("OpenNewFileCommandFunc: Mở file mới... ");
             FamilyTree = new GiaPhaViewModel(new GiaphaInfo());
+            _mainWindow.InvalidatePersonGridCache();
+            _mainWindow.ResetPhaDoWorkspaceState();
             this.OnPropertyChanged("FamilyTree");
+            _mainWindow.ScheduleExpandGiaPhaTreeView();
         }
-        private void OpenFileCommandFunc()
+        private async void OpenFileCommandFunc()
         {
             OpenFileDialog openFileDialog = new OpenFileDialog();
             openFileDialog.DefaultExt = ".json";
@@ -195,11 +209,24 @@ namespace vietnamgiapha
             {
                 try
                 {
-                    GiaphaInfo gp = Database.FromJson(openFileDialog.FileName);
+                    GiaphaInfo loadedGiaPha = null;
+                    GiaphaInfo gp = await _mainWindow.LoadGiaPhaFromJsonWithProgressAsync(
+                        openFileDialog.FileName,
+                        "Đang mở file gia phả...",
+                        "Đang đọc dữ liệu JSON...\n\nĐã chờ: 0 giây",
+                        async loaded =>
+                        {
+                            loaded.FileName = openFileDialog.FileName;
+                            loadedGiaPha = loaded;
+                            await UpdateGiaPhaAsync(loaded, saveToJson: false).ConfigureAwait(true);
+                        }).ConfigureAwait(true);
                     if (gp != null)
                     {
                         gp.FileName = openFileDialog.FileName;
-                        UpdateGiaPha(gp);
+                        if (loadedGiaPha == null)
+                        {
+                            await UpdateGiaPhaAsync(gp, saveToJson: false).ConfigureAwait(true);
+                        }
                         //FamilyTree = new GiaPhaViewModel(gp);
                         //_mainWindow.UpdateHtmlGiaPha();
                         //this.OnPropertyChanged("FamilyTree");
@@ -218,17 +245,15 @@ namespace vietnamgiapha
                 }
             }
         }
-        private void SaveFileCommandFunc()
+        public bool SaveFileCommandFunc()
         {
-            if( Database.SaveJson(FamilyTree))
+            if (Database.SaveJson(FamilyTree))
             {
-                
-                //log.Info("SaveFileCommandFunc: file: " + FamilyTree.GP.FileName);
+                return true;
             }
-            else
-            {
-                MessageBox.Show("Lưu file không được", "ERROR");
-            }
+
+            MessageBox.Show("Lưu file không được", "ERROR");
+            return false;
         }
         private  void SaveAsFileCommandFunc()
         {
@@ -241,13 +266,103 @@ namespace vietnamgiapha
                 MessageBox.Show("Lưu file không được", "ERROR");
             }
         }
-        public void UpdateGiaPha(GiaphaInfo gp)
+        public void UpdateGiaPha(GiaphaInfo gp, bool saveToJson = true)
         {
-            FamilyTree = new GiaPhaViewModel(gp);
-            _mainWindow.UpdateHtmlGiaPha();
-            
-            SaveFileCommandFunc();
-            this.OnPropertyChanged("FamilyTree");
+            Interlocked.Exchange(ref _isLoadingGiaPha, 1);
+            try
+            {
+                FamilyTree = new GiaPhaViewModel(gp);
+                _mainWindow.UpdateHtmlGiaPha();
+                _mainWindow.InvalidatePersonGridCache();
+                if (!_mainWindow.IsRestoringWorkspace)
+                {
+                    _mainWindow.ResetPhaDoWorkspaceState();
+                }
+
+                _mainWindow.SyncPhaDoBoxStylesFromGiaPhaFile();
+                // Khi vừa load file lớn, tránh ghi lại JSON ngay để không chặn STA/UI thread quá lâu.
+                if (saveToJson)
+                {
+                    SaveFileCommandFunc();
+                }
+                this.OnPropertyChanged("FamilyTree");
+                _mainWindow.ScheduleExpandGiaPhaTreeView();
+            }
+            finally
+            {
+                // Hạ cờ sau khi toàn bộ luồng cập nhật cây đã hoàn tất.
+                Interlocked.Exchange(ref _isLoadingGiaPha, 0);
+            }
+        }
+
+        public Task UpdateGiaPhaAsync(GiaphaInfo gp, bool saveToJson = true)
+        {
+            Interlocked.Exchange(ref _isLoadingGiaPha, 1);
+            try
+            {
+                // FamilyViewModel/Node có tạo WPF element => phải chạy trên STA/UI thread.
+                FamilyTree = new GiaPhaViewModel(gp);
+                _mainWindow.UpdateHtmlGiaPha();
+                _mainWindow.InvalidatePersonGridCache();
+                if (!_mainWindow.IsRestoringWorkspace)
+                {
+                    _mainWindow.ResetPhaDoWorkspaceState();
+                }
+
+                _mainWindow.SyncPhaDoBoxStylesFromGiaPhaFile();
+                // Khi vừa load file lớn, tránh ghi lại JSON ngay để không chặn STA/UI thread quá lâu.
+                if (saveToJson)
+                {
+                    SaveFileCommandFunc();
+                }
+                this.OnPropertyChanged("FamilyTree");
+                _mainWindow.ScheduleExpandGiaPhaTreeView();
+                return Task.CompletedTask;
+            }
+            finally
+            {
+                // Auto-save chỉ được chạy lại khi load cây đã xong.
+                Interlocked.Exchange(ref _isLoadingGiaPha, 0);
+            }
+        }
+
+        /// <summary>Mở file khi khôi phục session — không ghi đè file, không xóa layout phả đồ đã lưu.</summary>
+        public void LoadGiaPhaForSessionRestore(GiaphaInfo gp)
+        {
+            Interlocked.Exchange(ref _isLoadingGiaPha, 1);
+            try
+            {
+                FamilyTree = new GiaPhaViewModel(gp);
+                _mainWindow.UpdateHtmlGiaPha();
+                _mainWindow.InvalidatePersonGridCache();
+                _mainWindow.SyncPhaDoBoxStylesFromGiaPhaFile();
+                this.OnPropertyChanged("FamilyTree");
+                _mainWindow.ScheduleExpandGiaPhaTreeView();
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _isLoadingGiaPha, 0);
+            }
+        }
+
+        public Task LoadGiaPhaForSessionRestoreAsync(GiaphaInfo gp)
+        {
+            Interlocked.Exchange(ref _isLoadingGiaPha, 1);
+            try
+            {
+                // Khôi phục session cũng phải dựng cây trên UI thread (STA).
+                FamilyTree = new GiaPhaViewModel(gp);
+                _mainWindow.UpdateHtmlGiaPha();
+                _mainWindow.InvalidatePersonGridCache();
+                _mainWindow.SyncPhaDoBoxStylesFromGiaPhaFile();
+                this.OnPropertyChanged("FamilyTree");
+                _mainWindow.ScheduleExpandGiaPhaTreeView();
+                return Task.CompletedTask;
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _isLoadingGiaPha, 0);
+            }
         }
         public MainWindowViewModel(IDialogCoordinator dialogCoordinator, MainWindow mainWindow)
         {
@@ -312,75 +427,100 @@ namespace vietnamgiapha
         }
         void timer_Elapsed(object state)
         {
-            Thread.Sleep(15000);
-            if (!Directory.Exists(defaultSaveFolder))
+            try
             {
-                log.Info("Auto Tạo Thư mục: " + defaultSaveFolder);
-                Directory.CreateDirectory(defaultSaveFolder);
-            }
-            if (!Directory.Exists(defaultSaveFolder + "\\backup"))
-            {
-                log.Info("Auto Tạo Thư mục backup: " + defaultSaveFolder + "\\backup");
-                Directory.CreateDirectory(defaultSaveFolder + "\\backup");
-            }
+                Thread.Sleep(15000);
 
-            if (FamilyTree.GP.FileName.Length == 0)
-            {
-                FamilyTree.GP.FileName = defaultSaveFolder + "\\" + defaultSaveName;
-                log.Info("Auto Save File : " + FamilyTree.GP.FileName);
-            }
-            else
-            {
-                // Backup save
+                // Tránh autosave chen vào lúc đang nạp cây, dễ phát sinh trạng thái dở dang/null.
+                if (Volatile.Read(ref _isLoadingGiaPha) == 1)
+                {
+                    return;
+                }
 
-                // Delete file < 
-                string fileSearch = FamilyTree.GP.GiaphaName.Replace(" ", "_") + "_" + DateTime.Now.ToString("yyyy_dd_MM_") + "*.json";
-                var directory = new DirectoryInfo(defaultSaveFolder + "\\backup");
-                var query = directory.GetFiles(fileSearch, SearchOption.AllDirectories);
-                string lastFile = "";
-                foreach (var file in query.OrderByDescending(file => file.CreationTime))
+                // Chặn re-entry nếu timer callback bị gọi chồng.
+                if (Interlocked.Exchange(ref _isAutoSaving, 1) == 1)
                 {
-                    // last file 
-                    lastFile = file.Name;
-                    log.Info("Last File : " + lastFile);
-                    break;
+                    return;
                 }
-                foreach (var file in query.OrderByDescending(file => file.CreationTime).Skip(10))
+
+                var tree = FamilyTree;
+                var gp = tree?.GP;
+                if (gp == null)
                 {
-                    // Deleet all, keep last 10 files
-                    file.Delete();
+                    return;
                 }
-                if(lastFile.Length> 0)
+
+                if (!Directory.Exists(defaultSaveFolder))
                 {
-                    try
+                    log.Info("Auto Tạo Thư mục: " + defaultSaveFolder);
+                    Directory.CreateDirectory(defaultSaveFolder);
+                }
+                if (!Directory.Exists(defaultSaveFolder + "\\backup"))
+                {
+                    log.Info("Auto Tạo Thư mục backup: " + defaultSaveFolder + "\\backup");
+                    Directory.CreateDirectory(defaultSaveFolder + "\\backup");
+                }
+
+                if (string.IsNullOrWhiteSpace(gp.FileName))
+                {
+                    gp.FileName = defaultSaveFolder + "\\" + defaultSaveName;
+                    log.Info("Auto Save File : " + gp.FileName);
+                }
+                else
+                {
+                    // Dọn và tạo backup theo tên gia phả hiện tại trước khi lưu.
+                    string fileSearch = gp.GiaphaName.Replace(" ", "_") + "_" + DateTime.Now.ToString("yyyy_dd_MM_") + "*.json";
+                    foreach (char lDisallowed in System.IO.Path.GetInvalidFileNameChars())
                     {
-                        long length0 = new System.IO.FileInfo(FamilyTree.GP.FileName).Length;
-                        long length1 = new System.IO.FileInfo(defaultSaveFolder + "\\backup\\" + lastFile).Length;
-                        if (length0 != length1)
+                        fileSearch = fileSearch.Replace(lDisallowed.ToString(), "");
+                    }
+                    foreach (char lDisallowed in System.IO.Path.GetInvalidPathChars())
+                    {
+                        fileSearch = fileSearch.Replace(lDisallowed.ToString(), "");
+                    }
+
+                    var directory = new DirectoryInfo(defaultSaveFolder + "\\backup");
+                    var query = directory.GetFiles(fileSearch, SearchOption.AllDirectories);
+                    string lastFile = "";
+                    foreach (var file in query.OrderByDescending(file => file.CreationTime))
+                    {
+                        lastFile = file.Name;
+                        log.Info("Last File : " + lastFile);
+                        break;
+                    }
+                    foreach (var file in query.OrderByDescending(file => file.CreationTime).Skip(10))
+                    {
+                        file.Delete();
+                    }
+                    if (lastFile.Length > 0)
+                    {
+                        try
                         {
-                            log.Info("Backup Last File 1: " + length0 + " " + length1 + " " + lastFile);
-                            System.IO.File.Copy(FamilyTree.GP.FileName, defaultSaveFolder + "\\backup\\" + FamilyTree.GP.Username.Replace(" ", "_") + "_" + DateTime.Now.ToString("yyyy_dd_MM_hh_mm_ss_") + defaultSaveName);
+                            long length0 = new System.IO.FileInfo(gp.FileName).Length;
+                            long length1 = new System.IO.FileInfo(defaultSaveFolder + "\\backup\\" + lastFile).Length;
+                            if (length0 != length1)
+                            {
+                                log.Info("Backup Last File 1: " + length0 + " " + length1 + " " + lastFile);
+                                System.IO.File.Copy(
+                                    gp.FileName,
+                                    defaultSaveFolder + "\\backup\\" + gp.Username.Replace(" ", "_") + "_" + DateTime.Now.ToString("yyyy_dd_MM_hh_mm_ss_") + defaultSaveName);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            log.Error("Backup " + ex.Message);
+                            log.Error(ex);
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        log.Error("Backup " + ex.Message);
-                        log.Error(ex);
-                    }
                 }
-                else {
-                    //log.Info("Backup Last File 2: " + lastFile);
-                    if(FamilyTree.GP.Username.Length> 0)
-                    {
 
-                        System.IO.File.Copy(FamilyTree.GP.FileName, defaultSaveFolder + "\\backup\\" + FamilyTree.GP.Username.Replace(" ", "_") + "_" + DateTime.Now.ToString("yyyy_dd_MM_hh_mm_ss_") + defaultSaveName);
-                    }
-                }
+                SaveFileCommandFunc();
             }
-            //
-            SaveFileCommandFunc();
-            //
-            myTimer.Change(100, Timeout.Infinite);
+            finally
+            {
+                Interlocked.Exchange(ref _isAutoSaving, 0);
+                myTimer?.Change(100, Timeout.Infinite);
+            }
         }
 
         public void Dispose()
@@ -457,6 +597,7 @@ namespace vietnamgiapha
         {
             get { return _graphData; }
         }
+#if false // Đã thay bằng GiaPhaRender → GiaPhaRenderService.RenderToCanvas (MainWindow Button_Click_1)
         public void Draw(System.Windows.Controls.Canvas theCanvas)
         {
             theCanvas.Width = 100;
@@ -1246,6 +1387,7 @@ namespace vietnamgiapha
             _graphData.AUTO_SIZE = false;
             return false;
         }
+#endif // end code vẽ cũ Draw/GraphData
 
         internal void ExportHtml(string fileName)
         {

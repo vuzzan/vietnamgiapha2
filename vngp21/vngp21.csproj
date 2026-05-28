@@ -61,7 +61,6 @@
     <WarningLevel>4</WarningLevel>
     <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
-  
   <PropertyGroup>
     <ApplicationIcon>ICO.ico</ApplicationIcon>
   </PropertyGroup>
@@ -92,14 +91,12 @@
   </Target>
   <Target Name="ZipBuild" AfterTargets="GetVersion" Condition="'$(Configuration)'=='Release'">
     <Message Text="ZIP VersionInfo = $(VersionInfo)" Importance="high" />
-    <Exec Command="powershell Compress-Archive -Path '$(OutDir)*.exe','$(OutDir)log4net.config','$(OutDir)*.js' -DestinationPath '$(OutDir)\VietNamGiaPha2.zip' -Force" />
+    <Exec Command="%SYSTEMROOT%\System32\WindowsPowerShell\v1.0\powershell Compress-Archive -Path '$(OutDir)*.exe','$(OutDir)log4net.config','$(OutDir)*.js' -DestinationPath '$(OutDir)\VietNamGiaPha2.zip' -Force" />
   </Target>
-  
   <Target Name="Upload" AfterTargets="ZipBuild" Condition="'$(Configuration)'=='Release'">
     <Message Text="Upload VersionInfo = $(VersionInfo)" Importance="high" />
-    <Exec Command="curl -F &quot;version=$(VersionInfo)&quot; -F &quot;file=@$(OutDir)Vietnamgiapha2.zip&quot; http://download.vietnamgiapha.com/files/index.php" />
+    <Exec Command="curl -F &quot;version=$(VersionInfo)&quot; -F &quot;file=@$(OutDir)VietNamGiaPha2.zip&quot; http://download.vietnamgiapha.com/files/index.php" />
   </Target>
-  
   <ItemGroup>
     <Reference Include="Interop.MSHTML">
       <HintPath>..\SmithHtmlEditor\bin\Debug\net462\win-x86\Interop.MSHTML.dll</HintPath>
@@ -116,6 +113,7 @@
     <Reference Include="System.Drawing" />
     <Reference Include="System.Net" />
     <Reference Include="System.Numerics" />
+    <Reference Include="System.Printing" />
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Web" />
     <Reference Include="System.Web.Extensions" />
@@ -132,18 +130,54 @@
     <Reference Include="WindowsBase" />
     <Reference Include="PresentationCore" />
     <Reference Include="PresentationFramework" />
+    <Reference Include="ReachFramework" />
   </ItemGroup>
   <ItemGroup>
     <ApplicationDefinition Include="App.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="GiaPhaRender\A0PrintSpecification.cs" />
+    <Compile Include="GiaPhaRender\FamilyCardMetrics.cs" />
+    <Compile Include="GiaPhaRender\FamilyTreeCanvasRenderer.cs" />
+    <Compile Include="GiaPhaRender\FamilyTreeLayoutEngine.cs" />
+    <Compile Include="GiaPhaRender\GiaPhaRenderModels.cs" />
+    <Compile Include="GiaPhaRender\GiaPhaManualLayoutService.cs" />
+    <Compile Include="GiaPhaRender\GiaPhaRenderBoundsFitter.cs" />
+    <Compile Include="GiaPhaRender\GiaPhaRenderOptions.cs" />
+    <Compile Include="GiaPhaRender\GiaPhaLayoutSettings.cs" />
+    <Compile Include="GiaPhaRender\PhaDoBoxStyle.cs" />
+    <Compile Include="GiaPhaRender\PhaDoResizeHandleTag.cs" />
+    <Compile Include="GiaPhaRender\PhaDoTitleStyle.cs" />
+    <Compile Include="GiaPhaRender\PhaDoSvgFrameStyle.cs" />
+    <Compile Include="GiaPhaRender\PhaDoSvgFrameListBuilder.cs" />
+    <Compile Include="GiaPhaRender\GiaPhaTitleBlockRenderer.cs" />
+    <Compile Include="GiaPhaRender\PhaDoTitleBlockMetrics.cs" />
+    <Compile Include="GiaPhaRender\PhaDoBoxBackgroundTag.cs" />
+    <Compile Include="GiaPhaRender\PhaDoBoxSvgSanitizer.cs" />
+    <Compile Include="GiaPhaRender\PhaDoBoxSvgWpfRenderer.cs" />
+    <Compile Include="GiaPhaRender\PhaDoSvgShape.cs" />
+    <Compile Include="GiaPhaRender\PhaDoSvgCatalog.cs" />
+    <Compile Include="GiaPhaRender\GiaPhaExcelExportService.cs" />
+    <Compile Include="GiaPhaRender\GiaPhaRenderService.cs" />
+    <Compile Include="GiaPhaRender\GiaPhaSvgExportService.cs" />
+    <Compile Include="GiaPhaRender\PhaDoBoxSvgVectorExport.cs" />
+    <Compile Include="GiaPhaRender\GiaPhaVerticalCardLayout.cs" />
+    <Compile Include="GiaPhaRender\GiaPhaVerticalWordCardLayout.cs" />
+    <Compile Include="GiaPhaRender\LayoutTreeNode.cs" />
+    <Compile Include="GiaPhaRender\PrintUnits.cs" />
     <Compile Include="Draw\GraphData.cs" />
     <Compile Include="Draw\LayerLevel.cs" />
     <Compile Include="Draw\Link.cs" />
     <Compile Include="Draw\Node.cs" />
     <Compile Include="Draw\RenderVisualService.cs" />
     <Compile Include="Draw\Sharp0.cs" />
+    <Compile Include="Services\AppWorkspaceSession.cs" />
+    <Compile Include="Services\AppWorkspaceSessionStore.cs" />
+    <Compile Include="Services\GiaPhaLayoutSettingsStore.cs" />
+    <Compile Include="Services\SvgCloudApiService.cs" />
+    <Compile Include="Services\SvgCloudDuplicateException.cs" />
+    <Compile Include="Models\SvgCloudModels.cs" />
     <Compile Include="MainWindow.xaml.cs">
       <DependentUpon>MainWindow.xaml</DependentUpon>
     </Compile>
@@ -161,6 +195,14 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="PhaDoSubtreeMapDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="PhaDoSubtreeMapDialog.xaml.cs">
+      <DependentUpon>PhaDoSubtreeMapDialog.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="PhaDoSubtreeBranchBlock.cs" />
     <Compile Include="MainWindowViewModel.cs" />
     <Compile Include="Models\FamilyInfo.cs" />
     <Compile Include="Models\FamilyTreeViewModel.cs" />
@@ -172,6 +214,34 @@
     <Compile Include="Core\BindingProxy.cs" />
     <Compile Include="Core\SimpleCommand.cs" />
     <Compile Include="Core\ViewModelBase.cs" />
+    <Page Include="SettingsDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="SettingsDialog.xaml.cs">
+      <DependentUpon>SettingsDialog.xaml</DependentUpon>
+    </Compile>
+    <Page Include="PhaDoBoxStyleDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="PhaDoBoxStyleDialog.xaml.cs">
+      <DependentUpon>PhaDoBoxStyleDialog.xaml</DependentUpon>
+    </Compile>
+    <Page Include="PhaDoTitleStyleDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="PhaDoTitleStyleDialog.xaml.cs">
+      <DependentUpon>PhaDoTitleStyleDialog.xaml</DependentUpon>
+    </Compile>
+    <Page Include="SvgLibraryManagerWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="SvgLibraryManagerWindow.xaml.cs">
+      <DependentUpon>SvgLibraryManagerWindow.xaml</DependentUpon>
+    </Compile>
     <Page Include="WindowUpload.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
@@ -367,6 +437,7 @@
     <PackageReference Include="Autoupdater.NET.Official">
       <Version>1.9.0</Version>
     </PackageReference>
+    <PackageReference Include="ClosedXML" Version="0.102.2" />
     <PackageReference Include="log4net">
       <Version>3.0.3</Version>
     </PackageReference>
@@ -376,12 +447,14 @@
     <PackageReference Include="MaterialDesignThemes.MahApps">
       <Version>3.1.0</Version>
     </PackageReference>
+    <PackageReference Include="MessagePack" Version="3.1.6" />
     <PackageReference Include="MvvmLight">
       <Version>5.4.1.1</Version>
     </PackageReference>
     <PackageReference Include="Newtonsoft.Json">
       <Version>13.0.3</Version>
     </PackageReference>
+    <PackageReference Include="SharpVectors.Wpf" Version="1.8.4" />
     <PackageReference Include="System.Text.Json">
       <Version>9.0.0</Version>
     </PackageReference>

@@ -1,0 +1,94 @@
+<mah:MetroWindow x:Class="vietnamgiapha.PhaDoSubtreeMapDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mah="http://metro.mahapps.com/winfx/xaml/controls"
+        Title="Phân tích phả con"
+        Height="780"
+        Width="1020"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResizeWithGrip"
+        MinHeight="560"
+        MinWidth="800"
+        ShowInTaskbar="False">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Controls.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Fonts.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Themes/Light.Orange.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Grid Margin="10">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="2*"/>
+            <ColumnDefinition Width="6"/>
+            <ColumnDefinition Width="3*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Trái: phân tích -->
+        <Border Grid.Column="0" BorderBrush="#DDD" BorderThickness="1" Background="#FFFDF8">
+            <TextBox x:Name="analysisText"
+                     IsReadOnly="True"
+                     TextWrapping="Wrap"
+                     AcceptsReturn="True"
+                     VerticalScrollBarVisibility="Auto"
+                     HorizontalScrollBarVisibility="Disabled"
+                     BorderThickness="0"
+                     Background="Transparent"
+                     FontFamily="Consolas"
+                     FontSize="12"
+                     Padding="10"/>
+        </Border>
+
+        <GridSplitter Grid.Column="1"
+                      Width="6"
+                      HorizontalAlignment="Stretch"
+                      VerticalAlignment="Stretch"
+                      Background="#E8E8E8"
+                      ShowsPreview="True"/>
+
+        <!-- Phải: phả đồ nhỏ -->
+        <Grid Grid.Column="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="summaryText" Grid.Column="0" VerticalAlignment="Center"
+                           TextWrapping="Wrap" Foreground="#444"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="fullScreenBtn" Content="Toàn màn hình" Width="110" Margin="0,0,6,0" Click="ToggleFullScreen_Click"
+                            ToolTip="Bật/tắt toàn màn hình"/>
+                    <Button x:Name="zoomOutBtn" Content="-" Width="34" Margin="0,0,6,0" Click="ZoomOut_Click"
+                            ToolTip="Thu nhỏ"/>
+                    <Button x:Name="zoomInBtn" Content="+" Width="34" Margin="0,0,6,0" Click="ZoomIn_Click"
+                            ToolTip="Phóng to"/>
+                    <Button x:Name="zoom100Btn" Content="100%" Width="56" Margin="0,0,6,0" Click="Zoom100_Click"/>
+                    <Button x:Name="fitViewBtn" Content="Vừa khung" Width="72" Margin="0,0,6,0" Click="FitView_Click"
+                            ToolTip="Thu nhỏ vừa khung nhìn — xem toàn cục"/>
+                    <TextBlock x:Name="zoomLabel" VerticalAlignment="Center" Foreground="#666" Text="Vừa khung"/>
+                </StackPanel>
+            </Grid>
+
+            <Border Grid.Row="1" BorderBrush="#DDD" BorderThickness="1" Background="#FAFAFA">
+                <ScrollViewer x:Name="mapScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                              SizeChanged="MapScroll_SizeChanged"
+                              PreviewMouseWheel="MapScroll_PreviewMouseWheel">
+                    <Grid x:Name="mapHost" HorizontalAlignment="Left" VerticalAlignment="Top">
+                        <Grid.LayoutTransform>
+                            <ScaleTransform x:Name="mapScale" ScaleX="1" ScaleY="1"/>
+                        </Grid.LayoutTransform>
+                        <Canvas x:Name="mapCanvas" Background="White"/>
+                    </Grid>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+    </Grid>
+</mah:MetroWindow>

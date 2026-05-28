@@ -523,6 +523,7 @@ namespace vietnamgiapha
             // 2. Thêm 1 người mới tự động vô gia đình
             insertFamily.ListPerson = new ObservableCollection<PersonInfo>();
             var person = new PersonInfo(Name0+"Con" + (_familyListChildren.Count + 1), insertFamily);
+            person.MANS_CONTHUMAY = "" + (_familyListChildren.Count + 1);
             insertFamily.ListPerson.Add(person);
             // 3: Update info
             insertFamily.FamilyLevel = this._familyInfo.FamilyLevel + 1;
@@ -726,6 +727,21 @@ namespace vietnamgiapha
             }
         }
 
+        /// <summary>Mở rộng toàn bộ nhánh con trên TreeView.</summary>
+        public void ExpandAllDescendants()
+        {
+            IsExpanded = true;
+            if (_familyListChildren == null)
+            {
+                return;
+            }
+
+            foreach (var child in _familyListChildren)
+            {
+                child?.ExpandAllDescendants();
+            }
+        }
+
         #endregion // IsExpanded
 
         #region IsSelected
@@ -800,6 +816,11 @@ namespace vietnamgiapha
             //json += this._familyInfo.FamilyId + "," + this._familyInfo.FamilyLevel + "," + this._familyInfo.FamilyOrder + "," + this._familyInfo.FamilyUp + "," + this._familyInfo.FamilyNew;
             json += this._familyInfo.FamilyId + "," + this._familyInfo.FamilyLevel + "," + this._familyInfo.FamilyOrder + "," + this._familyInfo.FamilyUp + "," + this._familyInfo.FamilyNew 
                 + ",\"" + _familyInfo.X + "\",\"" + _familyInfo.Y + "\",\"" + _familyInfo.Width + "\",\"" + _familyInfo.Height + "\"";
+            if (!string.IsNullOrWhiteSpace(_familyInfo.PhaDoShapeSvgId))
+            {
+                json += ",\"" + GiaPhaRender.PhaDoSvgCatalog.EscapeJsonString(_familyInfo.PhaDoShapeSvgId) + "\"";
+            }
+
             json += "],";
             // Item 2: List Person name
             json += "[";

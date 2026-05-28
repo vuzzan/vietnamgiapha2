@@ -5,6 +5,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows.Input;
 using System.Windows.Media;
+using vietnamgiapha.GiaPhaRender;
 
 namespace vietnamgiapha
 {
@@ -225,6 +226,7 @@ namespace vietnamgiapha
             GP = gp;
             _family = new FamilyTreeViewModel(gp.familyRoot, this);
             _GiaphaWebHtml = "";
+            _family.ExpandAll();
         }
 
         public virtual void OnPropertyChanged(string propertyName)
@@ -237,6 +239,8 @@ namespace vietnamgiapha
         
         public string ToJson()
         {
+            // Catalog SVG giữ toàn bộ khung đã lưu (thư viện), không prune theo family.
+
             // Save vào json file
             String json = "[";
             // Build Json Gia phả
@@ -251,11 +255,46 @@ namespace vietnamgiapha
             json += "\"" + (GP.RF_OTAI) + "\", ";                   //7
             json += "\"" + (GP.RF_DAYS) + "\", ";                   //8
             json += "\"" + (GP.RF_CHANNGON) + "\", ";                //9
-            json += "\"" + (GP.Username) + "\", ";                //9
-            json += "\"" + (GP.Password) + "\" ";                //9
+            json += "\"" + (GP.Username) + "\", ";                  //10
+            json += "\"" + (GP.Password) + "\", ";                  //11
+            json += PhaDoSvgCatalog.ToJsonArray(GP?.SvgShapesById);  //12 catalog SVG
             json += "]";// END 
             //
             return json;
+        }
+
+        public FamilyInfo FindFamilyInfoById(int familyId)
+        {
+            return FindFamilyInfoRecursive(GP?.familyRoot, familyId);
+        }
+
+        private static FamilyInfo FindFamilyInfoRecursive(FamilyInfo node, int familyId)
+        {
+            if (node == null || familyId <= 0)
+            {
+                return null;
+            }
+
+            if (node.FamilyId == familyId)
+            {
+                return node;
+            }
+
+            if (node.FamilyChildren == null)
+            {
+                return null;
+            }
+
+            foreach (var child in node.FamilyChildren)
+            {
+                var found = FindFamilyInfoRecursive(child, familyId);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+
+            return null;
         }
 
         public string CheckValid()

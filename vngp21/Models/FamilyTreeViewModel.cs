@@ -51,6 +51,12 @@ namespace vietnamgiapha
         }
 
         #endregion // Constructor
+
+        public void ExpandAll()
+        {
+            RootPerson?.ExpandAllDescendants();
+        }
+
         public string ToJson()
         {
             return RootPerson.ToJson();
@@ -120,6 +126,29 @@ namespace vietnamgiapha
                 this.OnPropertyChanged("SelectedFamily");
             }
         }
+
+        /// <summary>Chọn gia đình trên cây (mở rộng nhánh cha, đồng bộ SelectedFamily / SelectedPerson).</summary>
+        public void SelectFamily(FamilyViewModel family)
+        {
+            if (family == null)
+            {
+                return;
+            }
+
+            for (var parent = family.Parent; parent != null; parent = parent.Parent)
+            {
+                parent.IsExpanded = true;
+            }
+
+            SelectedFamily = family;
+            family.IsSelected = true;
+
+            if (family.ListPerson != null && family.ListPerson.Count > 0)
+            {
+                SelectedPerson = family.ListPerson[0];
+            }
+        }
+
         #region FirstGeneration
 
         /// <summary>

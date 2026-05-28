@@ -1,0 +1,25 @@
+---
+description: Comment tiếng Việt khi sửa/thêm code trong dự án vngp21
+alwaysApply: true
+---
+
+# Comment bằng tiếng Việt
+
+Khi **sửa** hoặc **thêm** code trong dự án này:
+
+- Viết **comment tiếng Việt** giải thích **logic / mục đích**, không mô tả lại cú pháp hiển nhiên.
+- Đặt comment ở chỗ khó hiểu: nhánh xử lý đặc biệt, công thức đo layout, luồng UI (tab, chọn box, vẽ lại từng phần), tích hợp session/drag.
+- Với method/class **mới** hoặc **đổi hành vi**: dùng XML doc (`///`) tiếng Việt ngắn gọn nếu phù hợp với file xung quanh.
+- Không spam comment từng dòng; ưu tiên khối logic và API public/internal quan trọng.
+
+Ví dụ:
+
+```csharp
+// Chỉ vẽ lại box đang chọn — không xóa toàn canvas khi quay tab Phả đồ
+private void RefreshSelectedPhaDoFamilyBox() { ... }
+
+// Nhãn "Đời" viết ngang trên dải header; tên người vẫn xếp dọc bên dưới
+AddHorizontalText(..., TextAlignment.Center);
+```
+
+Giữ comment đồng bộ khi đổi logic; xóa comment cũ nếu không còn đúng.

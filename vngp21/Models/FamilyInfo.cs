@@ -22,6 +22,9 @@ namespace vietnamgiapha
         public int Width { get; set; }
         public int Height { get; set; }
 
+        /// <summary>Tham chiếu khung SVG trong catalog file gia phả (index root 12).</summary>
+        public string PhaDoShapeSvgId { get; set; }
+
         public FamilyInfo()
         {
             FamilyNew = 1;

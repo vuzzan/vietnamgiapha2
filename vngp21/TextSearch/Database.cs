@@ -1,6 +1,7 @@
 ﻿using MahApps.Metro.Controls;
 using Microsoft.Win32;
 using System;
+using System.Globalization;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Configuration;
@@ -160,8 +161,8 @@ namespace vietnamgiapha
                 string url = "https://vietnamgiapha.com/export/index2c.php?f=u&u=" + u + "&p=" + p;
                 log.Info("Upload " + url);
                 var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
-                var response = await client.PostAsync(url, content);
-                string responseBody = response.Content.ReadAsStringAsync().Result;
+                var response = await client.PostAsync(url, content).ConfigureAwait(false);
+                string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                 log.Info("Upload: " + responseBody.Length);
                 log.Info(responseBody);
                 return responseBody;
@@ -188,8 +189,8 @@ namespace vietnamgiapha
                 client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36");
                 string url = "https://vietnamgiapha.com/export/index2c.php?u="+u+"&p="+p;
                 log.Info("Download " + url);
-                var response = await client.GetAsync(url);
-                string responseBody = response.Content.ReadAsStringAsync().Result;
+                var response = await client.GetAsync(url).ConfigureAwait(false);
+                string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                 log.Info("Download: " + responseBody.Length);
                 //if(responseBody.Length < 200)
                 {
@@ -199,7 +200,6 @@ namespace vietnamgiapha
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Có lỗi: " + ex.Message, "Có lỗi");
                 log.Error("ERROR: Download " + ex.Message);
                 return null;
             }
@@ -210,21 +210,25 @@ namespace vietnamgiapha
             {
                 u = Util.Unicode2ASCII(u);
                 p = Util.Unicode2ASCII(p);
-                string json = await DownloadWeb(u, p);
-                //
-                log.Info("Download json: " + json);
-                JsonObject objData = (JsonObject)JsonObject.Parse(json);
-                GiaphaInfo gp = ParseJsonGiaPha(objData);
-                // Save file
-                //
-                return gp;
+                string json = await DownloadWeb(u, p).ConfigureAwait(false);
+                log.Info("Download json length: " + (json?.Length ?? 0));
+                if (string.IsNullOrWhiteSpace(json))
+                {
+                    return null;
+                }
+
+                // JSON lớn: parse ở background để không khóa STA/UI thread.
+                return await Task.Run(() =>
+                {
+                    JsonObject objData = (JsonObject)JsonObject.Parse(json);
+                    return ParseJsonGiaPha(objData);
+                }).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Có lỗi Download: " + ex.Message, "Có lỗi");
                 log.Error("Có lỗi Download Gia Phả.");
                 log.Error(ex);
-                throw ex;
+                throw;
             }
         }
         public static GiaphaInfo ParseJsonGiaPha(JsonObject objData)
@@ -279,6 +283,22 @@ namespace vietnamgiapha
                         gp.Password = "";
                     }
                 }
+
+                if (array.Count > GiaPhaRender.PhaDoSvgCatalog.RootJsonSvgCatalogIndex)
+                {
+                    var catalogNode = array[GiaPhaRender.PhaDoSvgCatalog.RootJsonSvgCatalogIndex];
+                    if (catalogNode is JsonArray catalogArray)
+                    {
+                        gp.SvgShapesById = ParseSvgCatalogFromJsonArray(catalogArray);
+                    }
+
+                    if (gp.SvgShapesById == null || gp.SvgShapesById.Count == 0)
+                    {
+                        string catalogJson = catalogNode?.ToString() ?? "[]";
+                        gp.SvgShapesById = GiaPhaRender.PhaDoSvgCatalog.ParseJsonArray(catalogJson);
+                    }
+                }
+
                 JsonArray arrayFamily = (JsonArray)array[2];
 
                 // THUY TO
@@ -408,13 +428,71 @@ namespace vietnamgiapha
             }
             return true;
         }
+        private static Dictionary<string, GiaPhaRender.PhaDoSvgShape> ParseSvgCatalogFromJsonArray(JsonArray catalogArray)
+        {
+            var result = new Dictionary<string, GiaPhaRender.PhaDoSvgShape>(StringComparer.Ordinal);
+            if (catalogArray == null)
+            {
+                return result;
+            }
+
+            for (int i = 0; i < catalogArray.Count; i++)
+            {
+                var row = catalogArray[i] as JsonArray;
+                if (row == null || row.Count < 4)
+                {
+                    continue;
+                }
+
+                string svgId = JsonValueToString(row[0]);
+                string svgBase64 = JsonValueToString(row[1]);
+                if (string.IsNullOrWhiteSpace(svgId) || string.IsNullOrWhiteSpace(svgBase64))
+                {
+                    continue;
+                }
+
+                double vbW = 100;
+                double vbH = 80;
+                double.TryParse(JsonValueToString(row[2]), NumberStyles.Float, CultureInfo.InvariantCulture, out vbW);
+                double.TryParse(JsonValueToString(row[3]), NumberStyles.Float, CultureInfo.InvariantCulture, out vbH);
+
+                result[svgId] = new GiaPhaRender.PhaDoSvgShape
+                {
+                    SvgId = svgId,
+                    SvgBase64 = svgBase64,
+                    ViewBoxWidth = vbW,
+                    ViewBoxHeight = vbH
+                };
+            }
+
+            return result;
+        }
+
+        private static string JsonValueToString(object jsonValue)
+        {
+            if (jsonValue == null)
+            {
+                return "";
+            }
+
+            string s = jsonValue.ToString();
+            if (s.Length >= 2 && s[0] == '"' && s[s.Length - 1] == '"')
+            {
+                return s.Substring(1, s.Length - 2)
+                    .Replace("\\\"", "\"")
+                    .Replace("\\\\", "\\");
+            }
+
+            return s;
+        }
+
         private static bool GetFamily(FamilyInfo family, JsonArray arrayFamily)
         {
             try
             {
                 // Item 1 : Family info 
                 JsonArray arrayFamilyInfo = (JsonArray)arrayFamily[0];
-                family.FamilyId = Convert.ToInt16(arrayFamilyInfo[0].ToString());
+                family.FamilyId = Convert.ToInt32(arrayFamilyInfo[0].ToString());
                 family.FamilyOrder = Convert.ToInt32(arrayFamilyInfo[2].ToString());
                 family.FamilyLevel = Convert.ToInt32(arrayFamilyInfo[1].ToString());
                 family.FamilyUp = Convert.ToInt32(arrayFamilyInfo[3].ToString());
@@ -432,6 +510,15 @@ namespace vietnamgiapha
                     family.Width = Convert.ToInt32(arrayFamilyInfo[7].ToString());
                     family.Height = Convert.ToInt32(arrayFamilyInfo[8].ToString());
                 }
+
+                if (arrayFamilyInfo.Count > GiaPhaRender.PhaDoSvgCatalog.FamilyInfoSvgIdIndex)
+                {
+                    string svgId = arrayFamilyInfo[GiaPhaRender.PhaDoSvgCatalog.FamilyInfoSvgIdIndex].ToString();
+                    if (!string.IsNullOrWhiteSpace(svgId))
+                    {
+                        family.PhaDoShapeSvgId = svgId.Trim().Trim('"');
+                    }
+                }
                 //family.FamilyName = family.FamilyId.ToString();
                 // Item 2: List Person name
                 JsonArray arrayPerson = (JsonArray)arrayFamily[1];
@@ -447,7 +534,14 @@ namespace vietnamgiapha
                     familyMember.fid = personInfoArray[5].ToString();
                     if(personInfoArray[6].ToString().Length>0)
                     {
-                        familyMember.MANS_GENDER = Convert.ToInt16(personInfoArray[6].ToString()) == 1 ? "Nam" : "Nữ";
+                        try
+                        {
+                            familyMember.MANS_GENDER = Convert.ToInt32(personInfoArray[6].ToString()) == 1 ? "Nam" : "Nữ";
+                        }
+                        catch (Exception exx)
+                        {
+                            familyMember.MANS_GENDER = "Nam";
+                        }
                     }
                     familyMember.MANS_DOB = personInfoArray[7].ToString();
                     familyMember.MANS_DOD = personInfoArray[8].ToString();
