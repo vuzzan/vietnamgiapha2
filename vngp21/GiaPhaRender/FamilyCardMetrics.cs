@@ -17,6 +17,8 @@ namespace vietnamgiapha.GiaPhaRender
         public IReadOnlyList<string> SpouseOverflow { get; private set; }
         public int Generation { get; private set; }
         public string FamilyLabel { get; private set; }
+        /// <summary>Ghi chú cuối ô: khởi đầu phả con, kích thước cm…</summary>
+        public IReadOnlyList<string> ExtraNotes { get; private set; } = Array.Empty<string>();
 
         public void ApplySizeOverride(double? widthMm, double? heightMm)
         {
@@ -52,7 +54,8 @@ namespace vietnamgiapha.GiaPhaRender
         {
             var metrics = new FamilyCardMetrics();
             metrics.Generation = family.familyInfo.FamilyLevel;
-            metrics.FamilyLabel = "Đời " + metrics.Generation;
+            
+            metrics.FamilyLabel = "Đời " + metrics.Generation;// Vẽ box gia đình
 
             var persons = family.ListPerson?.ToList() ?? new List<PersonInfo>();
             metrics.MainPerson = persons.FirstOrDefault(p => p.IsMainPerson == 1)
@@ -72,6 +75,8 @@ namespace vietnamgiapha.GiaPhaRender
             {
                 metrics.SpouseOverflow = new List<string>();
             }
+
+            metrics.ExtraNotes = ResolveExtraNotes(family, options);
 
             double innerMaxMm = options.CardMaxWidthMm - options.CardPaddingMm * 2;
             double maxTextWidthMm = options.CardMinWidthMm;
@@ -122,6 +127,8 @@ namespace vietnamgiapha.GiaPhaRender
                 + totalTextHeightMm
                 + options.CardBottomPaddingMm;
 
+            ApplyExtraNotesToHorizontalSize(metrics, options, innerMaxMm);
+
             metrics.SlotHeightMm = metrics.HeightMm * options.CardHeightSafetyFactor;
 
             return metrics;
@@ -135,7 +142,7 @@ namespace vietnamgiapha.GiaPhaRender
         {
             var metrics = new FamilyCardMetrics();
             metrics.Generation = family.familyInfo.FamilyLevel;
-            metrics.FamilyLabel = "Đời " + metrics.Generation;
+            metrics.FamilyLabel = "2Đời " + metrics.Generation;
 
             var persons = family.ListPerson?.ToList() ?? new List<PersonInfo>();
             metrics.MainPerson = persons.FirstOrDefault(p => p.IsMainPerson == 1)
@@ -170,8 +177,11 @@ namespace vietnamgiapha.GiaPhaRender
                     + GiaPhaVerticalCardLayout.ColumnGapMm;
             }
 
+            metrics.ExtraNotes = ResolveExtraNotes(family, options);
+
             metrics.WidthMm = w;
             metrics.HeightMm = h;
+            ApplyExtraNotesToVerticalSize(metrics, options);
             metrics.SlotHeightMm = metrics.HeightMm * options.CardHeightSafetyFactor;
             return metrics;
         }
@@ -180,9 +190,86 @@ namespace vietnamgiapha.GiaPhaRender
 
         internal static string FormatSpousePublic(PersonInfo p) => FormatSpouse(p);
 
+        internal static double EstimateWrappedLineHeightMm(
+            string text,
+            double fontPt,
+            double innerMaxMm,
+            GiaPhaRenderOptions options) =>
+            EstimateWrappedHeightMm(text, fontPt, innerMaxMm, options);
+
         private static string FormatMain(PersonInfo p)
         {
-            return "★ " + (p.MANS_NAME_HUY ?? "");
+            return p.MANS_NAME_HUY ?? "";
+        }
+
+        private static IReadOnlyList<string> ResolveExtraNotes(FamilyViewModel family, GiaPhaRenderOptions options)
+        {
+            if (options?.GetFamilyBoxNotes == null || family?.familyInfo == null)
+            {
+                return Array.Empty<string>();
+            }
+
+            int familyId = family.familyInfo.FamilyId;
+            if (familyId <= 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            var notes = options.GetFamilyBoxNotes(familyId);
+            if (notes == null || notes.Count == 0)
+            {
+                return Array.Empty<string>();
+            }
+
+            return notes.Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
+        }
+
+        private static double NoteFontPt(GiaPhaRenderOptions options)
+        {
+            return options.NoteFontPt > 0 ? options.NoteFontPt : 6.5;
+        }
+
+        private static void ApplyExtraNotesToHorizontalSize(
+            FamilyCardMetrics metrics,
+            GiaPhaRenderOptions options,
+            double innerMaxMm)
+        {
+            if (metrics.ExtraNotes == null || metrics.ExtraNotes.Count == 0)
+            {
+                return;
+            }
+
+            double notePt = NoteFontPt(options);
+            double notesBlockMm = options.CardNoteTopGapMm;
+            foreach (var line in metrics.ExtraNotes)
+            {
+                metrics.WidthMm = Math.Max(metrics.WidthMm,
+                    EstimateTextWidthMm(line, notePt) * (options.CardWidthTextFactor > 0 ? options.CardWidthTextFactor : 1.0)
+                    + options.CardPaddingMm * 2);
+                notesBlockMm += EstimateWrappedHeightMm(line, notePt, innerMaxMm, options);
+            }
+
+            metrics.HeightMm += notesBlockMm;
+        }
+
+        private static void ApplyExtraNotesToVerticalSize(FamilyCardMetrics metrics, GiaPhaRenderOptions options)
+        {
+            if (metrics.ExtraNotes == null || metrics.ExtraNotes.Count == 0)
+            {
+                return;
+            }
+
+            double innerMaxMm = Math.Max(8, metrics.WidthMm - options.CardPaddingMm * 2);
+            double notePt = NoteFontPt(options);
+            double notesBlockMm = options.CardNoteTopGapMm;
+            foreach (var line in metrics.ExtraNotes)
+            {
+                double lineW = EstimateTextWidthMm(line, notePt) + options.CardPaddingMm * 2;
+                metrics.WidthMm = Math.Max(metrics.WidthMm, Math.Min(options.CardVerticalMaxWidthMm * 2.5, lineW));
+                notesBlockMm += EstimateWrappedHeightMm(line, notePt, innerMaxMm, options);
+            }
+
+            metrics.HeightMm += notesBlockMm;
         }
 
         private static string FormatSpouse(PersonInfo p)

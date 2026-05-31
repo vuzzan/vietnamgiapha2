@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using vietnamgiapha;
 
 namespace vietnamgiapha.GiaPhaRender
@@ -91,24 +92,52 @@ namespace vietnamgiapha.GiaPhaRender
                 canvas.Children.Add(rect);
 
                 bool vertical = GiaPhaRenderOptions.IsVerticalCardLayout(_options.CardLayoutMode);
-                double bandLabelPt = vertical
-                    ? _options.VerticalGenerationLabelFontPt
-                    : _options.HeaderFontPt;
-                var label = new TextBlock
+                var custom = _options.GenLabelStyle;
+
+                double bandLabelPt = custom?.FontPt > 0
+                    ? custom.FontPt
+                    : (vertical ? _options.VerticalGenerationLabelFontPt : _options.HeaderFontPt);
+
+                string fontFamily = !string.IsNullOrWhiteSpace(custom?.FontFamily)
+                    ? custom.FontFamily
+                    : _options.FontFamilyName;
+
+                FontWeight fw = custom != null
+                    ? (custom.Bold ? FontWeights.Bold : FontWeights.Normal)
+                    : (vertical ? FontWeights.SemiBold : FontWeights.Normal);
+
+                FontStyle fs = custom?.Italic == true ? FontStyles.Italic : FontStyles.Normal;
+
+                Brush fg;
+                if (!string.IsNullOrWhiteSpace(custom?.ForegroundHex))
+                {
+                    try { fg = new SolidColorBrush((Color)ColorConverter.ConvertFromString(custom.ForegroundHex)); }
+                    catch { fg = new SolidColorBrush(Color.FromRgb(90, 90, 90)); }
+                }
+                else
+                {
+                    fg = vertical
+                        ? new SolidColorBrush(Color.FromRgb(25, 55, 120))
+                        : new SolidColorBrush(Color.FromRgb(90, 90, 90));
+                }
+
+                var labelLevelDoi = new TextBlock
                 {
                     Text = "Đời " + band.Level,
-                    FontFamily = new FontFamily(_options.FontFamilyName),
+                    FontFamily = new FontFamily(fontFamily),
                     FontSize = bandLabelPt * _dpi / 72.0,
-                    FontWeight = vertical ? FontWeights.SemiBold : FontWeights.Normal,
-                    Foreground = vertical
-                        ? new SolidColorBrush(Color.FromRgb(25, 55, 120))
-                        : new SolidColorBrush(Color.FromRgb(90, 90, 90)),
-                    IsHitTestVisible = false
+                    FontWeight = fw,
+                    FontStyle = fs,
+                    Foreground = fg,
+                    // IsHitTestVisible = true để nhận click chọn
+                    IsHitTestVisible = true,
+                    Cursor = System.Windows.Input.Cursors.Hand,
+                    Tag = new PhaDoGenLabelTag(band.Level)
                 };
-                Canvas.SetLeft(label, Mm(_options.MarginMm));
-                Canvas.SetTop(label, Mm(band.Ymm) + 2);
-                Panel.SetZIndex(label, 1);
-                canvas.Children.Add(label);
+                Canvas.SetLeft(labelLevelDoi, Mm(_options.MarginMm));
+                Canvas.SetTop(labelLevelDoi, Mm(band.Ymm) + 2);
+                Panel.SetZIndex(labelLevelDoi, 1);
+                canvas.Children.Add(labelLevelDoi);
             }
         }
 
@@ -119,6 +148,12 @@ namespace vietnamgiapha.GiaPhaRender
             var byFamily = _result.Nodes
                 .Where(n => n.Family != null)
                 .ToDictionary(n => n.Family, n => n);
+
+            if (_options.ConnectorPathType == GiaPhaConnectorPathType.Curved)
+            {
+                DrawCurvedConnectors(canvas, stroke, thickness, byFamily);
+                return;
+            }
 
             foreach (var parent in _result.Nodes.Where(n => n.Family != null))
             {
@@ -194,6 +229,48 @@ namespace vietnamgiapha.GiaPhaRender
             }
         }
 
+        /// <summary>Path type 2: dùng đường cong cha-con, bỏ bus/trunk kiểu cũ.</summary>
+        private void DrawCurvedConnectors(
+            Canvas canvas,
+            Brush stroke,
+            double thickness,
+            Dictionary<FamilyViewModel, GiaPhaPlacedNode> byFamily)
+        {
+            foreach (var parent in _result.Nodes.Where(n => n.Family != null))
+            {
+                var childNodes = parent.Family.Children
+                    .Where(byFamily.ContainsKey)
+                    .Select(c => byFamily[c])
+                    .ToList();
+                if (childNodes.Count == 0)
+                {
+                    continue;
+                }
+
+                int parentId = parent.Family.familyInfo?.FamilyId ?? 0;
+                double parentCx = parent.Xmm + parent.Metrics.WidthMm / 2.0;
+                double parentBottom = parent.Ymm + parent.Metrics.HeightMm;
+                foreach (var child in childNodes)
+                {
+                    int childId = child.Family?.familyInfo?.FamilyId ?? 0;
+                    double childCx = child.Xmm + child.Metrics.WidthMm / 2.0;
+                    double childTop = child.Ymm;
+                    AddConnectorCurve(
+                        canvas,
+                        parentCx, parentBottom,
+                        childCx, childTop,
+                        thickness,
+                        stroke,
+                        new GiaPhaCanvasConnectorTag
+                        {
+                            ParentFamilyId = parentId,
+                            ChildFamilyId = childId,
+                            LineKind = GiaPhaCanvasConnectorLineKind.CurvedBranch
+                        });
+                }
+            }
+        }
+
         private void DrawCards(Canvas canvas)
         {
             foreach (var placed in _result.Nodes)
@@ -226,6 +303,40 @@ namespace vietnamgiapha.GiaPhaRender
             };
             Panel.SetZIndex(line, 25);
             canvas.Children.Add(line);
+        }
+
+        private void AddConnectorCurve(
+            Canvas canvas,
+            double x1mm,
+            double y1mm,
+            double x2mm,
+            double y2mm,
+            double strokeThicknessPx,
+            Brush stroke,
+            object tag)
+        {
+            double x1 = Mm(x1mm);
+            double y1 = Mm(y1mm);
+            double x2 = Mm(x2mm);
+            double y2 = Mm(y2mm);
+            double midY = (y1 + y2) / 2.0;
+            var figure = new PathFigure { StartPoint = new Point(x1, y1), IsFilled = false, IsClosed = false };
+            figure.Segments.Add(new BezierSegment(
+                new Point(x1, midY),
+                new Point(x2, midY),
+                new Point(x2, y2),
+                true));
+            var path = new Path
+            {
+                Data = new PathGeometry(new[] { figure }),
+                Stroke = stroke,
+                StrokeThickness = strokeThicknessPx,
+                SnapsToDevicePixels = true,
+                IsHitTestVisible = false,
+                Tag = tag
+            };
+            Panel.SetZIndex(path, 25);
+            canvas.Children.Add(path);
         }
 
         private void DrawCard(Canvas canvas, GiaPhaPlacedNode placed)
@@ -293,6 +404,62 @@ namespace vietnamgiapha.GiaPhaRender
                     _options.SpouseFontPt, FontWeights.Normal, overflowTag);
                 personSlot++;
             }
+
+            DrawCardExtraNotes(canvas, placed, x, y, w, h, pad, ref lineY, personSlot);
+        }
+
+        /// <summary>Phần 4: ghi chú (phả con, kích thước cm…) — chữ nhỏ, màu xám.</summary>
+        private void DrawCardExtraNotes(
+            Canvas canvas,
+            GiaPhaPlacedNode placed,
+            double x,
+            double y,
+            double w,
+            double h,
+            double pad,
+            ref double lineY,
+            int personSlot)
+        {
+            var notes = placed.Metrics.ExtraNotes;
+            if (notes == null || notes.Count == 0)
+            {
+                return;
+            }
+
+            lineY += Mm(_options.CardNoteTopGapMm);
+            // double sepY = lineY - Mm(_options.CardNoteTopGapMm * 0.35);
+            // var sep = new System.Windows.Shapes.Line
+            // {
+            //     X1 = x + pad,
+            //     Y1 = sepY,
+            //     X2 = x + w - pad,
+            //     Y2 = sepY,
+            //     Stroke = new SolidColorBrush(Color.FromRgb(190, 198, 210)),
+            //     StrokeThickness = 0.8,
+            //     IsHitTestVisible = false
+            // };
+            // Panel.SetZIndex(sep, 12);
+            // canvas.Children.Add(sep);
+
+            double notePt = _options.NoteFontPt > 0 ? _options.NoteFontPt : 6.5;
+            var noteBrush = new SolidColorBrush(Color.FromRgb(90, 96, 108));
+            int noteSlot = 0;
+            foreach (var note in notes)
+            {
+                if (string.IsNullOrWhiteSpace(note))
+                {
+                    continue;
+                }
+
+                var noteTag = new PhaDoBoxVisualTag(
+                    placed.Family,
+                    PhaDoPersonTextRole.Spouse,
+                    PhaDoBoxElementKind.ExtraNote,
+                    personSlot + noteSlot);
+                lineY = AddLine(canvas, note.Trim(), x + pad, lineY, w - 2 * pad,
+                    notePt, FontWeights.Normal, noteTag, noteBrush);
+                noteSlot++;
+            }
         }
 
         private void DrawCardVertical(Canvas canvas, GiaPhaPlacedNode placed)
@@ -355,6 +522,61 @@ namespace vietnamgiapha.GiaPhaRender
 
                 colX += colW + Mm(GiaPhaVerticalCardLayout.ColumnGapMm);
             }
+
+            DrawCardExtraNotesVertical(canvas, placed, x, y, w, h, pad);
+        }
+
+        /// <summary>Ghi chú cuối thẻ dọc — chữ ngang nhỏ ở đáy ô.</summary>
+        private void DrawCardExtraNotesVertical(
+            Canvas canvas,
+            GiaPhaPlacedNode placed,
+            double x,
+            double y,
+            double w,
+            double h,
+            double pad)
+        {
+            var notes = placed.Metrics.ExtraNotes;
+            if (notes == null || notes.Count == 0)
+            {
+                return;
+            }
+
+            double notePt = _options.NoteFontPt > 0 ? _options.NoteFontPt : 6.5;
+            double innerMaxMm = Math.Max(8, placed.Metrics.WidthMm - _options.CardPaddingMm * 2);
+            double innerW = w - 2 * pad;
+            double noteBlockMm = _options.CardNoteTopGapMm;
+            foreach (var note in notes)
+            {
+                if (string.IsNullOrWhiteSpace(note))
+                {
+                    continue;
+                }
+
+                noteBlockMm += FamilyCardMetrics.EstimateWrappedLineHeightMm(
+                    note.Trim(), notePt, innerMaxMm, _options);
+            }
+
+            double lineY = y + Mm(placed.Metrics.HeightMm - _options.CardBottomPaddingMm - noteBlockMm
+                + _options.CardNoteTopGapMm);
+            int noteSlot = 0;
+            var noteBrush = new SolidColorBrush(Color.FromRgb(90, 96, 108));
+            foreach (var note in notes)
+            {
+                if (string.IsNullOrWhiteSpace(note))
+                {
+                    continue;
+                }
+
+                var noteTag = new PhaDoBoxVisualTag(
+                    placed.Family,
+                    PhaDoPersonTextRole.Spouse,
+                    PhaDoBoxElementKind.ExtraNote,
+                    PhaDoBoxVisualTag.MainPersonSlotIndex + 100 + noteSlot);
+                lineY = AddLine(canvas, note.Trim(), x + pad, lineY, innerW,
+                    notePt, FontWeights.Normal, noteTag, noteBrush);
+                noteSlot++;
+            }
         }
 
         /// <summary>Kiểu Word: trong một cột, mỗi từ là một dòng chữ ngang.</summary>
@@ -379,6 +601,8 @@ namespace vietnamgiapha.GiaPhaRender
             {
                 Orientation = Orientation.Vertical,
                 Width = columnWidthPx,
+                // Mở rộng vùng hit-test của cả cột để kéo/thả chữ dễ hơn.
+                Background = Brushes.Transparent,
                 Tag = tag
             };
 
@@ -393,7 +617,8 @@ namespace vietnamgiapha.GiaPhaRender
                     Foreground = foreground,
                     TextAlignment = TextAlignment.Center,
                     HorizontalAlignment = HorizontalAlignment.Center,
-                    Width = columnWidthPx
+                    Width = columnWidthPx,
+                    Background = Brushes.Transparent
                 };
                 column.Children.Add(tb);
             }
@@ -455,6 +680,7 @@ namespace vietnamgiapha.GiaPhaRender
                 FontWeight = weight,
                 Foreground = foreground,
                 TextAlignment = alignment,
+                Background = Brushes.Transparent,
                 Tag = tag
             };
             if (widthPx.HasValue)
@@ -492,6 +718,8 @@ namespace vietnamgiapha.GiaPhaRender
             {
                 Orientation = Orientation.Vertical,
                 Width = columnWidthPx,
+                // Cả cột bắt chuột được để chọn/kéo text dọc đỡ bị "trượt".
+                Background = Brushes.Transparent,
                 Tag = tag
             };
 
@@ -514,7 +742,8 @@ namespace vietnamgiapha.GiaPhaRender
                     HorizontalAlignment = HorizontalAlignment.Center,
                     LineHeight = linePx,
                     Height = linePx,
-                    Padding = new Thickness(0)
+                    Padding = new Thickness(0),
+                    Background = Brushes.Transparent
                 });
             }
 
@@ -528,16 +757,33 @@ namespace vietnamgiapha.GiaPhaRender
 
         private double AddLine(Canvas canvas, string text, double x, double y, double maxW, double fontPt, FontWeight weight, object tag)
         {
+            return AddLine(canvas, text, x, y, maxW, fontPt, weight, tag, Brushes.Black);
+        }
+
+        private double AddLine(
+            Canvas canvas,
+            string text,
+            double x,
+            double y,
+            double maxW,
+            double fontPt,
+            FontWeight weight,
+            object tag,
+            Brush foreground)
+        {
             var tb = new TextBlock
             {
                 Text = text,
                 FontFamily = new FontFamily(_options.FontFamilyName),
                 FontSize = fontPt * _dpi / 72.0,
                 FontWeight = weight,
-                Foreground = Brushes.Black,
+                Foreground = foreground ?? Brushes.Black,
+                // Dòng ngang dùng full bề rộng nội dung để vùng kéo/thả rộng, dễ thao tác hơn.
+                Width = maxW,
                 MaxWidth = maxW,
                 TextWrapping = TextWrapping.Wrap,
                 TextTrimming = TextTrimming.CharacterEllipsis,
+                Background = Brushes.Transparent,
                 Tag = tag
             };
             Canvas.SetLeft(tb, x);
@@ -555,7 +801,7 @@ namespace vietnamgiapha.GiaPhaRender
 
         private static string FormatMain(PersonInfo p)
         {
-            return "★ " + (p.MANS_NAME_HUY ?? "");
+            return p.MANS_NAME_HUY ?? "";
         }
 
         private static string FormatSpouse(PersonInfo p)

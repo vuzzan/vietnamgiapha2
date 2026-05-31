@@ -14,9 +14,12 @@ using vietnamgiapha.GiaPhaRender;
 
 namespace vietnamgiapha
 {
-    /// <summary>Quản lý kho SVG cloud + catalog local trong file gia phả.</summary>
+    /// <summary>Quản lý SVG zone (title_* / family_*) + kho cloud.</summary>
     public partial class SvgLibraryManagerWindow : MetroWindow
     {
+        private const string ZoneCatTitle = "title";
+        private const string ZoneCatFamily = "family";
+
         private enum PanelSelectionSource
         {
             None = 0,
@@ -26,6 +29,7 @@ namespace vietnamgiapha
 
         private readonly GiaphaInfo _giaPha;
         private readonly Func<bool> _saveGiaPhaFile;
+        private readonly Action _onZoneFilesChanged;
         private readonly ObservableCollection<SvgTreeNode> _treeRoots = new ObservableCollection<SvgTreeNode>();
         private readonly ObservableCollection<SvgLocalListItem> _localItems = new ObservableCollection<SvgLocalListItem>();
         private readonly DispatcherTimer _previewTimer;
@@ -36,16 +40,22 @@ namespace vietnamgiapha
         private PanelSelectionSource _panelSource = PanelSelectionSource.None;
         private int? _selectedCloudId;
         private SvgCloudItem _loadedCloudDetail;
+        private string _zoneSvgFolderPath;
+        private string _selectedZoneFilePath;
 
-        public SvgLibraryManagerWindow(GiaphaInfo giaPha, Func<bool> saveGiaPhaFile)
+        public SvgLibraryManagerWindow(GiaphaInfo giaPha, Func<bool> saveGiaPhaFile, Action onZoneFilesChanged = null)
         {
             _giaPha = giaPha;
             _saveGiaPhaFile = saveGiaPhaFile;
+            _onZoneFilesChanged = onZoneFilesChanged;
 
             InitializeComponent();
             DataContext = this;
             TreeRoots = _treeRoots;
             LocalItems = _localItems;
+
+            uploadCategoryCombo.ItemsSource = new[] { ZoneCatTitle, ZoneCatFamily };
+            uploadCategoryCombo.SelectedIndex = 0;
 
             _previewTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
             _previewTimer.Tick += PreviewTimer_Tick;
@@ -68,6 +78,7 @@ namespace vietnamgiapha
         {
             _selectedCloudId = null;
             _loadedCloudDetail = null;
+            _selectedZoneFilePath = null;
             _panelSource = PanelSelectionSource.None;
             _isEditMode = true;
             svgCodeBox.IsReadOnly = false;
@@ -86,8 +97,9 @@ namespace vietnamgiapha
                 _suppressCodePreview = false;
             }
 
-            detailStatusText.Text = "Tạo khung mới — dán/tải file → Upload cloud hoặc lưu local.";
-            SetStatus("Chế độ tạo mới.");
+            uploadCategoryCombo.SelectedIndex = 0;
+            detailStatusText.Text = "Tạo mới — dán/tải file → Lưu file SVG (thư mục zone) hoặc Upload cloud.";
+            SetStatus("Chế độ tạo mới. Thư mục: " + (_zoneSvgFolderPath ?? "?"));
             UpdatePreview();
         }
 
@@ -110,10 +122,13 @@ namespace vietnamgiapha
                 _isEditMode = true;
                 _suppressCodePreview = true;
                 svgCodeBox.Text = File.ReadAllText(dlg.FileName);
+                string stem = Path.GetFileNameWithoutExtension(dlg.FileName);
                 if (string.IsNullOrWhiteSpace(uploadNameBox.Text))
                 {
-                    uploadNameBox.Text = Path.GetFileNameWithoutExtension(dlg.FileName);
+                    uploadNameBox.Text = StripZonePrefixFromFileName(stem);
                 }
+
+                ApplyZoneCategoryFromFileName(stem);
             }
             catch (Exception ex)
             {
@@ -145,7 +160,7 @@ namespace vietnamgiapha
                 return;
             }
 
-            string category = uploadCategoryCombo?.Text?.Trim() ?? "Chung";
+            string category = GetSelectedZoneCategory();
             string name = uploadNameBox?.Text?.Trim() ?? "";
             string author = uploadAuthorBox?.Text?.Trim() ?? "";
 
@@ -221,6 +236,92 @@ namespace vietnamgiapha
             finally
             {
                 btnUpload.IsEnabled = true;
+            }
+        }
+
+        private void SaveToZoneFolder_Click(object sender, RoutedEventArgs e)
+        {
+            string raw = svgCodeBox?.Text?.Trim() ?? "";
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                MessageBox.Show("Chưa có nội dung SVG.", "Lưu file SVG");
+                return;
+            }
+
+            var sanitized = PhaDoBoxSvgSanitizer.Sanitize(raw);
+            if (!sanitized.Success)
+            {
+                MessageBox.Show(sanitized.Message ?? "SVG không hợp lệ.", "Lưu file SVG");
+                return;
+            }
+
+            string namePart = uploadNameBox?.Text?.Trim() ?? "";
+            if (string.IsNullOrWhiteSpace(namePart))
+            {
+                MessageBox.Show("Nhập tên file (phần sau title_ hoặc family_).", "Lưu file SVG");
+                uploadNameBox.Focus();
+                return;
+            }
+
+            string svgId;
+            try
+            {
+                svgId = BuildZoneSvgFileId(GetSelectedZoneCategory(), namePart);
+            }
+            catch (ArgumentException ex)
+            {
+                MessageBox.Show(ex.Message, "Lưu file SVG");
+                return;
+            }
+
+            string folder = PhaDoZoneSvgFolderLoader.ResolveFolderPath();
+            string targetPath = Path.Combine(folder, svgId + ".svg");
+            if (File.Exists(targetPath))
+            {
+                var ow = MessageBox.Show(
+                    "File đã tồn tại:\n" + targetPath + "\n\nGhi đè?",
+                    "Lưu file SVG",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (ow != MessageBoxResult.Yes)
+                {
+                    return;
+                }
+            }
+
+            btnSaveZone.IsEnabled = false;
+            try
+            {
+                string savedPath = PhaDoZoneSvgFolderLoader.SaveSvgToFolder(
+                    folder,
+                    svgId,
+                    sanitized.SanitizedSvgMarkup);
+
+                _zoneSvgFolderPath = folder;
+                _selectedZoneFilePath = savedPath;
+                _panelSource = PanelSelectionSource.Local;
+                _isEditMode = true;
+                svgCodeBox.IsReadOnly = false;
+
+                RefreshLocalList();
+                SelectLocalItemById(svgId);
+                _onZoneFilesChanged?.Invoke();
+
+                SetStatus("Đã lưu: " + savedPath);
+                MessageBox.Show(
+                    "Đã lưu file SVG:\n" + savedPath,
+                    "Lưu file SVG",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Không lưu được file:\n\n" + ex.Message, "Lỗi", MessageBoxButton.OK, MessageBoxImage.Error);
+                SetStatus("Lỗi lưu file zone.");
+            }
+            finally
+            {
+                btnSaveZone.IsEnabled = true;
             }
         }
 
@@ -352,7 +453,7 @@ namespace vietnamgiapha
                 try
                 {
                     svgCodeBox.Text = detail.SvgData ?? "";
-                    uploadCategoryCombo.Text = detail.Category ?? "";
+                    SelectZoneCategoryFromCloud(detail.Category);
                     uploadNameBox.Text = detail.Name ?? "";
                     uploadAuthorBox.Text = detail.Author ?? "";
                 }
@@ -390,7 +491,8 @@ namespace vietnamgiapha
             _panelSource = PanelSelectionSource.Local;
             _selectedCloudId = null;
             _loadedCloudDetail = null;
-            _isEditMode = false;
+            _selectedZoneFilePath = local.FilePath;
+            _isEditMode = true;
 
             _suppressPanelSelectionSync = true;
             try
@@ -403,20 +505,35 @@ namespace vietnamgiapha
             }
 
             string markup = local.Shape?.GetSvgMarkup() ?? "";
+            if (string.IsNullOrWhiteSpace(markup)
+                && !string.IsNullOrWhiteSpace(local.FilePath)
+                && File.Exists(local.FilePath))
+            {
+                try
+                {
+                    markup = File.ReadAllText(local.FilePath);
+                }
+                catch
+                {
+                    // Giữ markup rỗng nếu đọc file lỗi
+                }
+            }
+
             _suppressCodePreview = true;
             try
             {
                 svgCodeBox.Text = markup;
-                uploadNameBox.Text = local.SvgId ?? "";
+                ApplyZoneCategoryFromFileName(local.SvgId);
+                uploadNameBox.Text = StripZonePrefixFromFileName(local.SvgId);
             }
             finally
             {
                 _suppressCodePreview = false;
             }
 
-            svgCodeBox.IsReadOnly = true;
-            detailStatusText.Text = "Kho local: " + local.DisplayText;
-            SetStatus("Đang xem khung local \"" + local.SvgId + "\".");
+            svgCodeBox.IsReadOnly = false;
+            detailStatusText.Text = "File zone: " + (local.FilePath ?? local.DisplayText);
+            SetStatus("Đang sửa file zone \"" + local.SvgId + "\" — Lưu file SVG để ghi đè.");
             UpdatePreview();
         }
 
@@ -472,22 +589,26 @@ namespace vietnamgiapha
         private void RefreshLocalList()
         {
             _localItems.Clear();
-            if (_giaPha?.SvgShapesById == null || _giaPha.SvgShapesById.Count == 0)
-            {
-                return;
-            }
+            _zoneSvgFolderPath = PhaDoZoneSvgFolderLoader.ResolveFolderPath();
+            var loaded = PhaDoZoneSvgFolderLoader.Load(_zoneSvgFolderPath);
 
-            foreach (var kv in _giaPha.SvgShapesById.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
+            var entries = new List<PhaDoZoneSvgFileEntry>();
+            entries.AddRange(loaded.TitleEntries);
+            entries.AddRange(loaded.FamilyEntries);
+
+            foreach (var entry in entries.OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase))
             {
-                if (kv.Value == null || string.IsNullOrWhiteSpace(kv.Value.SvgBase64))
+                PhaDoSvgShape shape = null;
+                if (loaded.ShapesById != null)
                 {
-                    continue;
+                    loaded.ShapesById.TryGetValue(entry.Id, out shape);
                 }
 
                 _localItems.Add(new SvgLocalListItem
                 {
-                    SvgId = kv.Key,
-                    Shape = kv.Value
+                    SvgId = entry.Id,
+                    FilePath = entry.FilePath,
+                    Shape = shape
                 });
             }
         }
@@ -498,16 +619,13 @@ namespace vietnamgiapha
             SetStatus("Đang tải danh sách cloud...");
             try
             {
-                var listTask = SvgCloudApiService.ListAsync();
-                var catTask = SvgCloudApiService.ListCategoriesAsync();
-                await Task.WhenAll(listTask, catTask).ConfigureAwait(true);
-
-                var list = listTask.Result ?? new List<SvgCloudItem>();
-                var categories = catTask.Result ?? new List<string>();
+                var list = await SvgCloudApiService.ListAsync().ConfigureAwait(true)
+                    ?? new List<SvgCloudItem>();
 
                 BuildTree(list);
-                RefreshCategoryCombo(categories, list);
-                SetStatus("Cloud: " + list.Count + " khung | Local: " + _localItems.Count + " khung.");
+                SetStatus(
+                    "Cloud: " + list.Count + " khung | Zone: " + _localItems.Count + " file | "
+                    + (_zoneSvgFolderPath ?? PhaDoZoneSvgFolderLoader.ResolveFolderPath()));
             }
             catch (Exception ex)
             {
@@ -527,57 +645,146 @@ namespace vietnamgiapha
         private void BuildTree(List<SvgCloudItem> list)
         {
             _treeRoots.Clear();
-            var groups = list
-                .GroupBy(i => string.IsNullOrWhiteSpace(i.Category) ? "Chung" : i.Category.Trim())
-                .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
 
-            foreach (var g in groups)
+            var titleGroup = new SvgCategoryGroup { Category = ZoneCatTitle };
+            var familyGroup = new SvgCategoryGroup { Category = ZoneCatFamily };
+            var titleNode = new SvgTreeNode { IsCategory = true, Group = titleGroup };
+            var familyNode = new SvgTreeNode { IsCategory = true, Group = familyGroup };
+
+            foreach (var item in list.OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase))
             {
-                var group = new SvgCategoryGroup { Category = g.Key };
-                foreach (var item in g.OrderBy(i => i.Name, StringComparer.OrdinalIgnoreCase))
+                if (IsFamilyCategory(item.Category))
                 {
-                    group.Items.Add(item);
+                    familyGroup.Items.Add(item);
+                    familyNode.Children.Add(new SvgTreeNode { IsCategory = false, Item = item });
                 }
-
-                var catNode = new SvgTreeNode { IsCategory = true, Group = group };
-                foreach (var item in group.Items)
+                else
                 {
-                    catNode.Children.Add(new SvgTreeNode { IsCategory = false, Item = item });
+                    titleGroup.Items.Add(item);
+                    titleNode.Children.Add(new SvgTreeNode { IsCategory = false, Item = item });
                 }
+            }
 
-                _treeRoots.Add(catNode);
+            if (titleNode.Children.Count > 0)
+            {
+                _treeRoots.Add(titleNode);
+            }
+
+            if (familyNode.Children.Count > 0)
+            {
+                _treeRoots.Add(familyNode);
             }
         }
 
-        private void RefreshCategoryCombo(List<string> categories, List<SvgCloudItem> list)
+        private static string GetSelectedZoneCategoryFromCombo(System.Windows.Controls.ComboBox combo)
         {
-            var all = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (string c in categories)
+            if (combo?.SelectedItem is string s && !string.IsNullOrWhiteSpace(s))
             {
-                if (!string.IsNullOrWhiteSpace(c))
-                {
-                    all.Add(c.Trim());
-                }
+                return s.Trim();
             }
 
-            foreach (var item in list)
+            return ZoneCatTitle;
+        }
+
+        private string GetSelectedZoneCategory()
+        {
+            return GetSelectedZoneCategoryFromCombo(uploadCategoryCombo);
+        }
+
+        private void SelectZoneCategory(string category)
+        {
+            if (uploadCategoryCombo == null)
             {
-                if (!string.IsNullOrWhiteSpace(item.Category))
-                {
-                    all.Add(item.Category.Trim());
-                }
+                return;
             }
 
-            if (!all.Contains("Chung"))
+            string cat = IsFamilyCategory(category) ? ZoneCatFamily : ZoneCatTitle;
+            uploadCategoryCombo.SelectedItem = cat;
+        }
+
+        private void SelectZoneCategoryFromCloud(string category)
+        {
+            SelectZoneCategory(category);
+        }
+
+        private static bool IsFamilyCategory(string category)
+        {
+            if (string.IsNullOrWhiteSpace(category))
             {
-                all.Add("Chung");
+                return false;
             }
 
-            uploadCategoryCombo.ItemsSource = all.OrderBy(c => c, StringComparer.OrdinalIgnoreCase).ToList();
-            if (string.IsNullOrWhiteSpace(uploadCategoryCombo.Text))
+            string c = category.Trim();
+            if (c.Equals(ZoneCatFamily, StringComparison.OrdinalIgnoreCase))
             {
-                uploadCategoryCombo.Text = "Chung";
+                return true;
             }
+
+            return c.StartsWith(PhaDoZoneSvgFolderLoader.FamilyPrefix, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void ApplyZoneCategoryFromFileName(string fileNameWithoutExtension)
+        {
+            if (string.IsNullOrWhiteSpace(fileNameWithoutExtension))
+            {
+                return;
+            }
+
+            if (fileNameWithoutExtension.StartsWith(
+                    PhaDoZoneSvgFolderLoader.FamilyPrefix,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                SelectZoneCategory(ZoneCatFamily);
+            }
+            else if (fileNameWithoutExtension.StartsWith(
+                         PhaDoZoneSvgFolderLoader.TitlePrefix,
+                         StringComparison.OrdinalIgnoreCase))
+            {
+                SelectZoneCategory(ZoneCatTitle);
+            }
+        }
+
+        private static string StripZonePrefixFromFileName(string fileNameWithoutExtension)
+        {
+            if (string.IsNullOrWhiteSpace(fileNameWithoutExtension))
+            {
+                return "";
+            }
+
+            string stem = fileNameWithoutExtension.Trim();
+            if (stem.StartsWith(PhaDoZoneSvgFolderLoader.FamilyPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return stem.Substring(PhaDoZoneSvgFolderLoader.FamilyPrefix.Length);
+            }
+
+            if (stem.StartsWith(PhaDoZoneSvgFolderLoader.TitlePrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return stem.Substring(PhaDoZoneSvgFolderLoader.TitlePrefix.Length);
+            }
+
+            return stem;
+        }
+
+        private static string BuildZoneSvgFileId(string category, string namePart)
+        {
+            string stem = (namePart ?? "").Trim();
+            stem = StripZonePrefixFromFileName(stem);
+
+            foreach (char c in Path.GetInvalidFileNameChars())
+            {
+                stem = stem.Replace(c, '_');
+            }
+
+            if (string.IsNullOrWhiteSpace(stem))
+            {
+                throw new ArgumentException("Tên file không hợp lệ.");
+            }
+
+            string prefix = IsFamilyCategory(category)
+                ? PhaDoZoneSvgFolderLoader.FamilyPrefix
+                : PhaDoZoneSvgFolderLoader.TitlePrefix;
+
+            return prefix + stem;
         }
 
         private void SelectCloudItemById(int id)

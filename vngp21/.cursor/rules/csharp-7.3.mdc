@@ -1,0 +1,27 @@
+---
+description: Chỉ dùng C# 7.3 — không dùng cú pháp C# 8+
+alwaysApply: true
+---
+
+# C# 7.3
+
+Dự án **vngp21** (`LangVersion` = 7.3, .NET Framework 4.6.2). Khi sửa/thêm code C#:
+
+## Không dùng (C# 8 trở lên)
+
+- `is not Type x` → dùng `!(x is Type t)` hoặc `if (x is Type t) { ... } else return;`
+- `??=`, `switch` expression, `and`/`or` pattern
+- `using var`, `async using`
+- Nullable reference types (`string?`, `#nullable`)
+- `init`, `record`, `with` expression
+- Index/range (`^1`, `..`)
+- Target-typed `new()` (C# 9)
+- Top-level statements, file-scoped namespace
+
+## Được dùng (C# 7.x)
+
+- Pattern matching cơ bản: `if (x is Type t)`
+- `out var`, tuple, `async`/`await`, expression-bodied members
+- `nameof`, null-conditional `?.`
+
+Nếu compiler báo CS8370 hoặc “not available in C# 7.3”, đổi sang cú pháp tương đương C# 7.3 — **không** nâng `LangVersion`.

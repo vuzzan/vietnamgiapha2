@@ -9,6 +9,7 @@
     <RootNamespace>vngp21</RootNamespace>
     <AssemblyName>VietNamGiaPha2</AssemblyName>
     <TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>
+    <LangVersion>7.3</LangVersion>
     <FileAlignment>512</FileAlignment>
     <ProjectTypeGuids>{60dc8134-eba5-43b8-bcc9-bb4bc16c2548};{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}</ProjectTypeGuids>
     <WarningLevel>4</WarningLevel>
@@ -40,8 +41,12 @@
     <BootstrapperEnabled>true</BootstrapperEnabled>
     <BootstrapperComponentsUrl>D:\work\vngp29\vngp21\publish</BootstrapperComponentsUrl>
   </PropertyGroup>
+  <!-- Smith.WPF.HtmlEditor + Interop.MSHTML: COM 32-bit — app phải x86 -->
+  <PropertyGroup>
+    <SmithHtmlEditorOutput>$(MSBuildThisFileDirectory)..\SmithHtmlEditor\bin\$(Configuration)\net462\win-x86\</SmithHtmlEditorOutput>
+  </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
+    <PlatformTarget>x86</PlatformTarget>
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
@@ -49,17 +54,17 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <Prefer32Bit>true</Prefer32Bit>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
+    <PlatformTarget>x86</PlatformTarget>
     <DebugType>pdbonly</DebugType>
     <Optimize>false</Optimize>
     <OutputPath>bin\Release\</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <Prefer32Bit>true</Prefer32Bit>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup>
     <ApplicationIcon>ICO.ico</ApplicationIcon>
@@ -97,14 +102,17 @@
     <Message Text="Upload VersionInfo = $(VersionInfo)" Importance="high" />
     <Exec Command="curl -F &quot;version=$(VersionInfo)&quot; -F &quot;file=@$(OutDir)VietNamGiaPha2.zip&quot; http://download.vietnamgiapha.com/files/index.php" />
   </Target>
+  <Target Name="EnsureSmithHtmlEditorBuilt" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(SmithHtmlEditorOutput)Smith.WPF.HtmlEditor.dll')" Text="Thiếu Smith.WPF.HtmlEditor (x86). Build SmithHtmlEditor trước: ..\SmithHtmlEditor — hoặc chạy .\build.ps1" />
+  </Target>
   <ItemGroup>
     <Reference Include="Interop.MSHTML">
-      <HintPath>..\SmithHtmlEditor\bin\Debug\net462\win-x86\Interop.MSHTML.dll</HintPath>
+      <HintPath>$(SmithHtmlEditorOutput)Interop.MSHTML.dll</HintPath>
       <EmbedInteropTypes>False</EmbedInteropTypes>
     </Reference>
-    <Reference Include="Smith.WPF.HtmlEditor, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="Smith.WPF.HtmlEditor, Version=1.0.0.0, Culture=neutral, processorArchitecture=x86">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\SmithHtmlEditor\bin\Debug\net462\win-x86\Smith.WPF.HtmlEditor.dll</HintPath>
+      <HintPath>$(SmithHtmlEditorOutput)Smith.WPF.HtmlEditor.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.ComponentModel.DataAnnotations" />
@@ -148,12 +156,17 @@
     <Compile Include="GiaPhaRender\GiaPhaLayoutSettings.cs" />
     <Compile Include="GiaPhaRender\PhaDoBoxStyle.cs" />
     <Compile Include="GiaPhaRender\PhaDoResizeHandleTag.cs" />
+    <Compile Include="GiaPhaRender\PhaDoTitleResizeHandleTag.cs" />
+    <Compile Include="GiaPhaRender\PhaDoGenLabelTag.cs" />
+    <Compile Include="GiaPhaRender\PhaDoBoxZoneTag.cs" />
+    <Compile Include="GiaPhaRender\PhaDoTitleTextLineTag.cs" />
     <Compile Include="GiaPhaRender\PhaDoTitleStyle.cs" />
     <Compile Include="GiaPhaRender\PhaDoSvgFrameStyle.cs" />
     <Compile Include="GiaPhaRender\PhaDoSvgFrameListBuilder.cs" />
     <Compile Include="GiaPhaRender\GiaPhaTitleBlockRenderer.cs" />
     <Compile Include="GiaPhaRender\PhaDoTitleBlockMetrics.cs" />
     <Compile Include="GiaPhaRender\PhaDoBoxBackgroundTag.cs" />
+    <Compile Include="GiaPhaRender\PhaDoZoneSvgPreviewTag.cs" />
     <Compile Include="GiaPhaRender\PhaDoBoxSvgSanitizer.cs" />
     <Compile Include="GiaPhaRender\PhaDoBoxSvgWpfRenderer.cs" />
     <Compile Include="GiaPhaRender\PhaDoSvgShape.cs" />
@@ -161,6 +174,8 @@
     <Compile Include="GiaPhaRender\GiaPhaExcelExportService.cs" />
     <Compile Include="GiaPhaRender\GiaPhaRenderService.cs" />
     <Compile Include="GiaPhaRender\GiaPhaSvgExportService.cs" />
+    <Compile Include="GiaPhaRender\PhaDoSvgExportHelper.cs" />
+    <Compile Include="GiaPhaRender\PhaDoZoneSvgFolderLoader.cs" />
     <Compile Include="GiaPhaRender\PhaDoBoxSvgVectorExport.cs" />
     <Compile Include="GiaPhaRender\GiaPhaVerticalCardLayout.cs" />
     <Compile Include="GiaPhaRender\GiaPhaVerticalWordCardLayout.cs" />
@@ -175,6 +190,7 @@
     <Compile Include="Services\AppWorkspaceSession.cs" />
     <Compile Include="Services\AppWorkspaceSessionStore.cs" />
     <Compile Include="Services\GiaPhaLayoutSettingsStore.cs" />
+    <Compile Include="Services\GiaPhaUndoStack.cs" />
     <Compile Include="Services\SvgCloudApiService.cs" />
     <Compile Include="Services\SvgCloudDuplicateException.cs" />
     <Compile Include="Models\SvgCloudModels.cs" />
@@ -220,6 +236,13 @@
     </Page>
     <Compile Include="SettingsDialog.xaml.cs">
       <DependentUpon>SettingsDialog.xaml</DependentUpon>
+    </Compile>
+    <Page Include="HelpDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="HelpDialog.xaml.cs">
+      <DependentUpon>HelpDialog.xaml</DependentUpon>
     </Compile>
     <Page Include="PhaDoBoxStyleDialog.xaml">
       <Generator>MSBuild:Compile</Generator>
@@ -310,6 +333,31 @@
     <Content Include="view-static.min.js">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+    <Content Include="ZoneSvg\family_Frame180.svg">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>svgZone\family_Frame180.svg</TargetPath>
+    </Content>
+    <Content Include="ZoneSvg\family_showcard_border.svg">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>svgZone\family_showcard_border.svg</TargetPath>
+    </Content>
+    <Content Include="ZoneSvg\title_flowerpotscrollframe.svg">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>svgZone\title_flowerpotscrollframe.svg</TargetPath>
+    </Content>
+    <Content Include="ZoneSvg\title_FrameOld.svg">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>svgZone\title_FrameOld.svg</TargetPath>
+    </Content>
+    <Content Include="ZoneSvg\title_FrameSimple.svg">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>svgZone\title_FrameSimple.svg</TargetPath>
+    </Content>
+    <Content Include="ZoneSvg\title_Thick_ornate_curly.svg">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>svgZone\title_Thick_ornate_curly.svg</TargetPath>
+    </Content>
+    <!-- SVG zone → bin\...\svgZone\ (tên thư mục ưu tiên khi chạy app) -->
     <Resource Include="ICO.ico" />
     <Resource Include="autobuild\autoupdate.xml">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>

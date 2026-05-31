@@ -55,6 +55,7 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Lề trang" Style="{StaticResource SettingLabelStyle}"/>
                     <TextBox x:Name="marginCmBox" Grid.Row="0" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
@@ -75,6 +76,13 @@
                     <TextBlock Grid.Row="4" Grid.Column="0" Text="Độ dài bus ngang tối thiểu" Style="{StaticResource SettingLabelStyle}"/>
                     <TextBox x:Name="minBusSpanCmBox" Grid.Row="4" Grid.Column="1" Style="{StaticResource SettingBoxStyle}"/>
                     <TextBlock Grid.Row="4" Grid.Column="2" Text="cm" VerticalAlignment="Center" Margin="4,0,0,6"/>
+
+                    <TextBlock Grid.Row="5" Grid.Column="0" Text="Path type (đường cha-con)" Style="{StaticResource SettingLabelStyle}"/>
+                    <ComboBox x:Name="connectorPathTypeBox" Grid.Row="5" Grid.Column="1" Margin="0,0,0,6">
+                        <ComboBoxItem Content="Option 1 - Như hiện tại"/>
+                        <ComboBoxItem Content="Option 2 - Đường cong"/>
+                    </ComboBox>
+                    <TextBlock Grid.Row="5" Grid.Column="2" Text=""/>
                 </Grid>
 
                 <TextBlock Text="Ô gia đình — kiểu ngang (cm)" Style="{StaticResource SectionHeaderStyle}"/>

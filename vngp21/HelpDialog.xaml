@@ -1,0 +1,103 @@
+<mah:MetroWindow x:Class="vietnamgiapha.HelpDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mah="http://metro.mahapps.com/winfx/xaml/controls"
+        Title="Trợ giúp — Vietnam Gia Phả"
+        Height="640"
+        Width="620"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResizeWithGrip"
+        MinHeight="480"
+        MinWidth="520"
+        ShowInTaskbar="False">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Controls.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Fonts.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Themes/Light.Orange.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <Style x:Key="HelpSectionStyle" TargetType="TextBlock">
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="FontSize" Value="14"/>
+                <Setter Property="Margin" Value="0,16,0,8"/>
+                <Setter Property="Foreground" Value="#C45C00"/>
+            </Style>
+            <Style x:Key="HelpBodyStyle" TargetType="TextBlock">
+                <Setter Property="TextWrapping" Value="Wrap"/>
+                <Setter Property="Margin" Value="0,0,0,6"/>
+                <Setter Property="LineHeight" Value="20"/>
+            </Style>
+            <Style x:Key="HelpShortcutStyle" TargetType="TextBlock" BasedOn="{StaticResource HelpBodyStyle}">
+                <Setter Property="Margin" Value="12,0,0,4"/>
+                <Setter Property="FontFamily" Value="Segoe UI"/>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <TextBlock Style="{StaticResource HelpBodyStyle}" FontSize="13" Margin="0,0,0,8"
+                           Text="Ứng dụng quản lý cây gia phả (gia đình — người) và vẽ phả đồ. Làm việc chủ yếu ở cây bên trái và danh sách người của gia đình đang chọn."/>
+
+                <TextBlock Text="1. Tạo gia phả mới" Style="{StaticResource HelpSectionStyle}" Margin="0,8,0,8"/>
+                <TextBlock Style="{StaticResource HelpBodyStyle}"
+                           Text="• Menu File → Mới: lưu file hiện tại (nếu có) rồi tạo gia phả trống với một gia đình gốc (thủy tổ)."/>
+                <TextBlock Style="{StaticResource HelpBodyStyle}"
+                           Text="• Menu File → Mở File: mở file JSON gia phả đã lưu trước đó."/>
+                <TextBlock Style="{StaticResource HelpBodyStyle}"
+                           Text="• Trên cây gia phả: chọn gia đình gốc, dùng phím tắt (mục 3) hoặc chuột phải để thêm gia đình con, anh, em."/>
+                <TextBlock Style="{StaticResource HelpBodyStyle}"
+                           Text="• Chọn một gia đình trên cây → danh sách người bên dưới hiển thị thành viên → thêm người bằng Insert hoặc chuột phải (mục 4)."/>
+                <TextBlock Style="{StaticResource HelpBodyStyle}"
+                           Text="• File → Lưu / Lưu file khác: lưu dữ liệu JSON. Tab Phả đồ: vẽ và in phả đồ sau khi nhập liệu."/>
+
+                <TextBlock Text="2. Chỉnh sửa gia phả" Style="{StaticResource HelpSectionStyle}"/>
+                <TextBlock Style="{StaticResource HelpBodyStyle}"
+                           Text="• Chọn gia đình trên cây để xem và sửa danh sách người trong gia đình đó."/>
+                <TextBlock Style="{StaticResource HelpBodyStyle}"
+                           Text="• F2 (khi focus cây): đổi tên nhãn gia đình trên cây; Enter xác nhận, Esc hủy."/>
+                <TextBlock Style="{StaticResource HelpBodyStyle}"
+                           Text="• Double-click một dòng người: mở form chi tiết (họ tên, giới tính, đời, ghi chú…)."/>
+                <TextBlock Style="{StaticResource HelpBodyStyle}"
+                           Text="• Chuột phải trên cây: cắt / dán gia đình, chèn, xóa, kiểm tra nhánh (tương đương một số phím tắt)."/>
+                <TextBlock Style="{StaticResource HelpBodyStyle}"
+                           Text="• Kéo thả gia đình trên cây để đổi vị trí trong cây. Ctrl+Z: hoàn tác tối đa 2 bước sửa cây gần nhất."/>
+                <TextBlock Style="{StaticResource HelpBodyStyle}"
+                           Text="• Settings → Cài đặt phả đồ: khoảng cách, kích thước ô, cỡ chữ khi vẽ phả đồ."/>
+
+                <TextBlock Text="3. Phím tắt — gia đình (focus cây gia phả)" Style="{StaticResource HelpSectionStyle}"/>
+                <TextBlock Style="{StaticResource HelpBodyStyle}"
+                           Text="Chọn một gia đình trên cây, giữ phím Shift khi gõ (trừ khi ghi chú khác):"/>
+                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Shift + Insert — Chèn gia đình cha (phía trên gia đình đang chọn)"/>
+                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Shift + + (hoặc Numpad +) — Thêm gia đình con"/>
+                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Shift + E — Thêm gia đình em (xuống dưới anh em)"/>
+                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Shift + A — Thêm gia đình anh (lên trên anh em)"/>
+                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Shift + Delete — Xóa gia đình (theo quy tắc xóa nhánh)"/>
+                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Shift + ↑ / Shift + ↓ — Đổi thứ tự anh em"/>
+                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="F2 — Sửa tên gia đình trên cây"/>
+                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Ctrl + C — Copy nhánh gia đình"/>
+                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Ctrl + V — Dán nhánh đã copy làm con của gia đình đang chọn"/>
+
+                <TextBlock Text="4. Phím tắt — người (danh sách người trong gia đình)" Style="{StaticResource HelpSectionStyle}"/>
+                <TextBlock Style="{StaticResource HelpBodyStyle}"
+                           Text="Chọn gia đình trên cây, click vào danh sách người bên dưới (focus danh sách):"/>
+                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Insert — Thêm người mới vào gia đình đang chọn"/>
+                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Delete — Xóa người đang chọn (có hộp xác nhận)"/>
+                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Shift + ↑ / Shift + ↓ — Đổi thứ tự người trong ô (người chính / phối)"/>
+
+                <TextBlock Text="5. Phím tắt khác" Style="{StaticResource HelpSectionStyle}"/>
+                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Ctrl + Z — Hoàn tác sửa cây"/>
+                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="F11 — Toàn màn hình vùng cây hoặc phả đồ (tùy tab đang mở)"/>
+                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Esc — Thoát chế độ toàn màn hình / bỏ chọn trên phả đồ"/>
+            </StackPanel>
+        </ScrollViewer>
+        <Button Grid.Row="1" Content="Đóng" Width="88" Margin="0,12,0,0"
+                HorizontalAlignment="Right" IsDefault="True" IsCancel="True"
+                Style="{StaticResource MahApps.Styles.Button.Square.Accent}"/>
+    </Grid>
+</mah:MetroWindow>

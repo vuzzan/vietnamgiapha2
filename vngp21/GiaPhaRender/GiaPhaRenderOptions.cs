@@ -2,6 +2,13 @@ using System;
 
 namespace vietnamgiapha.GiaPhaRender
 {
+    /// <summary>Kiểu đường liên kết giữa gia đình cha và con.</summary>
+    public enum GiaPhaConnectorPathType
+    {
+        Orthogonal = 0,
+        Curved = 1
+    }
+
     /// <summary>Kiểu bố cục ô một gia đình.</summary>
     public enum GiaPhaCardLayoutMode
     {
@@ -46,6 +53,7 @@ namespace vietnamgiapha.GiaPhaRender
 
         /// <summary>Ngang (rộng) hoặc Dọc (hẹp, tiết kiệm width).</summary>
         public GiaPhaCardLayoutMode CardLayoutMode { get; set; } = GiaPhaCardLayoutMode.Horizontal;
+        public GiaPhaConnectorPathType ConnectorPathType { get; set; } = GiaPhaConnectorPathType.Orthogonal;
 
         public double CardMinWidthMm { get; set; } = 26.0;
         public double CardMaxWidthMm { get; set; } = 72.0;
@@ -68,14 +76,43 @@ namespace vietnamgiapha.GiaPhaRender
         /// <summary>Dòng 2 khối tiêu đề (ở tại / OTAI).</summary>
         public string TitleLine2 { get; set; } = "";
 
+        /// <summary>Dòng 3 — tự động: số gia đình + số người (vd "120 gia đình · 380 người").</summary>
+        public string TitleLine3 { get; set; } = "";
+
+        /// <summary>Dòng 4 — tự động: kích thước phả (vd "245.6 cm × 112.3 cm").</summary>
+        public string TitleLine4 { get; set; } = "";
+
+        /// <summary>Override chiều rộng khối tiêu đề (mm) — 0 = tự tính theo chữ.</summary>
+        public double ManualTitleWidthMm { get; set; } = 0;
+        /// <summary>Override chiều cao khối tiêu đề (mm) — 0 = tự tính theo dòng.</summary>
+        public double ManualTitleHeightMm { get; set; } = 0;
+        /// <summary>Override vị trí trái (mm) — chỉ dùng khi ManualTitlePositionSet.</summary>
+        public double ManualTitleLeftMm { get; set; } = 0;
+        /// <summary>Override vị trí trên (mm) — chỉ dùng khi ManualTitlePositionSet.</summary>
+        public double ManualTitleTopMm { get; set; } = 0;
+        /// <summary>Đã kéo/resize vị trí title — cho phép sát mép trái (Left = 0).</summary>
+        public bool ManualTitlePositionSet { get; set; }
+
+        // ── 4 vùng SVG trang trí quanh khối tiêu đề ─────────────────────
+        public string TitleTopSvg    { get; set; } public double TitleTopSvgViewBoxW    { get; set; } = 100; public double TitleTopSvgViewBoxH    { get; set; } = 100; public double TitleTopSvgSizeMm    { get; set; } = 8;
+        public string TitleBottomSvg { get; set; } public double TitleBottomSvgViewBoxW { get; set; } = 100; public double TitleBottomSvgViewBoxH { get; set; } = 100; public double TitleBottomSvgSizeMm { get; set; } = 8;
+        public string TitleLeftSvg   { get; set; } public double TitleLeftSvgViewBoxW   { get; set; } = 100; public double TitleLeftSvgViewBoxH   { get; set; } = 100; public double TitleLeftSvgSizeMm   { get; set; } = 8;
+        public string TitleRightSvg  { get; set; } public double TitleRightSvgViewBoxW  { get; set; } = 100; public double TitleRightSvgViewBoxH  { get; set; } = 100; public double TitleRightSvgSizeMm  { get; set; } = 8;
+
         public string FontFamilyName { get; set; } = "Segoe UI";
 
-        public double TitleFontPt { get; set; } = 18;
-        public double TitleLine2FontPt { get; set; } = 12;
+        public double TitleFontPt { get; set; } = 18;          // dòng 1
+        public double TitleLine2FontPt { get; set; } = 12;      // dòng 2
+        public double TitleLine3FontPt { get; set; } = 0;        // 0 = tự tính ~ 0.78*Line2
+        public double TitleLine4FontPt { get; set; } = 0;
         public string TitleLine1FontFamily { get; set; }
         public string TitleLine2FontFamily { get; set; }
+        public string TitleLine3FontFamily { get; set; }
+        public string TitleLine4FontFamily { get; set; }
         public string TitleLine1ForegroundHex { get; set; }
         public string TitleLine2ForegroundHex { get; set; }
+        public string TitleLine3ForegroundHex { get; set; }     // null = "#888888"
+        public string TitleLine4ForegroundHex { get; set; }
         public string TitleFillColorHex { get; set; }
         public string TitleShapeSvgId { get; set; }
         public string TitleCustomShapeSvg { get; set; }
@@ -84,8 +121,17 @@ namespace vietnamgiapha.GiaPhaRender
         public double HeaderFontPt { get; set; } = 7;
         /// <summary>Nhãn "Đời X" trên thẻ dọc — lớn hơn HeaderFontPt để dễ đọc.</summary>
         public double VerticalGenerationLabelFontPt { get; set; } = 10;
+        /// <summary>Style tùy chỉnh nhãn "Đời X" — null = dùng mặc định theo layout mode.</summary>
+        public PhaDoGenLabelStyle GenLabelStyle { get; set; }
         public double MainNameFontPt { get; set; } = 9;
         public double SpouseFontPt { get; set; } = 7.5;
+        /// <summary>Ghi chú trong ô (phả con, kích thước cm…).</summary>
+        public double NoteFontPt { get; set; } = 6.5;
+        /// <summary>Khoảng trống trước khối ghi chú (mm).</summary>
+        public double CardNoteTopGapMm { get; set; } = 1.5;
+
+        /// <summary>Ghi chú theo FamilyId — null nếu không có.</summary>
+        public System.Func<int, System.Collections.Generic.IReadOnlyList<string>> GetFamilyBoxNotes { get; set; }
 
         public double ContentWidthMm => PageWidthMm - 2 * MarginMm;
         public double ContentHeightMm => PageHeightMm - 2 * MarginMm;

@@ -14,7 +14,8 @@ namespace vietnamgiapha.GiaPhaRender
     {
         Trunk,
         Bus,
-        Branch
+        Branch,
+        CurvedBranch
     }
 
     public sealed class GiaPhaCanvasConnectorTag

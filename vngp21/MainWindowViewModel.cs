@@ -195,6 +195,7 @@ namespace vietnamgiapha
             SaveFileCommandFunc();
             log.Info("OpenNewFileCommandFunc: Mở file mới... ");
             FamilyTree = new GiaPhaViewModel(new GiaphaInfo());
+            AfterFamilyTreeReplaced(clearUndoStack: true);
             _mainWindow.InvalidatePersonGridCache();
             _mainWindow.ResetPhaDoWorkspaceState();
             this.OnPropertyChanged("FamilyTree");
@@ -272,6 +273,7 @@ namespace vietnamgiapha
             try
             {
                 FamilyTree = new GiaPhaViewModel(gp);
+                AfterFamilyTreeReplaced(clearUndoStack: true);
                 _mainWindow.UpdateHtmlGiaPha();
                 _mainWindow.InvalidatePersonGridCache();
                 if (!_mainWindow.IsRestoringWorkspace)
@@ -295,13 +297,38 @@ namespace vietnamgiapha
             }
         }
 
-        public Task UpdateGiaPhaAsync(GiaphaInfo gp, bool saveToJson = true)
+        private void AfterFamilyTreeReplaced(bool clearUndoStack)
+        {
+            _mainWindow.BindGiaPhaUndoCapture(FamilyTree);
+            if (clearUndoStack && !_mainWindow.IsGiaPhaUndoRestoring())
+            {
+                _mainWindow.ClearGiaPhaUndoStack();
+            }
+        }
+
+        public async Task UpdateGiaPhaAsync(GiaphaInfo gp, bool saveToJson = true)
         {
             Interlocked.Exchange(ref _isLoadingGiaPha, 1);
             try
             {
-                // FamilyViewModel/Node có tạo WPF element => phải chạy trên STA/UI thread.
+                var dispatcher = System.Windows.Application.Current?.Dispatcher;
+                if (dispatcher == null)
+                {
+                    return;
+                }
+
+                // Nhả reference cây cũ trước khi dựng cây mới (file lớn).
+                FamilyTree = null;
+                OnPropertyChanged(nameof(FamilyTree));
+                await dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+
+                // FamilyViewModel phải trên STA; Node WPF tạo lười khi cần đồ thị.
                 FamilyTree = new GiaPhaViewModel(gp);
+                await dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+
+                AfterFamilyTreeReplaced(clearUndoStack: true);
+                await dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+
                 _mainWindow.UpdateHtmlGiaPha();
                 _mainWindow.InvalidatePersonGridCache();
                 if (!_mainWindow.IsRestoringWorkspace)
@@ -310,18 +337,19 @@ namespace vietnamgiapha
                 }
 
                 _mainWindow.SyncPhaDoBoxStylesFromGiaPhaFile();
+                OnPropertyChanged(nameof(FamilyTree));
+
+                await dispatcher.InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Background);
+                _mainWindow.ScheduleExpandGiaPhaTreeView();
+
                 // Khi vừa load file lớn, tránh ghi lại JSON ngay để không chặn STA/UI thread quá lâu.
                 if (saveToJson)
                 {
                     SaveFileCommandFunc();
                 }
-                this.OnPropertyChanged("FamilyTree");
-                _mainWindow.ScheduleExpandGiaPhaTreeView();
-                return Task.CompletedTask;
             }
             finally
             {
-                // Auto-save chỉ được chạy lại khi load cây đã xong.
                 Interlocked.Exchange(ref _isLoadingGiaPha, 0);
             }
         }
@@ -333,6 +361,7 @@ namespace vietnamgiapha
             try
             {
                 FamilyTree = new GiaPhaViewModel(gp);
+                AfterFamilyTreeReplaced(clearUndoStack: true);
                 _mainWindow.UpdateHtmlGiaPha();
                 _mainWindow.InvalidatePersonGridCache();
                 _mainWindow.SyncPhaDoBoxStylesFromGiaPhaFile();
@@ -352,6 +381,7 @@ namespace vietnamgiapha
             {
                 // Khôi phục session cũng phải dựng cây trên UI thread (STA).
                 FamilyTree = new GiaPhaViewModel(gp);
+                AfterFamilyTreeReplaced(clearUndoStack: true);
                 _mainWindow.UpdateHtmlGiaPha();
                 _mainWindow.InvalidatePersonGridCache();
                 _mainWindow.SyncPhaDoBoxStylesFromGiaPhaFile();
@@ -409,6 +439,7 @@ namespace vietnamgiapha
             log.Info("Folder: " + defaultSaveFolder);
             log.Info("File : " + defaultSaveName);
             FamilyTree = new GiaPhaViewModel(new GiaphaInfo());
+            AfterFamilyTreeReplaced(clearUndoStack: true);
             myTimer = new System.Threading.Timer(timer_Elapsed, null, 0, Timeout.Infinite);
             _graphData = new GraphData();
             _ItemsLog.Add("Start App");

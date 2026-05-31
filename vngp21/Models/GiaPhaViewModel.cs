@@ -20,6 +20,12 @@ namespace vietnamgiapha
             get { return _familyCut; }
             set { _familyCut = value; }
         }
+
+        /// <summary>Nhánh đã copy (Ctrl+C) — bản sao FamilyInfo tách khỏi cây.</summary>
+        public FamilyInfo FamilyCopyBranch { get; set; }
+
+        /// <summary>Node gốc lúc copy — để không dán vào chính nhánh đó.</summary>
+        public FamilyViewModel FamilyCopySource { get; set; }
         
         private ObservableCollection<string> _listStringUserAction;
         public ObservableCollection<string> listStringUserAction
@@ -37,6 +43,14 @@ namespace vietnamgiapha
         {
             listStringUserAction.Add(action);
             this.OnPropertyChanged("listStringUserAction");
+        }
+
+        /// <summary>Gọi từ MainWindow trước thao tác sửa cây — lưu snapshot hoàn tác.</summary>
+        public Action<string> RequestUndoSnapshot;
+
+        public void CaptureUndoSnapshot(string label)
+        {
+            RequestUndoSnapshot?.Invoke(label);
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -226,7 +240,15 @@ namespace vietnamgiapha
             GP = gp;
             _family = new FamilyTreeViewModel(gp.familyRoot, this);
             _GiaphaWebHtml = "";
-            _family.ExpandAll();
+            // Không ExpandAll ở đây — file lớn sẽ materialize toàn bộ TreeView và khóa STA.
+        }
+
+        /// <summary>Đồng bộ tên gia phả trên form/tab sau khi sửa thủy tổ.</summary>
+        public void SyncGiaphaNameFromRootThuyTo()
+        {
+            GP?.SyncGiaphaNameFromRootThuyTo();
+            OnPropertyChanged(nameof(GiaphaName));
+            OnPropertyChanged(nameof(GiaphaNameRoot));
         }
 
         public virtual void OnPropertyChanged(string propertyName)

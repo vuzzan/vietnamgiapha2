@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 //using BusinessLib;
@@ -57,6 +58,17 @@ namespace vietnamgiapha
             RootPerson?.ExpandAllDescendants();
         }
 
+        /// <summary>Chỉ mở nút gốc — dùng khi cây quá lớn.</summary>
+        public void ExpandRootOnly()
+        {
+            if (RootPerson == null)
+            {
+                return;
+            }
+
+            RootPerson.IsExpanded = true;
+        }
+
         public string ToJson()
         {
             return RootPerson.ToJson();
@@ -106,14 +118,61 @@ namespace vietnamgiapha
             set
             {
                 _selectedFamily = value;
-                _selectedListPerson = _selectedFamily.ListPerson;
-                if (_selectedListPerson.Count > 0)
+                this.OnPropertyChanged("SelectedFamily");
+                if (value == null)
                 {
-                    _selectedPerson = _selectedListPerson[0];
+                    return;
+                }
+
+                _selectedListPerson = value.ListPerson;
+                var main = PickPersonForGiaDinhDetail(value);
+                if (main != null)
+                {
+                    _selectedPerson = main;
                     this.OnPropertyChanged("SelectedPerson");
                 }
-                this.OnPropertyChanged("SelectedFamily");
             }
+        }
+
+        /// <summary>Họ ông thủy tổ = từ đầu tiên của tên người chính ở gốc cây.</summary>
+        public string GetThuyToClanSurname()
+        {
+            if (RootPerson?.ListPerson != null && RootPerson.ListPerson.Count > 0)
+            {
+                var main = RootPerson.ListPerson.FirstOrDefault(p => p.IsMainPerson == 1)
+                    ?? RootPerson.ListPerson[0];
+                string ho = Util.GetFirstWord(main?.MANS_NAME_HUY ?? "");
+                if (!string.IsNullOrWhiteSpace(ho))
+                {
+                    return ho;
+                }
+            }
+
+            return _objFamilyTree?.GP?.GiaphaNameRoot?.Trim() ?? "";
+        }
+
+        /// <summary>Đồng bộ tab 2.Gia Đình sau sửa tên trên cây.</summary>
+        public void SyncGiaDinhTabForFamily(FamilyViewModel family)
+        {
+            if (family == null)
+            {
+                return;
+            }
+
+            family.OnPropertyChanged(nameof(FamilyViewModel.ListPerson));
+            family.OnPropertyChanged(nameof(FamilyViewModel.Name));
+            SelectedFamily = family;
+            family.IsSelected = true;
+        }
+
+        private static PersonInfo PickPersonForGiaDinhDetail(FamilyViewModel family)
+        {
+            if (family?.ListPerson == null || family.ListPerson.Count == 0)
+            {
+                return null;
+            }
+
+            return family.ListPerson.FirstOrDefault(p => p.IsMainPerson == 1) ?? family.ListPerson[0];
         }
 
         public PersonInfo SelectedPerson
@@ -140,13 +199,7 @@ namespace vietnamgiapha
                 parent.IsExpanded = true;
             }
 
-            SelectedFamily = family;
-            family.IsSelected = true;
-
-            if (family.ListPerson != null && family.ListPerson.Count > 0)
-            {
-                SelectedPerson = family.ListPerson[0];
-            }
+            SyncGiaDinhTabForFamily(family);
         }
 
         #region FirstGeneration

@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:mah="http://metro.mahapps.com/winfx/xaml/controls"
         xmlns:local="clr-namespace:vietnamgiapha"
-        Title="Quản lý kho SVG (cloud + local)"
+        Title="Quản lý SVG zone (title / family)"
         Height="720"
         Width="980"
         MinHeight="520"
@@ -36,13 +36,15 @@
             <Separator Margin="8 0"/>
             <Button x:Name="btnNew" Content="Tạo mới" Width="72" Margin="4 0 0 0" Click="New_Click"/>
             <Button x:Name="btnLoadFile" Content="Tải file .svg" Width="95" Margin="4 0 0 0" Click="LoadFile_Click"/>
-            <Button x:Name="btnUpload" Content="Upload lên cloud" Width="110" Margin="4 0 0 0" Click="Upload_Click"
-                    Style="{StaticResource MahApps.Styles.Button.Square.Accent}"/>
+            <Button x:Name="btnSaveZone" Content="Lưu file SVG" Width="100" Margin="4 0 0 0" Click="SaveToZoneFolder_Click"
+                    Style="{StaticResource MahApps.Styles.Button.Square.Accent}"
+                    ToolTip="Lưu vào thư mục svgZone / ZoneSvg (title_*.svg hoặc family_*.svg)"/>
+            <Button x:Name="btnUpload" Content="Upload cloud" Width="95" Margin="4 0 0 0" Click="Upload_Click"/>
             <Separator Margin="8 0"/>
-            <TextBlock Text="Category:" VerticalAlignment="Center" Margin="4 0 4 0"/>
-            <ComboBox x:Name="uploadCategoryCombo" Width="120" IsEditable="True" mah:TextBoxHelper.Watermark="Chung"/>
-            <TextBlock Text="Tên:" VerticalAlignment="Center" Margin="8 0 4 0"/>
-            <TextBox x:Name="uploadNameBox" Width="120" mah:TextBoxHelper.Watermark="Tên khung"/>
+            <TextBlock Text="Loại:" VerticalAlignment="Center" Margin="4 0 4 0"/>
+            <ComboBox x:Name="uploadCategoryCombo" Width="100" IsEditable="False"/>
+            <TextBlock Text="Tên file:" VerticalAlignment="Center" Margin="8 0 4 0"/>
+            <TextBox x:Name="uploadNameBox" Width="140" mah:TextBoxHelper.Watermark="phần sau title_ / family_"/>
             <TextBlock Text="Tác giả:" VerticalAlignment="Center" Margin="8 0 4 0"/>
             <TextBox x:Name="uploadAuthorBox" Width="90" mah:TextBoxHelper.Watermark="Tác giả"/>
         </ToolBar>
@@ -63,7 +65,7 @@
                     </Grid.RowDefinitions>
 
                     <DockPanel Grid.Row="0">
-                        <TextBlock DockPanel.Dock="Top" Text="Kho cloud (category)" FontWeight="SemiBold" Margin="0 0 0 4"/>
+                        <TextBlock DockPanel.Dock="Top" Text="Kho cloud (title / family)" FontWeight="SemiBold" Margin="0 0 0 4"/>
                         <TreeView x:Name="svgTree"
                                   ItemsSource="{Binding TreeRoots}"
                                   SelectedItemChanged="SvgTree_SelectedItemChanged"/>
@@ -73,9 +75,9 @@
 
                     <DockPanel Grid.Row="2">
                         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0 0 0 4">
-                            <TextBlock Text="Kho local (file gia phả)" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                            <TextBlock Text="Thư mục zone (SVG)" FontWeight="SemiBold" VerticalAlignment="Center"/>
                             <Button Content="↻" Width="28" Height="22" Margin="6 0 0 0" Click="RefreshLocal_Click"
-                                    ToolTip="Tải lại danh sách local"/>
+                                    ToolTip="Tải lại file title_* / family_* trong thư mục SVG"/>
                         </StackPanel>
                         <ListBox x:Name="localSvgList"
                                  DisplayMemberPath="DisplayText"

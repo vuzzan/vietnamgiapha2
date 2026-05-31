@@ -21,11 +21,18 @@ namespace vietnamgiapha
         private static readonly log4net.ILog log = log4net.LogManager.GetLogger("m0");
         #region for Graph
         private Node _node;
+
+        /// <summary>Node đồ thị — tạo lười để load file lớn không dựng hàng nghìn TextBlock WPF.</summary>
         public Node Node
         {
             get
             {
-                
+                if (_node == null)
+                {
+                    _node = new Node(this, _familyInfo.X, _familyInfo.Y);
+                    _node.UpdateNodeSize += _node_UpdateNodeSize;
+                }
+
                 return _node;
             }
         }
@@ -38,6 +45,8 @@ namespace vietnamgiapha
 
         bool _isExpanded;
         bool _isSelected;
+        private static FamilyViewModel _treeLabelEditingFamily;
+        private string _treeEditText = "";
 
         private GiaPhaViewModel _objFamilyTree;
         //private FamilyInfo rootPerson;
@@ -55,8 +64,6 @@ namespace vietnamgiapha
                     (from child in _familyInfo.FamilyChildren
                      select new FamilyViewModel(child, this, _objFamilyTree))
                      .ToList<FamilyViewModel>());
-            _node = new Node(this, _familyInfo.X, _familyInfo.Y);
-            _node.UpdateNodeSize += _node_UpdateNodeSize;
             // MENU FUNCTION
             CheckFamilyClick = new RelayCommand(CheckFamilyClickFunc);
             DebugFamilyClick = new RelayCommand(DebugFamilyClickFunc);
@@ -368,13 +375,317 @@ namespace vietnamgiapha
                 text, "Chi tiết gia đình: " + this.Name0
                 );
         }
+        private void CaptureUndoBefore(string label)
+        {
+            _objFamilyTree?.CaptureUndoSnapshot(label);
+        }
+
+        /// <summary>Ctrl+C — copy nguyên nhánh (không xóa trên cây).</summary>
+        public void CopyBranchToClipboard()
+        {
+            _objFamilyTree.FamilyCopyBranch = FamilyBranchCloneHelper.CloneFamilyBranch(_familyInfo);
+            _objFamilyTree.FamilyCopySource = this;
+            _objFamilyTree.FamilyCut = null;
+            AddUserAction("Copy nhánh: " + Name0);
+        }
+
+        /// <summary>Ctrl+V — dán nhánh đã copy làm con của gia đình đang chọn.</summary>
+        public FamilyViewModel PasteCopiedBranchAsChild()
+        {
+            var copy = _objFamilyTree?.FamilyCopyBranch;
+            if (copy == null)
+            {
+                MessageBox.Show("Chưa copy nhánh nào (Ctrl+C trên cây).", "Dán nhánh");
+                return null;
+            }
+
+            var source = _objFamilyTree.FamilyCopySource;
+            if (source != null
+                && (ReferenceEquals(this, source) || IsDescendantOf(source)))
+            {
+                MessageBox.Show("Không thể dán nhánh vào chính nó hoặc vào con cháu của nhánh gốc đã copy.", "Dán nhánh");
+                return null;
+            }
+
+            CaptureUndoBefore("Dán nhánh (copy)");
+            var cloned = FamilyBranchCloneHelper.CloneFamilyBranch(copy);
+            int nextId = _objFamilyTree.Family.GetMaxFamilyId() + 1;
+            FamilyBranchCloneHelper.RemapFamilyIds(cloned, ref nextId);
+
+            cloned.FamilyUp = _familyInfo.FamilyId;
+            int levelDelta = _familyInfo.FamilyLevel + 1 - cloned.FamilyLevel;
+            var added = InsertChildFamilyAt(0, cloned);
+            UpdateLevel(added, levelDelta);
+            IsExpanded = true;
+            AddUserAction("Dán nhánh copy vào con của " + Name0 + " ← " + added.Name0);
+            _objFamilyTree?.OnPropertyChanged("GP");
+            return added;
+        }
+
+        public bool RemoveChildFully(FamilyViewModel child)
+        {
+            if (child == null)
+            {
+                return false;
+            }
+
+            int i = _familyListChildren.IndexOf(child);
+            if (i < 0)
+            {
+                return false;
+            }
+
+            _familyListChildren.RemoveAt(i);
+            _familyInfo.FamilyChildren.RemoveAt(i);
+            // Gỡ liên kết cha — caller phải lưu Parent trước khi gọi nếu còn dùng node con
+            child._familyParent = null;
+            MakeOrderChild();
+            return true;
+        }
+
+        /// <summary>Shift+Insert — chèn GD mới, GD hiện tại thành con.</summary>
+        public FamilyViewModel InsertParentFamilyFromTree()
+        {
+            CaptureUndoBefore("Chèn gia đình cha");
+            var newInsertFamily = new FamilyInfo
+            {
+                FamilyId = _objFamilyTree.Family.GetMaxFamilyId() + 1,
+                FamilyLevel = _familyInfo.FamilyLevel,
+                FamilyUp = _familyInfo.FamilyUp,
+                FamilyOrder = _familyInfo.FamilyOrder,
+                ListPerson = new ObservableCollection<PersonInfo>(),
+                FamilyChildren = new ObservableCollection<FamilyInfo>()
+            };
+            newInsertFamily.ListPerson.Add(new PersonInfo("Cha" + Name0, newInsertFamily));
+
+            FamilyViewModel insert;
+            var parent = Parent;
+            if (parent != null)
+            {
+                int index = parent.Children.IndexOf(this);
+                parent.RemoveChildFully(this);
+                newInsertFamily.FamilyChildren.Add(_familyInfo);
+                _familyInfo.FamilyUp = newInsertFamily.FamilyId;
+                insert = parent.InsertChildFamilyAt(index, newInsertFamily);
+                foreach (var child in insert.Children)
+                {
+                    if (ReferenceEquals(child._familyInfo, _familyInfo))
+                    {
+                        UpdateLevel(child, 1);
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                newInsertFamily.FamilyChildren.Add(_familyInfo);
+                _familyInfo.FamilyUp = newInsertFamily.FamilyId;
+                insert = new FamilyViewModel(newInsertFamily, null, _objFamilyTree);
+                _objFamilyTree.Family.UpdateRootPerson(insert);
+                if (insert.Children.Count > 0)
+                {
+                    UpdateLevel(insert.Children[0], 1);
+                }
+            }
+
+            insert.IsExpanded = true;
+            insert.IsSelected = true;
+            AddUserAction("Chèn gia đình cha trước " + Name0);
+            _objFamilyTree?.OnPropertyChanged("GP");
+            return insert;
+        }
+
+        /// <summary>Xóa GD, đưa đúng 1 con lên thay (không hỏi lại).</summary>
+        public bool TryDeleteFamilyPromoteOnlyChild()
+        {
+            if (Parent == null || Children.Count != 1)
+            {
+                return false;
+            }
+
+            CaptureUndoBefore("Xóa gia đình, giữ nhánh con");
+            int index = Parent.Children.IndexOf(this);
+            var promoted = Children[0];
+
+            Parent._familyListChildren.RemoveAt(index);
+            Parent._familyInfo.FamilyChildren.RemoveAt(index);
+            _familyInfo.FamilyChildren.Remove(promoted._familyInfo);
+
+            Parent._familyInfo.FamilyChildren.Insert(index, promoted._familyInfo);
+            Parent._familyListChildren.Insert(index, promoted);
+            promoted._familyParent = Parent;
+            promoted._familyInfo.FamilyUp = Parent._familyInfo.FamilyId;
+            UpdateLevel(promoted, -1);
+            Parent.MakeOrderChild();
+            Parent.IsExpanded = true;
+            Parent.IsSelected = true;
+            _objFamilyTree?.Family?.SyncGiaDinhTabForFamily(Parent);
+
+            AddUserAction("Xóa gia đình " + Name0 + ", đưa con " + promoted.Name0 + " thay vị trí");
+            _objFamilyTree?.OnPropertyChanged("GP");
+            return true;
+        }
+
+        /// <summary>Xóa cả nhánh (không hỏi lại). Trả về gia đình cha để chọn lại trên cây.</summary>
+        public FamilyViewModel TryDeleteFamilyBranch()
+        {
+            if (Parent == null)
+            {
+                MessageBox.Show("Không thể xóa gia đình gốc (thủy tổ) bằng phím tắt.", "Xóa gia đình");
+                return null;
+            }
+
+            var parent = Parent;
+            if (parent.Children.IndexOf(this) < 0)
+            {
+                return null;
+            }
+
+            CaptureUndoBefore("Xóa gia đình và nhánh con");
+            parent.RemoveChildFully(this);
+            parent.IsExpanded = true;
+            parent.IsSelected = true;
+            _objFamilyTree?.Family?.SyncGiaDinhTabForFamily(parent);
+            AddUserAction("Xóa gia đình " + Name0 + ", tất cả gia đình con");
+            _objFamilyTree?.OnPropertyChanged("GP");
+            return parent;
+        }
+
         private void CutFamilyClickFunc()
         {
+            CaptureUndoBefore("Cắt gia đình");
             _objFamilyTree.FamilyCut = this;
             // Lấy gia đình dán, lấy cha
             int index = this.Parent.Children.IndexOf(this);
             this.Parent.Children.Remove(this);
             AddUserAction("Cắt GD " + this.Name0);
+        }
+
+        /// <summary>Kiểm tra node có nằm dưới nhánh this (con/cháu) không.</summary>
+        public bool IsDescendantOf(FamilyViewModel ancestor)
+        {
+            if (ancestor == null)
+            {
+                return false;
+            }
+
+            for (FamilyViewModel p = Parent; p != null; p = p.Parent)
+            {
+                if (ReferenceEquals(p, ancestor))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Di chuyển this thành con của targetParent (sau khi user đã xác nhận).</summary>
+        public bool TryMoveAsChildOf(FamilyViewModel targetParent)
+        {
+            if (targetParent == null
+                || ReferenceEquals(this, targetParent)
+                || IsDescendantOf(targetParent))
+            {
+                return false;
+            }
+
+            if (Parent != null)
+            {
+                Parent.Children.Remove(this);
+            }
+
+            targetParent.Children.Insert(0, this);
+            Parent = targetParent;
+            _familyInfo.FamilyUp = targetParent._familyInfo.FamilyId;
+            int levelDelta = targetParent._familyInfo.FamilyLevel - _familyInfo.FamilyLevel + 1;
+            UpdateLevel(this, levelDelta);
+            targetParent.MakeOrderChild();
+            targetParent.IsExpanded = true;
+            IsSelected = true;
+            _objFamilyTree?.OnPropertyChanged("GP");
+            AddUserAction("Kéo thả: " + Name0 + " → con của " + targetParent.Name0);
+            return true;
+        }
+
+        /// <summary>Đặt this ngay sau targetSibling — cùng cha chỉ đổi thứ tự (đời không đổi).</summary>
+        public bool TryMoveAsSiblingAfter(FamilyViewModel targetSibling)
+        {
+            if (targetSibling == null
+                || ReferenceEquals(this, targetSibling)
+                || targetSibling.IsDescendantOf(this))
+            {
+                return false;
+            }
+
+            FamilyViewModel newParent = targetSibling.Parent;
+            if (newParent == null)
+            {
+                return false;
+            }
+
+            // Cùng cha: chỉ sắp xếp lại anh em — không đụng FamilyLevel / FamilyUp
+            bool reorderAmongSiblings = Parent != null && ReferenceEquals(Parent, newParent);
+
+            if (Parent != null)
+            {
+                Parent.Children.Remove(this);
+            }
+
+            int insertIndex = newParent.Children.IndexOf(targetSibling);
+            if (insertIndex < 0)
+            {
+                insertIndex = newParent.Children.Count - 1;
+            }
+            else
+            {
+                insertIndex++;
+            }
+
+            if (insertIndex > newParent.Children.Count)
+            {
+                insertIndex = newParent.Children.Count;
+            }
+
+            newParent.Children.Insert(insertIndex, this);
+            Parent = newParent;
+
+            if (!reorderAmongSiblings)
+            {
+                _familyInfo.FamilyUp = newParent._familyInfo.FamilyId;
+                // Đời anh em = đời node đích, không lấy bậc của cha (cha thấp hơn 1 đời)
+                int levelDelta = targetSibling._familyInfo.FamilyLevel - _familyInfo.FamilyLevel;
+                UpdateLevel(this, levelDelta);
+            }
+
+            newParent.MakeOrderChild();
+            newParent.IsExpanded = true;
+            IsSelected = true;
+            _objFamilyTree?.OnPropertyChanged("GP");
+            AddUserAction("Kéo thả: " + Name0 + " → sau " + targetSibling.Name0
+                + (reorderAmongSiblings ? " (cùng cha)" : " (anh em nhánh khác)"));
+            return true;
+        }
+
+        /// <summary>Mô tả thao tác kéo thả để hỏi xác nhận.</summary>
+        public static string DescribeTreeDragMove(FamilyViewModel source, FamilyViewModel target)
+        {
+            if (source == null || target == null)
+            {
+                return "";
+            }
+
+            if (source.Parent != null
+                && target.Parent != null
+                && ReferenceEquals(source.Parent, target.Parent)
+                && !ReferenceEquals(source, target))
+            {
+                return "Đặt gia đình \"" + source.Name0 + "\" ngay sau \""
+                    + target.Name0 + "\" (cùng cha: " + source.Parent.Name0 + ")?";
+            }
+
+            return "Di chuyển gia đình \"" + source.Name0 + "\" thành con của \""
+                + target.Name0 + "\"?";
         }
         private void PasteFamilyEmClickFunc()
         {
@@ -387,6 +698,7 @@ namespace vietnamgiapha
                 "Vào dưới gia đình " + this.Name0
                 , "Dán", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
             {
+                CaptureUndoBefore("Dán gia đình (em)");
                 // 1. remove gia đình ra khỏi cha
                 if(_objFamilyTree.FamilyCut.Parent != null)
                 {
@@ -421,6 +733,7 @@ namespace vietnamgiapha
                 "Vào làm gia đình con của gia đình " + this.Name0
                 , "Dán", MessageBoxButton.OKCancel) == MessageBoxResult.OK)
             {
+                CaptureUndoBefore("Dán gia đình (con)");
                 // 1. remove gia đình ra khỏi cha
                 if (_objFamilyTree.FamilyCut.Parent != null)
                 {
@@ -442,6 +755,7 @@ namespace vietnamgiapha
         }
         private void InsertPerson2FamilyClickFunc()
         {
+            CaptureUndoBefore("Thêm người vào gia đình");
             if( this.ListPerson.Count>=1)
             {
                 var person = new PersonInfo("Người mới", this._familyInfo);
@@ -469,165 +783,229 @@ namespace vietnamgiapha
 
         private void RemoveFamilyClickFunc()
         {
-            if (this.Parent != null)
+            if (Parent == null)
             {
-                if (this.Parent.Children.IndexOf(this) > -1)
-                {
-                    if (MessageBox.Show("Xác nhận xóa gia đình " + Name0 + ", tất cả gia đình con của " + Name0 + " sẽ mất", "Xác nhận",
-                        MessageBoxButton.OKCancel) == MessageBoxResult.OK)
-                    {
-                        this.Parent.Children.Remove(this);
-                        this.Parent.IsExpanded = true;
-                        this.Parent.IsSelected = true;
-                        _objFamilyTree.OnPropertyChanged("GP");
+                return;
+            }
 
-                        AddUserAction("Xóa gia đình " + Name0 + ", tất cả gia đình con");
-                    }
-                }
+            if (MessageBox.Show(
+                    "Xác nhận xóa gia đình " + Name0 + ", tất cả gia đình con của " + Name0 + " sẽ mất",
+                    "Xác nhận",
+                    MessageBoxButton.OKCancel) == MessageBoxResult.OK)
+            {
+                TryDeleteFamilyBranch();
             }
         }
+
         private void RemoveFamilyOnlyClickFunc()
         {
-            if (this.Parent != null)
+            if (Parent == null || Children.Count != 1)
             {
-                if (this.Parent.Children.IndexOf(this) > -1)
+                if (Parent != null && Children.Count != 1)
                 {
-                    if (this.Children.Count == 1)
-                    {
-                        if (MessageBox.Show("Xác nhận xóa gia đình " + this.Name0+ ", đưa con là " + this.Children[0].Name0 + " thay vào vị trí này", "Xác nhận",
-                            MessageBoxButton.OKCancel) == MessageBoxResult.OK)
-                        {
-                            int index = this.Parent.Children.IndexOf(this);
-                            this.Parent.Children.Remove(this);
-                            this.Parent.Children.Insert(index, this.Children[0]);
-                            UpdateLevel(this.Children[0], - 1);
-                            this.Children[0].Parent = this.Parent;
-                            this.Parent.IsExpanded = true;
-                            this.Parent.IsSelected = true;
-
-                            AddUserAction("Xóa gia đình " + Name0 + ", đưa con là " + this.Children[0].Name0 + " thay vào vị trí này");
-                            _objFamilyTree.OnPropertyChanged("GP");
-                        }
-                    }
+                    MessageBox.Show("Chỉ xóa và đưa con lên khi gia đình có đúng 1 gia đình con.", "Xóa gia đình");
                 }
+
+                return;
+            }
+
+            if (MessageBox.Show(
+                    "Xác nhận xóa gia đình " + Name0 + ", đưa con là " + Children[0].Name0 + " thay vào vị trí này",
+                    "Xác nhận",
+                    MessageBoxButton.OKCancel) == MessageBoxResult.OK)
+            {
+                TryDeleteFamilyPromoteOnlyChild();
             }
         }
         private void InsertFamilyConClickFunc()
         {
-            // 1. Thêm thông tin gia đình mới vô 
+            var added = InsertNewChildFamilyFromTree();
+            if (added != null)
+            {
+                added.IsSelected = true;
+            }
+        }
+
+        /// <summary>Shift+[+] — thêm gia đình đời con dưới node đang chọn.</summary>
+        public FamilyViewModel InsertNewChildFamilyFromTree()
+        {
+            CaptureUndoBefore("Thêm gia đình con");
             FamilyInfo insertFamily = new FamilyInfo();
-            insertFamily.FamilyId = this._objFamilyTree.Family.GetMaxFamilyId()+1;
-            insertFamily.FamilyLevel = this._familyInfo.FamilyLevel;
-            insertFamily.FamilyUp = this._familyInfo.FamilyUp;
-            insertFamily.FamilyOrder = this._familyInfo.FamilyOrder;
-            // 2. Thêm 1 người mới tự động vô gia đình
-            insertFamily.ListPerson = new ObservableCollection<PersonInfo>();
-            var person = new PersonInfo(Name0+"Con" + (_familyListChildren.Count + 1), insertFamily);
-            person.MANS_CONTHUMAY = "" + (_familyListChildren.Count + 1);
-            insertFamily.ListPerson.Add(person);
-            // 3: Update info
+            insertFamily.FamilyId = this._objFamilyTree.Family.GetMaxFamilyId() + 1;
             insertFamily.FamilyLevel = this._familyInfo.FamilyLevel + 1;
             insertFamily.FamilyUp = this._familyInfo.FamilyId;
             insertFamily.FamilyOrder = this._familyInfo.FamilyOrder;
-            //
-            this.AddFamilyChild(insertFamily);
-            this.IsExpanded = true;
-            this.IsSelected = true;
+            insertFamily.ListPerson = new ObservableCollection<PersonInfo>();
+            var person = new PersonInfo(Name0 + "Con" + (_familyListChildren.Count + 1), insertFamily);
+            person.MANS_CONTHUMAY = "" + (_familyListChildren.Count + 1);
+            insertFamily.ListPerson.Add(person);
+
+            var added = AddFamilyChild(insertFamily);
+            IsExpanded = true;
             AddUserAction("Thêm gia đình con " + Name0);
-            log.Info("======================= newChildFamily =======================");
-            log.Info(this.Debug0);
-            log.Info("======================= END =======================");
-            _objFamilyTree.OnPropertyChanged("GP");
+            _objFamilyTree?.OnPropertyChanged("GP");
+            return added;
         }
 
-        private void AddFamilyChild(FamilyInfo insertFamily)
+        /// <summary>Shift+E — thêm gia đình em (cùng đời, ngay sau node đang chọn).</summary>
+        public FamilyViewModel InsertNewSiblingEmFromTree()
+        {
+            if (Parent == null)
+            {
+                return null;
+            }
+
+            CaptureUndoBefore("Thêm gia đình em");
+            int indexThis = Parent.Children.IndexOf(this);
+            if (indexThis < 0)
+            {
+                indexThis = Parent.Children.Count - 1;
+            }
+
+            var insertFamily = CreateSiblingFamilyInfo("Em", Parent.Children.Count + 1);
+            var added = Parent.InsertChildFamilyAt(indexThis + 1, insertFamily);
+            Parent.IsExpanded = true;
+            AddUserAction("Thêm gia đình em " + added.Name0);
+            _objFamilyTree?.OnPropertyChanged("GP");
+            return added;
+        }
+
+        /// <summary>Shift+A — thêm gia đình anh (cùng đời, ngay trước node đang chọn).</summary>
+        public FamilyViewModel InsertNewSiblingAnhFromTree()
+        {
+            if (Parent == null)
+            {
+                return null;
+            }
+
+            CaptureUndoBefore("Thêm gia đình anh");
+            int indexThis = Parent.Children.IndexOf(this);
+            if (indexThis < 0)
+            {
+                indexThis = 0;
+            }
+
+            var insertFamily = CreateSiblingFamilyInfo("Anh", Parent.Children.Count + 1);
+            var added = Parent.InsertChildFamilyAt(indexThis, insertFamily);
+            Parent.IsExpanded = true;
+            AddUserAction("Thêm gia đình anh " + added.Name0);
+            _objFamilyTree?.OnPropertyChanged("GP");
+            return added;
+        }
+
+        private FamilyInfo CreateSiblingFamilyInfo(string suffix, int ordinal)
+        {
+            var insertFamily = new FamilyInfo
+            {
+                FamilyId = _objFamilyTree.Family.GetMaxFamilyId() + 1,
+                FamilyLevel = _familyInfo.FamilyLevel,
+                FamilyUp = _familyInfo.FamilyUp,
+                FamilyOrder = _familyInfo.FamilyOrder,
+                ListPerson = new ObservableCollection<PersonInfo>()
+            };
+            insertFamily.ListPerson.Add(new PersonInfo(Name0 + suffix + ordinal, insertFamily));
+            return insertFamily;
+        }
+
+        private FamilyViewModel InsertChildFamilyAt(int index, FamilyInfo insertFamily)
+        {
+            if (index < 0)
+            {
+                index = 0;
+            }
+
+            if (index > _familyListChildren.Count)
+            {
+                index = _familyListChildren.Count;
+            }
+
+            _familyInfo.FamilyChildren.Insert(index, insertFamily);
+            var added = new FamilyViewModel(insertFamily, this, _objFamilyTree);
+            _familyListChildren.Insert(index, added);
+            MakeOrderChild();
+            return added;
+        }
+
+        private FamilyViewModel AddFamilyChild(FamilyInfo insertFamily)
         {
             this._familyInfo.FamilyChildren.Add(insertFamily);
-            this._familyListChildren.Add(new FamilyViewModel(insertFamily, this, _objFamilyTree));
+            var added = new FamilyViewModel(insertFamily, this, _objFamilyTree);
+            this._familyListChildren.Add(added);
+            MakeOrderChild();
+            return added;
         }
 
         private void InsertFamilyEmClickFunc()
         {
-            if (this.Parent == null)
-            {
-                return;
-            }
-            int indexThis = this.Parent.Children.IndexOf(this);
-            if (indexThis < this.Parent.Children.Count-1)
-            {
-                this.Parent.Children.Move(indexThis, indexThis + 1);
-            }
-
-            this.Parent.MakeOrderChild();
-            AddUserAction("Thêm gia đình em " + Name0);
+            TryMoveSiblingOrderDown();
         }
+
         private void InsertFamilyAnhClickFunc()
         {
-            if (this.Parent == null)
+            TryMoveSiblingOrderUp();
+        }
+
+        /// <summary>Shift+Up — đổi thứ tự lên (anh hơn). Đã là anh cả thì không đổi.</summary>
+        public bool TryMoveSiblingOrderUp()
+        {
+            if (Parent == null)
+            {
+                return false;
+            }
+
+            int indexThis = Parent.Children.IndexOf(this);
+            if (indexThis <= 0)
+            {
+                return false;
+            }
+
+            CaptureUndoBefore("Đổi thứ tự anh/em: lên");
+            Parent.MoveChildSiblingAt(indexThis, indexThis - 1);
+            AddUserAction("Chỉnh lên (anh hơn): " + Name0);
+            _objFamilyTree?.OnPropertyChanged("GP");
+            return true;
+        }
+
+        /// <summary>Shift+Down — đổi thứ tự xuống (em hơn). Đã là em út thì không đổi.</summary>
+        public bool TryMoveSiblingOrderDown()
+        {
+            if (Parent == null)
+            {
+                return false;
+            }
+
+            int indexThis = Parent.Children.IndexOf(this);
+            if (indexThis < 0 || indexThis >= Parent.Children.Count - 1)
+            {
+                return false;
+            }
+
+            CaptureUndoBefore("Đổi thứ tự anh/em: xuống");
+            Parent.MoveChildSiblingAt(indexThis, indexThis + 1);
+            AddUserAction("Chỉnh xuống (em hơn): " + Name0);
+            _objFamilyTree?.OnPropertyChanged("GP");
+            return true;
+        }
+
+        /// <summary>Đổi vị trí con trong cây — đồng bộ ViewModel và FamilyInfo.</summary>
+        private void MoveChildSiblingAt(int fromIndex, int toIndex)
+        {
+            if (fromIndex < 0
+                || toIndex < 0
+                || fromIndex >= _familyListChildren.Count
+                || toIndex >= _familyListChildren.Count
+                || fromIndex == toIndex)
             {
                 return;
             }
-            int indexThis = this.Parent.Children.IndexOf(this);
-            if (indexThis > 0)
-            {
-                this.Parent.Children.Move(indexThis, indexThis-1);
-            }
-            this.Parent.MakeOrderChild();
-            AddUserAction("Thêm gia đình anh " + Name0);
+
+            _familyListChildren.Move(fromIndex, toIndex);
+            _familyInfo.FamilyChildren.Move(fromIndex, toIndex);
+            MakeOrderChild();
         }
         private void InsertFamilyClickFunc()
         {
-            // 1. Thêm thông tin gia đình mới vô 
-            FamilyInfo newInsertFamily = new FamilyInfo();
-            newInsertFamily.FamilyId = this._objFamilyTree.Family.GetMaxFamilyId() + 1;
-            newInsertFamily.FamilyLevel = this._familyInfo.FamilyLevel;
-            newInsertFamily.FamilyUp = this._familyInfo.FamilyUp;
-            newInsertFamily.FamilyOrder = this._familyInfo.FamilyOrder;
-            // 3. Thêm 1 người mới tự động vô gia đình
-            newInsertFamily.ListPerson = new ObservableCollection<PersonInfo>();
-            //
-            newInsertFamily.ListPerson.Add(new PersonInfo("Cha" + Name0 + "", newInsertFamily));
-
-            newInsertFamily.FamilyChildren = new ObservableCollection<FamilyInfo>();
-            // 2. Cho gia đình hiện tại trở thành con của gia đình chèn vô
-            newInsertFamily.FamilyChildren.Add(this._familyInfo);
-
-
-            // 4. Tạo thông tin gia đình mới, liên kết với phía gia đình hiện tại (là con)
-            FamilyViewModel insert = new FamilyViewModel(newInsertFamily, this._familyParent, _objFamilyTree);
-
-            // 5. Tạo thông tin gia đình mới, liên kết với phía gia đình cha
-            if(this.Parent!=null)
-            {
-                if (this.Parent.Children.Contains(this))
-                {
-                    // 5.1 . Remove gia đình hiện tại, thêm gia đình chèn vô
-                    int index = this.Parent.Children.IndexOf(this);
-                    this.Parent.Children.Remove(this);
-                    this.Parent.Children.Insert(index, insert);
-                }
-                this.Parent = insert;
-            }
-            else
-            {
-                // Insert truoc Thuy to
-                this.Parent = insert;
-                this._familyInfo.FamilyUp = insert._familyInfo.FamilyId;
-            }
-
-            // 6. Update gia đình this tăng 1 bậc sâu
-            UpdateLevel(this, 1);
-
-            this.IsExpanded = true;
-            this.IsSelected = true;
-            if (insert.Parent == null) {
-                _objFamilyTree.Family.UpdateRootPerson(insert);
-            }
-            AddUserAction("Thêm gia đình " + Name0);
-            log.Info("======================= newInsertFamily =======================");
-            log.Info(insert.Debug0);
-            log.Info("======================= END =======================");
-            _objFamilyTree.OnPropertyChanged("GP");
+            InsertParentFamilyFromTree();
         }
 
         private void UpdateLevel(FamilyViewModel f, int levelUp)
@@ -665,6 +1043,93 @@ namespace vietnamgiapha
         public string Name0
         {
             get { return _familyInfo.Name0; }
+        }
+
+        /// <summary>Đang F2 sửa nhãn trên TreeView.</summary>
+        public bool IsTreeLabelEditing
+        {
+            get { return ReferenceEquals(_treeLabelEditingFamily, this); }
+        }
+
+        /// <summary>Chỉ phần tên (không có "đời."); Enter xong Name tự ghép lại đời.</summary>
+        public string TreeEditText
+        {
+            get { return _treeEditText; }
+            set
+            {
+                if (_treeEditText == value)
+                {
+                    return;
+                }
+
+                _treeEditText = value ?? "";
+                OnPropertyChanged(nameof(TreeEditText));
+            }
+        }
+
+        public void BeginTreeLabelEdit()
+        {
+            if (_treeLabelEditingFamily != null && !ReferenceEquals(_treeLabelEditingFamily, this))
+            {
+                _treeLabelEditingFamily.CancelTreeLabelEdit();
+            }
+
+            _treeLabelEditingFamily = this;
+            TreeEditText = _familyInfo.GetTreeEditNameText();
+            OnPropertyChanged(nameof(IsTreeLabelEditing));
+        }
+
+        public bool CommitTreeLabelEdit()
+        {
+            if (!IsTreeLabelEditing)
+            {
+                return false;
+            }
+
+            string before = _familyInfo.GetTreeEditNameText();
+            string after = (_treeEditText ?? "").Trim();
+            if (!string.Equals(before, after, StringComparison.Ordinal))
+            {
+                CaptureUndoBefore("Sửa tên trên cây");
+                if (_familyInfo.ApplyTreeEditNameText(after))
+                {
+                    string clanHo = _objFamilyTree?.Family?.GetThuyToClanSurname();
+                    _familyInfo.ApplyClanMembershipAfterNameEdit(clanHo ?? "", after);
+
+                    // Gia đình gốc (thủy tổ): đổi tên gia phả theo họ người chính nam
+                    if (Parent == null)
+                    {
+                        _objFamilyTree?.SyncGiaphaNameFromRootThuyTo();
+                    }
+
+                    AddUserAction("Sửa tên GD trên cây: " + Name);
+                    _objFamilyTree?.OnPropertyChanged("GP");
+                    _objFamilyTree?.Family?.SyncGiaDinhTabForFamily(this);
+                }
+            }
+
+            EndTreeLabelEdit();
+            return true;
+        }
+
+        public void CancelTreeLabelEdit()
+        {
+            if (!IsTreeLabelEditing)
+            {
+                return;
+            }
+
+            EndTreeLabelEdit();
+        }
+
+        private void EndTreeLabelEdit()
+        {
+            if (ReferenceEquals(_treeLabelEditingFamily, this))
+            {
+                _treeLabelEditingFamily = null;
+            }
+
+            OnPropertyChanged(nameof(IsTreeLabelEditing));
         }
 
         public string Debug0

@@ -82,7 +82,9 @@ namespace vietnamgiapha.GiaPhaRender
         /// <summary>Chữ "Đời N" — ngang + dọc từng ký tự.</summary>
         GenerationLabel = 0,
         /// <summary>Người chính hoặc người phụ (một dòng / một cột).</summary>
-        Person = 1
+        Person = 1,
+        /// <summary>Dòng ghi chú trong ô (phả con, kích thước…).</summary>
+        ExtraNote = 2
     }
 
     /// <summary>Tag WPF gắn lên TextBlock/StackPanel cột — giữ Family + vai trò chữ.</summary>
@@ -126,6 +128,8 @@ namespace vietnamgiapha.GiaPhaRender
         public string FontFamilyName { get; set; }
         public double? FontPt { get; set; }
         public string ForegroundHex { get; set; }
+        /// <summary>null = dùng mặc định theo vai trò (chính đậm / phụ thường).</summary>
+        public bool? Bold { get; set; }
 
         public PhaDoPersonTextStyle Clone()
         {
@@ -133,7 +137,8 @@ namespace vietnamgiapha.GiaPhaRender
             {
                 FontFamilyName = FontFamilyName,
                 FontPt = FontPt,
-                ForegroundHex = ForegroundHex
+                ForegroundHex = ForegroundHex,
+                Bold = Bold
             };
         }
 
@@ -141,7 +146,8 @@ namespace vietnamgiapha.GiaPhaRender
         {
             return string.IsNullOrWhiteSpace(FontFamilyName)
                 && !FontPt.HasValue
-                && string.IsNullOrWhiteSpace(ForegroundHex);
+                && string.IsNullOrWhiteSpace(ForegroundHex)
+                && !Bold.HasValue;
         }
     }
 
@@ -168,6 +174,18 @@ namespace vietnamgiapha.GiaPhaRender
         public Dictionary<int, PhaDoPersonLayoutOffset> PersonOffsetsBySlot { get; set; }
             = new Dictionary<int, PhaDoPersonLayoutOffset>();
 
+        /// <summary>Style riêng từng phần chữ (Đời / chính / phụ / ghi chú) theo slot.</summary>
+        public Dictionary<int, PhaDoPersonTextStyle> PersonTextStylesBySlot { get; set; }
+            = new Dictionary<int, PhaDoPersonTextStyle>();
+
+        // ── 4 vùng SVG trang trí quanh ô gia đình ─────────────────────────
+        public string TopZoneSvgId    { get; set; }
+        public string BottomZoneSvgId { get; set; }
+        public string LeftZoneSvgId   { get; set; }
+        public string RightZoneSvgId  { get; set; }
+        /// <summary>Chiều rộng/cao của vùng zone tính từ mép ô (mm).</summary>
+        public double ZoneSizeMm { get; set; } = 5;
+
         public PhaDoBoxStyle Clone()
         {
             return new PhaDoBoxStyle
@@ -187,7 +205,16 @@ namespace vietnamgiapha.GiaPhaRender
                     {
                         DeltaXmm = kv.Value?.DeltaXmm ?? 0,
                         DeltaYmm = kv.Value?.DeltaYmm ?? 0
-                    }) ?? new Dictionary<int, PhaDoPersonLayoutOffset>()
+                    }) ?? new Dictionary<int, PhaDoPersonLayoutOffset>(),
+                PersonTextStylesBySlot = PersonTextStylesBySlot?.ToDictionary(
+                    kv => kv.Key,
+                    kv => kv.Value?.Clone() ?? new PhaDoPersonTextStyle())
+                    ?? new Dictionary<int, PhaDoPersonTextStyle>(),
+                TopZoneSvgId    = TopZoneSvgId,
+                BottomZoneSvgId = BottomZoneSvgId,
+                LeftZoneSvgId   = LeftZoneSvgId,
+                RightZoneSvgId  = RightZoneSvgId,
+                ZoneSizeMm      = ZoneSizeMm
             };
         }
 
@@ -214,7 +241,11 @@ namespace vietnamgiapha.GiaPhaRender
                 || (PersonOffsetsBySlot != null && PersonOffsetsBySlot.Count > 0)
                 || !string.IsNullOrWhiteSpace(FillColorHex)
                 || (Main != null && !Main.IsEmpty())
-                || (Spouse != null && !Spouse.IsEmpty());
+                || (Spouse != null && !Spouse.IsEmpty())
+                || !string.IsNullOrWhiteSpace(TopZoneSvgId)
+                || !string.IsNullOrWhiteSpace(BottomZoneSvgId)
+                || !string.IsNullOrWhiteSpace(LeftZoneSvgId)
+                || !string.IsNullOrWhiteSpace(RightZoneSvgId);
         }
     }
 }

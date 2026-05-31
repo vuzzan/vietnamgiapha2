@@ -74,9 +74,17 @@ namespace vietnamgiapha
             rootBlock = rootBlock ?? new PhaDoSubtreeBranchBlock { MainPersonName = "Root0" };
             subTrees = subTrees ?? Array.Empty<PhaDoSubtreeBranchBlock>();
 
-            string splitNote = splitLevel > 0
-                ? "Tách đời " + splitLevel + " → " + subTrees.Count + " phả con"
-                : "Không tách phả con";
+            string splitNote;
+            if (splitLevel <= 0 || subTrees.Count <= 1)
+            {
+                splitNote = subTrees.Count == 1
+                    ? "Không tách phả con (chỉ 1 nhánh — coi như phả chính Root0)"
+                    : "Không tách phả con";
+            }
+            else
+            {
+                splitNote = "Tách đời " + splitLevel + " → " + subTrees.Count + " phả con";
+            }
             summaryText.Text = "Root0 (đời 1–" + rootLevelMax + ")  →  " + splitNote;
 
             RenderSubtreeHierarchyMap(rootBlock, subTrees);

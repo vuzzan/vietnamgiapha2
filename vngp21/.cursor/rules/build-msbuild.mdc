@@ -1,0 +1,40 @@
+---
+description: Cách build dự án vngp21 (WPF .NET Framework) — tránh lỗi x86/MSBuild trên agent
+globs: vngp21.csproj, build.ps1, **/*.xaml
+alwaysApply: false
+---
+
+# Build vngp21
+
+Dự án **WPF .NET Framework 4.6.2** (csproj kiểu cũ), **PlatformTarget=x86** vì `Smith.WPF.HtmlEditor` + `Interop.MSHTML` (COM MSHTML) chỉ **32-bit** (`win-x86`).
+
+## Không dùng
+
+```powershell
+dotnet build vngp21.csproj   # ❌ thường lỗi MSB4216 (task host x86) hoặc thiếu reference WPF
+```
+
+## Dùng
+
+```powershell
+.\build.ps1
+# hoặc Release:
+.\build.ps1 -Configuration Release
+```
+
+Script gọi **MSBuild Full** từ Visual Studio (qua `vswhere`), restore NuGet, build `SmithHtmlEditor` rồi `vngp21`.
+
+## Yêu cầu máy build
+
+- Visual Studio 2019/2022 với workload **.NET desktop development**
+- .NET Framework 4.6.2+ (target dự án)
+- Repo `SmithHtmlEditor` cùng cấp với `vngp21` (đường dẫn `..\SmithHtmlEditor\`)
+
+## Smith.WPF.HtmlEditor
+
+- Host **WebBrowser / MSHTML** → DLL **x86**; không build/reference `win-x64`.
+- HintPath: `..\SmithHtmlEditor\bin\$(Configuration)\net462\win-x86\` (biến `SmithHtmlEditorOutput` trong csproj).
+
+## Lỗi MSB4216 (agent)
+
+- Tránh `dotnet build` trên vngp21; dùng `build.ps1` (MSBuild Visual Studio).

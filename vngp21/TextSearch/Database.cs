@@ -11,6 +11,7 @@ using System.Net;
 using System.Net.Http;
 using System.Security.Policy;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using System.Web.UI.WebControls;
@@ -25,6 +26,24 @@ namespace vietnamgiapha
     public class Database
     {
         private static readonly log4net.ILog log = log4net.LogManager.GetLogger("m0");
+
+        private static void ReportParseError(string message, Exception ex = null)
+        {
+            if (ex != null)
+            {
+                log.Error(message, ex);
+            }
+            else
+            {
+                log.Error(message);
+            }
+
+            // Parse JSON chạy background — không gọi MessageBox ngoài STA/UI.
+            if (System.Windows.Application.Current?.Dispatcher?.CheckAccess() == true)
+            {
+                MessageBox.Show(message, "Có lỗi");
+            }
+        }
         public static bool SaveJsonAs(GiaPhaViewModel gp)
         {
             try
@@ -246,8 +265,7 @@ namespace vietnamgiapha
                 JsonArray array = (JsonArray)objData["data"];
                 if (array == null)
                 {
-                    MessageBox.Show("Có lỗi gia phả không có data");
-                    log.Error("ERROR: Download - No data");
+                    ReportParseError("Có lỗi gia phả không có data");
                     throw new Exception("ERROR: Download - No data");
                     //return new GiaphaInfo();
                 }
@@ -322,28 +340,59 @@ namespace vietnamgiapha
             }
             catch(Exception ex)
             {
-                MessageBox.Show("" +ex.Message, "Có lỗi");
+                ReportParseError(ex.Message, ex);
                 log.Info("Begin load Gia Phả. Có lỗi");
-                log.Error(ex);
             }
             return null;
         }
+
+        /// <summary>Đọc file .json gia phả — parse từ byte[], không ghép chuỗi wrapper (tiết kiệm RAM).</summary>
         public static GiaphaInfo FromJson(string jsonFile)
         {
             try
             {
                 log.Info("Begin load file Gia Phả: " + jsonFile);
-                string json = File.ReadAllText(jsonFile);
-                string jsonString = "{\"code\":0,\"msg\":\" \", \"data\":" + json + "}";
-                JsonObject jsonObject = (JsonObject)JsonObject.Parse(jsonString);
-                return ParseJsonGiaPha(jsonObject);
+                byte[] utf8Bytes = File.ReadAllBytes(jsonFile);
+                JsonNode rootNode = JsonNode.Parse(utf8Bytes);
+                JsonObject objData = WrapGiaPhaJsonRoot(rootNode);
+                if (objData == null)
+                {
+                    ReportParseError("Định dạng file JSON gia phả không hợp lệ.");
+                    return null;
+                }
+
+                return ParseJsonGiaPha(objData);
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Có lỗi mở file: " + ex.Message, "Có lỗi");
+                ReportParseError("Có lỗi mở file: " + ex.Message, ex);
                 log.Error("Có lỗi load file Gia Phả: " + jsonFile + ".");
-                log.Error(ex);
             }
+            return null;
+        }
+
+        private static JsonObject WrapGiaPhaJsonRoot(JsonNode rootNode)
+        {
+            if (rootNode == null)
+            {
+                return null;
+            }
+
+            if (rootNode is JsonArray rootArray)
+            {
+                return new JsonObject
+                {
+                    ["code"] = 0,
+                    ["msg"] = " ",
+                    ["data"] = rootArray
+                };
+            }
+
+            if (rootNode is JsonObject rootObject && rootObject["data"] != null)
+            {
+                return rootObject;
+            }
+
             return null;
         }
         private static bool UpdateFamilyMain(FamilyInfo family, String rootName)
@@ -580,9 +629,7 @@ namespace vietnamgiapha
             }
             catch(Exception ex)
             {
-                log.Error("Có lỗi GetFamily.");
-                log.Error(ex);
-                MessageBox.Show("Error: " + ex.Message);
+                log.Error("Có lỗi GetFamily.", ex);
             }
             return true;
         }

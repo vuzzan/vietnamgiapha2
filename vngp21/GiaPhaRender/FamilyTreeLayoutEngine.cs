@@ -132,10 +132,10 @@ namespace vietnamgiapha.GiaPhaRender
             return subtreeRight;
         }
 
-        /// <summary>Đẩy subtree sang phải nếu các node cùng FamilyLevel chồng nhau (lặp nhiều pass).</summary>
+        /// <summary>Đẩy subtree sang phải nếu các node cùng độ sâu layout chồng nhau (lặp nhiều pass).</summary>
         private void ResolveHorizontalOverlaps(LayoutTreeNode root)
         {
-            var byGeneration = CollectByGeneration(root);
+            var byGeneration = CollectByLayoutDepth(root);
             double gap = _options.HorizontalGapMm;
 
             for (int pass = 0; pass < 12; pass++)
@@ -164,19 +164,20 @@ namespace vietnamgiapha.GiaPhaRender
             }
         }
 
-        private static Dictionary<int, List<LayoutTreeNode>> CollectByGeneration(LayoutTreeNode root)
+        /// <summary>Nhóm theo độ sâu từ gốc layout (0,1,2…) — Root1→Root2 gọn như Root0→Root1 (FamilyLevel trên box vẫn tuyệt đối).</summary>
+        private static Dictionary<int, List<LayoutTreeNode>> CollectByLayoutDepth(LayoutTreeNode root)
         {
-            var byGeneration = new Dictionary<int, List<LayoutTreeNode>>();
+            var byDepth = new Dictionary<int, List<LayoutTreeNode>>();
             Visit(root, n =>
             {
-                int gen = n.Generation;
-                if (!byGeneration.ContainsKey(gen))
+                int depth = n.Level;
+                if (!byDepth.ContainsKey(depth))
                 {
-                    byGeneration[gen] = new List<LayoutTreeNode>();
+                    byDepth[depth] = new List<LayoutTreeNode>();
                 }
-                byGeneration[gen].Add(n);
+                byDepth[depth].Add(n);
             });
-            return byGeneration;
+            return byDepth;
         }
 
         private static void ShiftSubtreeX(LayoutTreeNode node, double dx)
@@ -186,7 +187,7 @@ namespace vietnamgiapha.GiaPhaRender
 
         private void AssignVerticalByGeneration(LayoutTreeNode root)
         {
-            var byGeneration = CollectByGeneration(root);
+            var byGeneration = CollectByLayoutDepth(root);
 
             double yMm = 0;
             foreach (var gen in byGeneration.Keys.OrderBy(k => k))

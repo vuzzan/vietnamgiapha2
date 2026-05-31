@@ -17,7 +17,8 @@ namespace vietnamgiapha.GiaPhaRender
         public static void Export(
             string filePath,
             GiaPhaRenderResult result,
-            Func<int, PhaDoBoxStyle> boxStyleForFamilyId = null)
+            Func<int, PhaDoBoxStyle> boxStyleForFamilyId = null,
+            PhaDoTitleStyle titleStyle = null)
         {
             if (string.IsNullOrWhiteSpace(filePath))
             {
@@ -48,7 +49,7 @@ namespace vietnamgiapha.GiaPhaRender
 
             sb.AppendLine("<rect width=\"100%\" height=\"100%\" fill=\"#ffffff\"/>");
 
-            DrawTitle(sb, options);
+            DrawTitle(sb, options, titleStyle);
             DrawGenerationBands(sb, result, options, wMm);
             DrawCards(sb, result, options, boxStyleForFamilyId);
             DrawConnectors(sb, result, options); // trên ô — giống canvas
@@ -58,11 +59,13 @@ namespace vietnamgiapha.GiaPhaRender
             File.WriteAllText(filePath, sb.ToString(), Encoding.UTF8);
         }
 
-        private static void DrawTitle(StringBuilder sb, GiaPhaRenderOptions options)
+        private static void DrawTitle(StringBuilder sb, GiaPhaRenderOptions options, PhaDoTitleStyle titleStyle)
         {
             bool has1 = !string.IsNullOrWhiteSpace(options.Title);
             bool has2 = !string.IsNullOrWhiteSpace(options.TitleLine2);
-            if (!has1 && !has2)
+            bool has3 = !string.IsNullOrWhiteSpace(options.TitleLine3);
+            bool has4 = !string.IsNullOrWhiteSpace(options.TitleLine4);
+            if (!has1 && !has2 && !has3 && !has4)
             {
                 return;
             }
@@ -86,18 +89,44 @@ namespace vietnamgiapha.GiaPhaRender
                 familyId: -1,
                 titleFrame);
 
+            double defaultSmallPt = Math.Max(7, (options.TitleLine2FontPt > 0 ? options.TitleLine2FontPt : 12) * 0.78);
+
             if (has1)
             {
-                AppendTitleLine(sb, options.Title, layout.TextLeftMm, layout.Line1TopMm,
+                var off = PhaDoSvgExportHelper.GetTitleLineOffset(titleStyle, 0);
+                AppendTitleLine(sb, options.Title, layout.TextLeftMm + off.DeltaXmm, layout.Line1TopMm + off.DeltaYmm,
                     options.TitleLine1FontFamily ?? options.FontFamilyName,
                     options.TitleFontPt, options.TitleLine1ForegroundHex, bold: true);
             }
 
             if (has2)
             {
-                AppendTitleLine(sb, options.TitleLine2, layout.TextLeftMm, layout.Line2TopMm,
+                var off = PhaDoSvgExportHelper.GetTitleLineOffset(titleStyle, 1);
+                AppendTitleLine(sb, options.TitleLine2, layout.TextLeftMm + off.DeltaXmm, layout.Line2TopMm + off.DeltaYmm,
                     options.TitleLine2FontFamily ?? options.FontFamilyName,
                     options.TitleLine2FontPt, options.TitleLine2ForegroundHex, bold: false);
+            }
+
+            if (has3)
+            {
+                double l3Pt = options.TitleLine3FontPt > 0 ? options.TitleLine3FontPt : defaultSmallPt;
+                string l3Fore = !string.IsNullOrWhiteSpace(options.TitleLine3ForegroundHex)
+                    ? options.TitleLine3ForegroundHex : "#888888";
+                var off = PhaDoSvgExportHelper.GetTitleLineOffset(titleStyle, 2);
+                AppendTitleLine(sb, options.TitleLine3, layout.TextLeftMm + off.DeltaXmm, layout.Line3TopMm + off.DeltaYmm,
+                    options.TitleLine3FontFamily ?? options.FontFamilyName,
+                    l3Pt, l3Fore, bold: false);
+            }
+
+            if (has4)
+            {
+                double l4Pt = options.TitleLine4FontPt > 0 ? options.TitleLine4FontPt : defaultSmallPt;
+                string l4Fore = !string.IsNullOrWhiteSpace(options.TitleLine4ForegroundHex)
+                    ? options.TitleLine4ForegroundHex : "#888888";
+                var off = PhaDoSvgExportHelper.GetTitleLineOffset(titleStyle, 3);
+                AppendTitleLine(sb, options.TitleLine4, layout.TextLeftMm + off.DeltaXmm, layout.Line4TopMm + off.DeltaYmm,
+                    options.TitleLine4FontFamily ?? options.FontFamilyName,
+                    l4Pt, l4Fore, bold: false);
             }
         }
 
@@ -105,14 +134,14 @@ namespace vietnamgiapha.GiaPhaRender
             StringBuilder sb,
             string text,
             double xMm,
-            double yMm,
+            double topMm,
             string fontFamily,
             double fontPt,
             string foregroundHex,
             bool bold)
         {
             double fontMm = PtToMm(fontPt);
-            double baselineY = yMm + fontMm * 0.85;
+            double baselineY = topMm + fontMm * 0.85;
             string fill = string.IsNullOrWhiteSpace(foregroundHex) ? "#000000" : foregroundHex.Trim();
             if (!fill.StartsWith("#", StringComparison.Ordinal))
             {
@@ -131,7 +160,7 @@ namespace vietnamgiapha.GiaPhaRender
                 .Append(EscText(text))
                 .AppendLine("</text>");
 
-            return yMm + Math.Max(5, fontPt * 0.38);
+            return topMm + Math.Max(5, fontPt * 0.38);
         }
 
         private static void DrawGenerationBands(
@@ -149,24 +178,36 @@ namespace vietnamgiapha.GiaPhaRender
                     .Append("\" fill=\"").Append(fill).AppendLine("\"/>");
 
                 bool vertical = GiaPhaRenderOptions.IsVerticalCardLayout(options.CardLayoutMode);
-                double bandLabelPt = vertical
-                    ? options.VerticalGenerationLabelFontPt
-                    : options.HeaderFontPt;
+                var genStyle = options.GenLabelStyle;
+                double bandLabelPt = genStyle?.FontPt > 0
+                    ? genStyle.FontPt
+                    : (vertical ? options.VerticalGenerationLabelFontPt : options.HeaderFontPt);
+                string genFont = !string.IsNullOrWhiteSpace(genStyle?.FontFamily)
+                    ? genStyle.FontFamily
+                    : options.FontFamilyName;
+                bool genBold = genStyle != null
+                    ? genStyle.Bold
+                    : vertical;
+                string genFill = !string.IsNullOrWhiteSpace(genStyle?.ForegroundHex)
+                    ? genStyle.ForegroundHex.Trim()
+                    : (vertical ? "#193778" : "#5a5a5a");
+                if (!genFill.StartsWith("#", StringComparison.Ordinal))
+                {
+                    genFill = "#" + genFill;
+                }
+
                 double headerMm = PtToMm(bandLabelPt);
                 sb.Append("<text x=\"").Append(F(options.MarginMm)).Append("\" y=\"")
                     .Append(F(band.Ymm + headerMm * 0.85))
-                    .Append("\" font-family=\"").Append(EscAttr(options.FontFamilyName))
+                    .Append("\" font-family=\"").Append(EscAttr(genFont))
                     .Append(", sans-serif\" font-size=\"").Append(F(headerMm));
-                if (vertical)
+                if (genBold)
                 {
-                    sb.Append("\" font-weight=\"600\" fill=\"#193778\">Đời ");
-                }
-                else
-                {
-                    sb.Append("\" fill=\"#5a5a5a\">Đời ");
+                    sb.Append("\" font-weight=\"bold");
                 }
 
-                sb.Append(band.Level).AppendLine("</text>");
+                sb.Append("\" fill=\"").Append(EscAttr(genFill)).Append("\">Đời ")
+                    .Append(band.Level).AppendLine("</text>");
             }
         }
 
@@ -226,46 +267,146 @@ namespace vietnamgiapha.GiaPhaRender
 
             if (GiaPhaRenderOptions.IsVerticalCardLayout(options.CardLayoutMode))
             {
-                DrawCardVertical(sb, placed, options, x, y, pad);
+                DrawCardVertical(sb, placed, options, boxStyle, x, y, pad);
                 return;
             }
 
-            double headerLabelMm = PtToMm(options.HeaderFontPt);
-            sb.Append("<text x=\"").Append(F(x + pad)).Append("\" y=\"")
-                .Append(F(y + pad * 0.4 + headerLabelMm * 0.85))
-                .Append("\" font-family=\"").Append(EscAttr(options.FontFamilyName))
-                .Append(", sans-serif\" font-size=\"").Append(F(headerLabelMm))
-                .Append("\" fill=\"#464646\">")
-                .Append(EscText(placed.Metrics.FamilyLabel))
-                .AppendLine("</text>");
+            DrawCardHorizontal(sb, placed, options, boxStyle, x, y, pad, w);
+        }
 
-            double lineY = y + options.CardHeaderHeightMm + pad * 0.5 + PtToMm(options.MainNameFontPt) * 0.85;
+        private static void DrawCardHorizontal(
+            StringBuilder sb,
+            GiaPhaPlacedNode placed,
+            GiaPhaRenderOptions options,
+            PhaDoBoxStyle boxStyle,
+            double x,
+            double y,
+            double pad,
+            double w)
+        {
+            int slot = PhaDoBoxVisualTag.FamilyLabelSlotIndex;
+            double lineTopMm = y + pad * 0.4;
+            lineTopMm = AppendCardTextLine(
+                sb, placed.Metrics.FamilyLabel, x + pad, lineTopMm,
+                options, boxStyle, slot, PhaDoPersonTextRole.Main, PhaDoBoxElementKind.GenerationLabel);
+
+            slot = PhaDoBoxVisualTag.MainPersonSlotIndex;
+            lineTopMm = y + options.CardHeaderHeightMm + pad * 0.5;
 
             if (placed.Metrics.MainPerson != null)
             {
-                lineY = AppendTextLine(sb, FormatMain(placed.Metrics.MainPerson),
-                    x + pad, lineY, options, options.MainNameFontPt, true);
+                lineTopMm = AppendCardTextLine(
+                    sb, FormatMain(placed.Metrics.MainPerson), x + pad, lineTopMm,
+                    options, boxStyle, slot, PhaDoPersonTextRole.Main, PhaDoBoxElementKind.Person);
+                slot++;
             }
             else if (placed.Family != null)
             {
                 string label = placed.Family.Name0 ?? placed.Family.Name ?? "Gia đình";
-                lineY = AppendTextLine(sb, label, x + pad, lineY, options,
-                    options.MainNameFontPt, true);
+                lineTopMm = AppendCardTextLine(
+                    sb, label, x + pad, lineTopMm,
+                    options, boxStyle, slot, PhaDoPersonTextRole.Main, PhaDoBoxElementKind.Person);
+                slot++;
             }
 
             foreach (var spouse in placed.Metrics.Spouses)
             {
-                lineY = AppendTextLine(sb, FormatSpouse(spouse), x + pad, lineY,
-                    options, options.SpouseFontPt, false);
+                lineTopMm = AppendCardTextLine(
+                    sb, FormatSpouse(spouse), x + pad, lineTopMm,
+                    options, boxStyle, slot, PhaDoPersonTextRole.Spouse, PhaDoBoxElementKind.Person);
+                slot++;
             }
 
             foreach (var overflow in placed.Metrics.SpouseOverflow)
             {
                 if (!string.IsNullOrWhiteSpace(overflow))
                 {
-                    lineY = AppendTextLine(sb, overflow, x + pad, lineY,
-                        options, options.SpouseFontPt, false);
+                    lineTopMm = AppendCardTextLine(
+                        sb, overflow, x + pad, lineTopMm,
+                        options, boxStyle, slot, PhaDoPersonTextRole.Spouse, PhaDoBoxElementKind.Person);
+                    slot++;
                 }
+            }
+
+            AppendCardExtraNotes(sb, placed, options, boxStyle, x, pad, w, ref lineTopMm, slot);
+        }
+
+        /// <summary>Một dòng chữ ngang — vẽ tại layoutTop + offset slot; trả về top layout dòng kế (không cộng dồn offset).</summary>
+        private static double AppendCardTextLine(
+            StringBuilder sb,
+            string text,
+            double xMm,
+            double layoutTopMm,
+            GiaPhaRenderOptions options,
+            PhaDoBoxStyle boxStyle,
+            int slot,
+            PhaDoPersonTextRole role,
+            PhaDoBoxElementKind elementKind)
+        {
+            var off = PhaDoSvgExportHelper.GetPersonSlotOffset(boxStyle, slot);
+            double drawX = xMm + off.DeltaXmm;
+            double drawTop = layoutTopMm + off.DeltaYmm;
+
+            double defaultPt = PhaDoSvgExportHelper.DefaultFontPt(options, elementKind, role);
+            var style = PhaDoSvgExportHelper.ResolveSlotTextStyle(boxStyle, options, slot, role, elementKind);
+            PhaDoSvgExportHelper.ResolveDrawParams(
+                style, options, defaultPt, role, elementKind,
+                out double fontPt, out string fontFamily, out string fillHex, out bool bold);
+
+            double fontMm = PtToMm(fontPt);
+            double baselineY = drawTop + fontMm * 0.85;
+            if (!fillHex.StartsWith("#", StringComparison.Ordinal))
+            {
+                fillHex = "#" + fillHex;
+            }
+
+            sb.Append("<text x=\"").Append(F(drawX)).Append("\" y=\"").Append(F(baselineY))
+                .Append("\" font-family=\"").Append(EscAttr(fontFamily))
+                .Append(", sans-serif\" font-size=\"").Append(F(fontMm));
+            if (bold)
+            {
+                sb.Append("\" font-weight=\"bold");
+            }
+
+            sb.Append("\" fill=\"").Append(EscAttr(fillHex)).Append("\">")
+                .Append(EscText(text))
+                .AppendLine("</text>");
+
+            double step = Math.Max(options.CardLineHeightMm, fontPt * 0.58);
+            return layoutTopMm + step;
+        }
+
+        private static void AppendCardExtraNotes(
+            StringBuilder sb,
+            GiaPhaPlacedNode placed,
+            GiaPhaRenderOptions options,
+            PhaDoBoxStyle boxStyle,
+            double x,
+            double pad,
+            double w,
+            ref double lineTopMm,
+            int startSlot)
+        {
+            var notes = placed.Metrics.ExtraNotes;
+            if (notes == null || notes.Count == 0)
+            {
+                return;
+            }
+
+            lineTopMm += options.CardNoteTopGapMm;
+            int noteSlot = 0;
+            foreach (var note in notes)
+            {
+                if (string.IsNullOrWhiteSpace(note))
+                {
+                    continue;
+                }
+
+                int slot = startSlot + noteSlot;
+                lineTopMm = AppendCardTextLine(
+                    sb, note.Trim(), x + pad, lineTopMm,
+                    options, boxStyle, slot, PhaDoPersonTextRole.Spouse, PhaDoBoxElementKind.ExtraNote);
+                noteSlot++;
             }
         }
 
@@ -273,33 +414,67 @@ namespace vietnamgiapha.GiaPhaRender
             StringBuilder sb,
             GiaPhaPlacedNode placed,
             GiaPhaRenderOptions options,
+            PhaDoBoxStyle boxStyle,
             double x,
             double y,
             double pad)
         {
-            // Thẻ dọc SVG: không vẽ dải header "Đời" trên box
             double contentTop = y + pad * 0.5;
             double colX = x + pad;
+            int personSlot = PhaDoBoxVisualTag.MainPersonSlotIndex;
 
             var columns = options.CardLayoutMode == GiaPhaCardLayoutMode.VerticalWord
                 ? GiaPhaVerticalWordCardLayout.BuildColumns(placed.Metrics, options, placed.Family)
                 : GiaPhaVerticalCardLayout.BuildColumns(placed.Metrics, options, placed.Family);
 
+            bool isWord = options.CardLayoutMode == GiaPhaCardLayoutMode.VerticalWord;
+            if (!isWord && !string.IsNullOrWhiteSpace(placed.Metrics.FamilyLabel))
+            {
+                double doiFontPt = options.VerticalGenerationLabelFontPt > 0
+                    ? options.VerticalGenerationLabelFontPt
+                    : options.HeaderFontPt;
+                double doiColW = GiaPhaVerticalCardLayout.ColumnWidthMm(doiFontPt, options);
+                int doiSlot = PhaDoBoxVisualTag.FamilyLabelSlotIndex;
+                var doiOff = PhaDoSvgExportHelper.GetPersonSlotOffset(boxStyle, doiSlot);
+                var doiStyle = PhaDoSvgExportHelper.ResolveSlotTextStyle(
+                    boxStyle, options, doiSlot, PhaDoPersonTextRole.Main, PhaDoBoxElementKind.GenerationLabel);
+                PhaDoSvgExportHelper.ResolveDrawParams(
+                    doiStyle, options, doiFontPt, PhaDoPersonTextRole.Main, PhaDoBoxElementKind.GenerationLabel,
+                    out double fontPt, out string fontFamily, out string fillHex, out bool bold);
+                AppendVerticalText(sb, placed.Metrics.FamilyLabel,
+                    colX + doiOff.DeltaXmm, contentTop + doiOff.DeltaYmm, doiColW,
+                    fontPt, bold, options, fillHex, fontFamily);
+                colX += doiColW + GiaPhaVerticalCardLayout.ColumnGapMm;
+            }
+
             foreach (var col in columns)
             {
+                var role = col.Bold ? PhaDoPersonTextRole.Main : PhaDoPersonTextRole.Spouse;
+                var off = PhaDoSvgExportHelper.GetPersonSlotOffset(boxStyle, personSlot);
+                var slotStyle = PhaDoSvgExportHelper.ResolveSlotTextStyle(
+                    boxStyle, options, personSlot, role, PhaDoBoxElementKind.Person);
+                PhaDoSvgExportHelper.ResolveDrawParams(
+                    slotStyle, options, col.FontPt, role, PhaDoBoxElementKind.Person,
+                    out double fontPt, out string fontFamily, out string fillHex, out bool bold);
+
                 if (col.IsWordStack)
                 {
-                    AppendVerticalWordStackText(sb, col.HorizontalWordLines, colX, contentTop, col.WidthMm,
-                        col.FontPt, col.Bold, options);
+                    AppendVerticalWordStackText(sb, col.HorizontalWordLines,
+                        colX + off.DeltaXmm, contentTop + off.DeltaYmm, col.WidthMm,
+                        fontPt, bold, options, fillHex, fontFamily);
                 }
                 else
                 {
-                    AppendVerticalText(sb, col.Text, colX, contentTop, col.WidthMm,
-                        col.FontPt, col.Bold, options);
+                    AppendVerticalText(sb, col.Text,
+                        colX + off.DeltaXmm, contentTop + off.DeltaYmm, col.WidthMm,
+                        fontPt, bold, options, fillHex, fontFamily);
                 }
 
+                personSlot++;
                 colX += col.WidthMm + GiaPhaVerticalCardLayout.ColumnGapMm;
             }
+
+            AppendCardExtraNotesVertical(sb, placed, options, boxStyle, x, y, pad, personSlot);
         }
 
         /// <summary>Word: mỗi từ một dòng chữ ngang trong cột người.</summary>
@@ -311,7 +486,9 @@ namespace vietnamgiapha.GiaPhaRender
             double columnWidthMm,
             double fontPt,
             bool bold,
-            GiaPhaRenderOptions options)
+            GiaPhaRenderOptions options,
+            string fillHex,
+            string fontFamily)
         {
             if (words == null || words.Length == 0)
             {
@@ -325,8 +502,13 @@ namespace vietnamgiapha.GiaPhaRender
             for (int i = 0; i < words.Length; i++)
             {
                 double centerX = columnLeft + columnWidthMm / 2.0;
+                if (!fillHex.StartsWith("#", StringComparison.Ordinal))
+                {
+                    fillHex = "#" + fillHex;
+                }
+
                 sb.Append("<text x=\"").Append(F(centerX)).Append("\" y=\"").Append(F(y))
-                    .Append("\" font-family=\"").Append(EscAttr(options.FontFamilyName))
+                    .Append("\" font-family=\"").Append(EscAttr(fontFamily))
                     .Append(", sans-serif\" font-size=\"").Append(F(fontMm))
                     .Append("\" text-anchor=\"middle\"");
                 if (bold)
@@ -334,7 +516,7 @@ namespace vietnamgiapha.GiaPhaRender
                     sb.Append(" font-weight=\"bold\"");
                 }
 
-                sb.Append(" fill=\"#000000\">").Append(EscText(words[i])).AppendLine("</text>");
+                sb.Append(" fill=\"").Append(EscAttr(fillHex)).Append("\">").Append(EscText(words[i])).AppendLine("</text>");
                 y += lineStep;
             }
         }
@@ -348,7 +530,8 @@ namespace vietnamgiapha.GiaPhaRender
             double fontPt,
             bool bold,
             GiaPhaRenderOptions options,
-            string fillHex = "#000000")
+            string fillHex,
+            string fontFamily)
         {
             if (string.IsNullOrEmpty(text))
             {
@@ -358,8 +541,13 @@ namespace vietnamgiapha.GiaPhaRender
             double colCenter = GiaPhaVerticalCardLayout.ColumnCenterMm(columnLeft, columnWidthMm);
             double fontMm = PtToMm(fontPt);
 
+            if (!fillHex.StartsWith("#", StringComparison.Ordinal))
+            {
+                fillHex = "#" + fillHex;
+            }
+
             sb.Append("<text x=\"").Append(F(colCenter)).Append("\" y=\"").Append(F(columnTop))
-                .Append("\" font-family=\"").Append(EscAttr(options.FontFamilyName))
+                .Append("\" font-family=\"").Append(EscAttr(fontFamily))
                 .Append(", sans-serif\" font-size=\"").Append(F(fontMm)).Append('"');
             if (bold)
             {
@@ -367,7 +555,7 @@ namespace vietnamgiapha.GiaPhaRender
             }
 
             sb.Append(" writing-mode=\"vertical-rl\" text-anchor=\"middle\" dominant-baseline=\"hanging\" fill=\"")
-                .Append(fillHex).Append("\">")
+                .Append(EscAttr(fillHex)).Append("\">")
                 .Append(EscText(text))
                 .AppendLine("</text>");
         }
@@ -381,6 +569,19 @@ namespace vietnamgiapha.GiaPhaRender
             double fontPt,
             bool bold)
         {
+            return AppendTextLine(sb, text, x, y, options, fontPt, bold, "#000000");
+        }
+
+        private static double AppendTextLine(
+            StringBuilder sb,
+            string text,
+            double x,
+            double y,
+            GiaPhaRenderOptions options,
+            double fontPt,
+            bool bold,
+            string fillHex)
+        {
             double fontMm = PtToMm(fontPt);
             sb.Append("<text x=\"").Append(F(x)).Append("\" y=\"").Append(F(y))
                 .Append("\" font-family=\"").Append(EscAttr(options.FontFamilyName))
@@ -390,16 +591,64 @@ namespace vietnamgiapha.GiaPhaRender
                 sb.Append(" font-weight=\"bold\"");
             }
 
-            sb.Append(" fill=\"#000000\">")
+            sb.Append(" fill=\"").Append(EscAttr(fillHex ?? "#000000")).Append("\">")
                 .Append(EscText(text)).AppendLine("</text>");
 
             double step = Math.Max(options.CardLineHeightMm, fontPt * 0.58);
             return y + step;
         }
 
+        private static void AppendCardExtraNotesVertical(
+            StringBuilder sb,
+            GiaPhaPlacedNode placed,
+            GiaPhaRenderOptions options,
+            PhaDoBoxStyle boxStyle,
+            double x,
+            double y,
+            double pad,
+            int startSlot)
+        {
+            var notes = placed.Metrics.ExtraNotes;
+            if (notes == null || notes.Count == 0)
+            {
+                return;
+            }
+
+            double notePt = options.NoteFontPt > 0 ? options.NoteFontPt : 6.5;
+            double innerMaxMm = Math.Max(8, placed.Metrics.WidthMm - options.CardPaddingMm * 2);
+            double noteBlockMm = options.CardNoteTopGapMm;
+            foreach (var note in notes)
+            {
+                if (string.IsNullOrWhiteSpace(note))
+                {
+                    continue;
+                }
+
+                noteBlockMm += FamilyCardMetrics.EstimateWrappedLineHeightMm(
+                    note.Trim(), notePt, innerMaxMm, options);
+            }
+
+            double lineTopMm = y + placed.Metrics.HeightMm - options.CardBottomPaddingMm - noteBlockMm
+                + options.CardNoteTopGapMm;
+            int noteSlot = 0;
+            foreach (var note in notes)
+            {
+                if (string.IsNullOrWhiteSpace(note))
+                {
+                    continue;
+                }
+
+                int slot = PhaDoBoxVisualTag.MainPersonSlotIndex + 100 + noteSlot;
+                lineTopMm = AppendCardTextLine(
+                    sb, note.Trim(), x + pad, lineTopMm,
+                    options, boxStyle, slot, PhaDoPersonTextRole.Spouse, PhaDoBoxElementKind.ExtraNote);
+                noteSlot++;
+            }
+        }
+
         private static string FormatMain(PersonInfo p)
         {
-            return "★ " + (p.MANS_NAME_HUY ?? "").Trim();
+            return (p.MANS_NAME_HUY ?? "").Trim();
         }
 
         private static string FormatSpouse(PersonInfo p)

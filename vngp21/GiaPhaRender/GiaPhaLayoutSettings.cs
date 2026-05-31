@@ -28,6 +28,7 @@ namespace vietnamgiapha.GiaPhaRender
         public double MainNameFontPt { get; set; } = 9;
         public double SpouseFontPt { get; set; } = 7.5;
         public double VerticalGenerationLabelFontPt { get; set; } = 10;
+        public int ConnectorPathType { get; set; } = (int)GiaPhaConnectorPathType.Orthogonal;
 
         public static GiaPhaLayoutSettings CreateDefault()
         {
@@ -62,7 +63,8 @@ namespace vietnamgiapha.GiaPhaRender
                 HeaderFontPt = o.HeaderFontPt,
                 MainNameFontPt = o.MainNameFontPt,
                 SpouseFontPt = o.SpouseFontPt,
-                VerticalGenerationLabelFontPt = o.VerticalGenerationLabelFontPt
+                VerticalGenerationLabelFontPt = o.VerticalGenerationLabelFontPt,
+                ConnectorPathType = (int)o.ConnectorPathType
             };
         }
 
@@ -93,6 +95,9 @@ namespace vietnamgiapha.GiaPhaRender
             options.MainNameFontPt = MainNameFontPt;
             options.SpouseFontPt = SpouseFontPt;
             options.VerticalGenerationLabelFontPt = VerticalGenerationLabelFontPt;
+            options.ConnectorPathType = Enum.IsDefined(typeof(GiaPhaConnectorPathType), ConnectorPathType)
+                ? (GiaPhaConnectorPathType)ConnectorPathType
+                : GiaPhaConnectorPathType.Orthogonal;
         }
 
         public GiaPhaLayoutSettings Clone()

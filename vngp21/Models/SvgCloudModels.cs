@@ -71,6 +71,7 @@ namespace vietnamgiapha
     public sealed class SvgLocalListItem
     {
         public string SvgId { get; set; }
+        public string FilePath { get; set; }
         public PhaDoSvgShape Shape { get; set; }
 
         public string DisplayText

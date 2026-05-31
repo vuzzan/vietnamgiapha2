@@ -1,0 +1,6 @@
+<Project>
+  <!-- MSBuild Core (dotnet build / dotnet msbuild): không có worker x86 cho GenerateResource khi Prefer32Bit=true -->
+  <PropertyGroup Condition="'$(MSBuildRuntimeType)' == 'Core'">
+    <Prefer32Bit>false</Prefer32Bit>
+  </PropertyGroup>
+</Project>

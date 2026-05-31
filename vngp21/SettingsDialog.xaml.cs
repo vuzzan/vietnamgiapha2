@@ -24,6 +24,7 @@ namespace vietnamgiapha
             generationGapCmBox.Text = FormatCm(s.GenerationGapCm);
             busLineGapCmBox.Text = FormatCm(s.BusLineGapCm);
             minBusSpanCmBox.Text = FormatCm(s.MinBusSpanCm);
+            connectorPathTypeBox.SelectedIndex = s.ConnectorPathType == (int)GiaPhaConnectorPathType.Curved ? 1 : 0;
 
             cardMinWidthCmBox.Text = FormatCm(s.CardMinWidthCm);
             cardMaxWidthCmBox.Text = FormatCm(s.CardMaxWidthCm);
@@ -92,6 +93,9 @@ namespace vietnamgiapha
             settings.GenerationGapCm = generationGapCm;
             settings.BusLineGapCm = busLineGapCm;
             settings.MinBusSpanCm = minBusSpanCm;
+            settings.ConnectorPathType = connectorPathTypeBox.SelectedIndex == 1
+                ? (int)GiaPhaConnectorPathType.Curved
+                : (int)GiaPhaConnectorPathType.Orthogonal;
             settings.CardMinWidthCm = cardMinWidthCm;
             settings.CardMaxWidthCm = cardMaxWidthCm;
             settings.CardPaddingCm = cardPaddingCm;

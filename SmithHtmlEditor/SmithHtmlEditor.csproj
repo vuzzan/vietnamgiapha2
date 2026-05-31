@@ -4,7 +4,9 @@
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <TargetFrameworks>net462;</TargetFrameworks>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <!-- COM MSHTML (WebBrowser) chỉ chạy ổn định bản 32-bit -->
+    <RuntimeIdentifier>win-x86</RuntimeIdentifier>
+    <PlatformTarget>x86</PlatformTarget>
 
     <RootNamespace>Smith.WPF.HtmlEditor</RootNamespace>
     <AssemblyName>Smith.WPF.HtmlEditor</AssemblyName>
@@ -24,8 +26,7 @@
       update to NetCore 3.0
       </PackageReleaseNotes>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <Platforms>AnyCPU;x86</Platforms>
-    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Platforms>x86</Platforms>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net462|AnyCPU'">

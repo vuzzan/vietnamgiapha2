@@ -70,11 +70,30 @@ namespace vietnamgiapha
 
         public static string GetFirstWord(string text)
         {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return "";
+            }
+
             var candidate = text.Trim();
             if (!candidate.Any(Char.IsWhiteSpace))
-                return text;
+            {
+                return candidate;
+            }
 
-            return candidate.Split(' ').FirstOrDefault();
+            return candidate.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+        }
+
+        /// <summary>So sánh họ (từ đầu tiên của tên) với họ tộc — không phân biệt hoa thường.</summary>
+        public static bool SameClanSurname(string personFullName, string clanSurname)
+        {
+            if (string.IsNullOrWhiteSpace(personFullName) || string.IsNullOrWhiteSpace(clanSurname))
+            {
+                return false;
+            }
+
+            string personHo = GetFirstWord(personFullName);
+            return string.Equals(personHo, clanSurname.Trim(), StringComparison.OrdinalIgnoreCase);
         }
         public static Level LoggerLevel(string logLevel)
         {

@@ -249,7 +249,8 @@ namespace vietnamgiapha.GiaPhaRender
         public static void ExportResultToSvg(
             string filePath,
             GiaPhaRenderResult result,
-            Func<int, PhaDoBoxStyle> boxStyleForFamilyId = null)
+            Func<int, PhaDoBoxStyle> boxStyleForFamilyId = null,
+            PhaDoTitleStyle titleStyle = null)
         {
             if (string.IsNullOrWhiteSpace(filePath))
             {
@@ -260,7 +261,7 @@ namespace vietnamgiapha.GiaPhaRender
                 throw new ArgumentNullException(nameof(result));
             }
 
-            GiaPhaSvgExportService.Export(filePath, result, boxStyleForFamilyId);
+            GiaPhaSvgExportService.Export(filePath, result, boxStyleForFamilyId, titleStyle);
         }
 
         /// <summary>In — khổ giấy = đúng kích thước cây (custom page size).</summary>

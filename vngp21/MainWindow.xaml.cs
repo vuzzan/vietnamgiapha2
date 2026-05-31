@@ -1,6 +1,7 @@
 ﻿using MahApps.Metro.Controls;
 using MahApps.Metro.Controls.Dialogs;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media.Media3D;
 using System.Windows.Media;
@@ -34,6 +35,7 @@ using GalaSoft.MvvmLight.Command;
 using Path = System.IO.Path;
 using System.Text;
 using System.ComponentModel;
+using System.Globalization;
 using System.Windows.Data;
 
 namespace vietnamgiapha
@@ -47,18 +49,72 @@ namespace vietnamgiapha
         private readonly MainWindowViewModel viewModel;
 
         private double _phaDoZoom = 1.0;
+        /// <summary>Zoom tối thiểu thủ công; zoom-to-fit có thể nhỏ hơn khi phả rất rộng.</summary>
         private const double PhaDoZoomMin = 0.15;
+        private const double PhaDoZoomFitMin = 0.01;
         private const double PhaDoZoomMax = 5.0;
         private const double PhaDoZoomStep = 0.15;
-        private const int PhaDoTabIndex = 6;
+        private const int PhaDoTabIndex = 3;
+
+        private readonly GiaPhaUndoStack _giaPhaUndo = new GiaPhaUndoStack();
+        private bool _giaPhaUndoRestoring;
+
+        /// <summary>Ánh xạ chỉ số tab cũ (8 tab) sang tab mới sau khi gom Tư liệu.</summary>
+        private static int MapLegacyMainTabIndex(int legacyIndex)
+        {
+            if (legacyIndex >= 2 && legacyIndex <= 5)
+            {
+                return 2;
+            }
+
+            if (legacyIndex >= 6)
+            {
+                return legacyIndex - 3;
+            }
+
+            return legacyIndex;
+        }
         /// <summary>Dưới ngưỡng này không tách phả con (một phả đủ nhỏ).</summary>
         private const int PhaDoMinFamilyCountToSplitPhaiCon = 100;
         /// <summary>Mục tiêu mềm: mỗi phả con quanh mức này (cho phép dao động).</summary>
-        private const int PhaDoTargetFamilyCountPerSubtree = 300;
+        private const int PhaDoTargetFamilyCountPerSubtree = 200;
         private GiaPhaRenderResult _phaDoRenderedLayout;
+        /// <summary>Layout cây đầy đủ — chỉ dùng ước lượng đời tách Root0 khi chưa phân tích (không dùng layout đã scope).</summary>
+        private GiaPhaRenderResult _phaDoFullTreeLayoutSnapshot;
+        private int _phaDoFullTreeLayoutSnapshotRootId;
         private GiaPhaRenderOptions _phaDoCurrentOptions;
 
+        /// <summary>Hai mode tương tác chính trên phả đồ — chọn/di box hoặc kéo cuộn canvas.</summary>
+        private enum PhaDoInteractionMode { Select, Pan }
+        private PhaDoInteractionMode _phaDoInteractionMode = PhaDoInteractionMode.Select;
+
+        // ── Trạng thái select nhãn "Đời X" ────────────────────────────
+        private int _phaDoSelectedGenLevel = -1;   // -1 = không chọn
+        private const string GenLabelSelectionTag = "__PhaDoGenLabelSelection";
+
+        // ── Trạng thái select dòng text bên trong title block ──────────
+        /// <summary>Dòng text title: 0–3 (tối đa 4 dòng), -1 = chỉ chọn khối title.</summary>
+        private int _phaDoTitleSelectedLine = -1;
+
+        // ── Trạng thái select + resize title block ─────────────────────
+        private bool _phaDoTitleSelected;
+        private bool _phaDoTitleIsResizing;
+        private PhaDoResizeCorner _phaDoTitleResizeCorner;
+        private Point  _phaDoTitleResizeStartPoint;
+        private double _phaDoTitleResizeStartWmm;
+        private double _phaDoTitleResizeStartHmm;
+        private double _phaDoTitleResizeStartLeftMm;
+        private double _phaDoTitleResizeStartTopMm;
+
+        /// <summary>Kéo di chuyển cả khối title khi đã chọn (không phải kéo từng dòng chữ).</summary>
+        private bool _phaDoIsDraggingTitleBlock;
+        private Point _phaDoTitleBlockDragStartPoint;
+        private double _phaDoTitleBlockDragStartLeftMm;
+        private double _phaDoTitleBlockDragStartTopMm;
+        private bool _phaDoTitleBlockMovedWhileDrag;
+
         private bool _phaDoIsDragging;
+        private bool _phaDoIsMarqueeSelecting;
         private bool _phaDoIsPanning;
         private bool _phaDoPanMoved;
         private MouseButton _phaDoPanMouseButton;
@@ -67,7 +123,8 @@ namespace vietnamgiapha
         private double _phaDoPanStartScrollV;
         private int _phaDoDraggingFamilyId;
         private int _phaDoSelectedFamilyId;
-        private int _phaDoSelectedPersonSlot = -1;
+        /// <summary>null = chỉ chọn ô; -1 = chữ Đời; 0+ = người chính/phụ.</summary>
+        private int? _phaDoSelectedPersonSlot;
         private bool _phaDoIsDraggingPerson;
         private int _phaDoDraggingPersonFamilyId;
         private int _phaDoDraggingPersonSlot;
@@ -77,9 +134,32 @@ namespace vietnamgiapha
         private double _phaDoPersonNaturalTopPx;
         private double _phaDoPersonDragStartDeltaXmm;
         private double _phaDoPersonDragStartDeltaYmm;
+        /// <summary>Chờ kéo text: mousedown chọn text, move vượt ngưỡng mới bắt drag (1 thao tác).</summary>
+        private bool _phaDoPendingPersonDrag;
+        private int _phaDoPendingPersonFamilyId;
+        private int _phaDoPendingPersonSlot;
+        private FrameworkElement _phaDoPendingPersonElement;
+        private Point _phaDoPendingPersonDragStart;
+        /// <summary>Chờ kéo dòng chữ title — tương tự text trong ô gia đình.</summary>
+        private bool _phaDoPendingTitleDrag;
+        private int _phaDoPendingTitleLine;
+        private FrameworkElement _phaDoPendingTitleElement;
+        private Point _phaDoPendingTitleDragStart;
+        private bool _phaDoIsDraggingTitleLine;
+        private int _phaDoDraggingTitleLine;
+        private FrameworkElement _phaDoDraggingTitleElement;
+        private Point _phaDoTitleLineDragStartCanvas;
+        private double _phaDoTitleLineNaturalLeftPx;
+        private double _phaDoTitleLineNaturalTopPx;
+        private double _phaDoTitleLineDragStartDeltaXmm;
+        private double _phaDoTitleLineDragStartDeltaYmm;
         private Point _phaDoDragStartPoint;
         private double _phaDoDragStartNodeXmm;
         private bool _phaDoMouseMovedWhileDrag;
+        private readonly HashSet<int> _phaDoMultiSelectedFamilyIds = new HashSet<int>();
+        private readonly Dictionary<int, double> _phaDoDragStartXmmByFamilyId = new Dictionary<int, double>();
+        private Rectangle _phaDoMarqueeRect;
+        private Point _phaDoMarqueeStartPoint;
         /// <summary>Kiểu tùy chỉnh từng ô: nền + chữ người chính + chữ người phụ.</summary>
         private readonly Dictionary<int, PhaDoBoxStyle> _phaDoBoxStyleByFamilyId = new Dictionary<int, PhaDoBoxStyle>();
         private PhaDoTitleStyle _phaDoTitleStyle = new PhaDoTitleStyle();
@@ -100,6 +180,26 @@ namespace vietnamgiapha
 
         private bool _phaDoImmersive;
         private bool _phaDoImmersivePaneWasOpen = true;
+        private bool _phaDoToolboxExpanded;
+        private const double PhaDoToolboxWidthCollapsed = 52;
+        private const double PhaDoToolboxWidthExpanded = 176;
+        private bool _treePaneImmersive;
+        private double _treePaneImmersiveSavedOpenPaneLength = 300;
+        private double _treePaneImmersiveSavedCompactPaneLength = 48;
+        private double _treePaneImmersiveSavedMaximumOpenPaneLength = 1000;
+        private SplitViewDisplayMode _treePaneImmersiveSavedDisplayMode = SplitViewDisplayMode.Inline;
+        private GridLength _treePaneImmersiveSavedLogRowHeight = new GridLength(200);
+        private FrameworkElement _treePaneSplitViewContentHost;
+        private UIElement _treePaneSplitViewResizeThumb;
+        private Visibility _treePaneSplitViewResizeThumbSavedVisibility = Visibility.Visible;
+        private Grid _treePaneSplitViewRootGrid;
+        private GridLength _treePaneSplitViewSavedPaneColumnWidth;
+        private GridLength _treePaneSplitViewSavedContentColumnWidth;
+        private bool _treePaneSplitViewColumnsCaptured;
+
+        private FamilyViewModel _treeDragSourceFamily;
+        private Point _treeDragStartPoint;
+        private bool _treeDragStarted;
         private FrameworkElement _phaDoCachedTabStrip;
         private bool _isRestoringWorkspace;
         private bool _personGridIsRefreshing;
@@ -119,7 +219,26 @@ namespace vietnamgiapha
             MessagePackSerializerOptions.Standard.WithResolver(ContractlessStandardResolverAllowPrivate.Instance);
         public ICollectionView PersonGridView { get; private set; }
         private readonly ObservableCollection<PhaDoRenderScopeItem> _phaDoRenderScopes = new ObservableCollection<PhaDoRenderScopeItem>();
+        private readonly ObservableCollection<PhaDoCardLayoutItem> _phaDoCardLayoutItems = new ObservableCollection<PhaDoCardLayoutItem>();
         private int _phaDoRenderScopeSourceRootId;
+        /// <summary>Danh sách scope đã được bổ sung sau Phân tích phả (Root1, Root2...).</summary>
+        private bool _phaDoRenderScopesFromAnalyze;
+        /// <summary>Đời cao nhất lúc phân tích — dùng chọn mốc tách Root1→Root2… (cùng EffectiveMax như report).</summary>
+        private int _phaDoAnalyzeMaxFamilyLevel = 30;
+        /// <summary>Đời cao nhất của Root0 khi chưa phân tích — khớp mặc định sau phân tích (1–4).</summary>
+        private const int PhaDoDefaultRoot0MaxGeneration = 4;
+        private int _phaDoScopeHighlightStartLevel;
+        private int _phaDoScopeHighlightRootIndex;
+        private string _phaDoScopeHighlightLabel;
+        private bool _phaDoScopeExpandSmallBranchesAtStopLevel;
+        private int _phaDoScopeMinBranchForStopLevel;
+        private HashSet<int> _phaDoScopeStopFamilyIdsAtMaxLevel = new HashSet<int>();
+        private bool _phaDoShowScopeSummaryNote;
+        private string _phaDoScopeStartFamilyName;
+        private readonly HashSet<int> _phaConFamilyIds = new HashSet<int>();
+        private readonly HashSet<int> _phaConStopFamilyIds = new HashSet<int>();
+        private readonly Dictionary<int, (double WidthCm, double HeightCm)> _phaConBoundsCmByFamilyId =
+            new Dictionary<int, (double WidthCm, double HeightCm)>();
 
         /// <summary>Một lựa chọn vẽ ở toolbar: Toàn phả hoặc một nhánh phả con.</summary>
         private sealed class PhaDoRenderScopeItem
@@ -129,11 +248,47 @@ namespace vietnamgiapha
             public FamilyViewModel RootFamily { get; set; }
             public bool IsWholeTree { get; set; }
             public int MaxGenerationInclusive { get; set; } = int.MaxValue;
+            public int HighlightStartLevel { get; set; }
+            public int HighlightStartRootIndex { get; set; }
+            public string HighlightStartLabel { get; set; }
+            public bool ExpandSmallBranchesAtStopLevel { get; set; }
+            public int MinBranchForStopLevel { get; set; }
+            public HashSet<int> StopFamilyIdsAtMaxLevel { get; set; }
+
+            /// <summary>Scope Root0 mặc định khi chưa bấm Phân tích phả — cần bổ sung tham số tách trước khi vẽ.</summary>
+            public bool IsDefaultRoot0WithoutAnalyze { get; set; }
+
+            /// <summary>Mô tả luồng vẽ: Root0→Root1, Root1→Root2, trang lá…</summary>
+            public string RenderPlanSummary { get; set; }
+
+            /// <summary>Thứ tự mục trên combo toolbar (0 = Toàn phả).</summary>
+            public int ComboIndexHint { get; set; }
+
+            /// <summary>Số GD ước lượng sau clone scope (khớp ComputeLayoutAsync).</summary>
+            public int LayoutFamilyCountEstimate { get; set; }
 
             public override string ToString()
             {
                 return Label ?? "";
             }
+        }
+
+        /// <summary>Một kiểu chữ ô phả đồ: ngang / dọc / dọc theo từ.</summary>
+        private sealed class PhaDoCardLayoutItem
+        {
+            public int Index { get; set; }
+            public string Label { get; set; }
+
+            public override string ToString()
+            {
+                return Label ?? "";
+            }
+        }
+
+        /// <summary>Tag marker gắn vào đúng gia đình để kéo/refresh thì text đi theo box.</summary>
+        private sealed class PhaDoScopeStartMarkerTag
+        {
+            public int FamilyId { get; set; }
         }
 
         /// <summary>Xóa cache tab Người khi đổi file gia phả / cây mới.</summary>
@@ -189,6 +344,29 @@ namespace vietnamgiapha
             return options;
         }
 
+        /// <summary>
+        /// Điền dòng 3 (số GĐ · số người) và dòng 4 (W cm × H cm) vào options
+        /// dựa trên kết quả layout — phải gọi sau ComputeLayout, trước PaintToCanvas.
+        /// </summary>
+        private void PopulateTitleAutoLines(GiaPhaRenderResult result)
+        {
+            if (result?.Options == null) return;
+
+            var nodes = result.Nodes;
+            int familyCount = nodes?.Count(n => n?.Family != null) ?? 0;
+            int personCount = nodes?.Sum(n => n?.Family?.ListPerson?.Count ?? 0) ?? 0;
+
+            result.Options.TitleLine3 = familyCount > 0
+                ? $"{familyCount} gia đình · {personCount} người"
+                : "";
+
+            double wCm = result.ContentWidthMm  / 10.0;
+            double hCm = result.ContentHeightMm / 10.0;
+            result.Options.TitleLine4 = (wCm > 0 && hCm > 0)
+                ? $"{wCm:0.#} cm × {hCm:0.#} cm"
+                : "";
+        }
+
         private void ApplyPhaDoTitleStyleToOptions(GiaPhaRenderOptions options)
         {
             if (options == null)
@@ -209,17 +387,28 @@ namespace vietnamgiapha
                 gp?.RF_OTAI);
         }
 
-        /// <summary>Đọc radio kiểu chữ: 0 Ngang, 1 Dọc, 2 Dọc theo từ.</summary>
-        private int GetPhaDoCardLayoutListIndex()
+        private void InitPhaDoCardLayoutCombo()
         {
-            if (phaDoLayoutDocTu?.IsChecked == true)
+            _phaDoCardLayoutItems.Clear();
+            _phaDoCardLayoutItems.Add(new PhaDoCardLayoutItem { Index = 0, Label = "Chữ ngang" });
+            _phaDoCardLayoutItems.Add(new PhaDoCardLayoutItem { Index = 1, Label = "Chữ dọc" });
+            _phaDoCardLayoutItems.Add(new PhaDoCardLayoutItem { Index = 2, Label = "Dọc theo từ" });
+            if (phaDoCardLayoutCombo == null)
             {
-                return 2;
+                return;
             }
 
-            if (phaDoLayoutDoc?.IsChecked == true)
+            phaDoCardLayoutCombo.ItemsSource = _phaDoCardLayoutItems;
+            phaDoCardLayoutCombo.SelectedIndex = 0;
+            UpdatePhaDoCardLayoutComboToolTip();
+        }
+
+        /// <summary>Đọc combo kiểu chữ: 0 Ngang, 1 Dọc, 2 Dọc theo từ.</summary>
+        private int GetPhaDoCardLayoutListIndex()
+        {
+            if (phaDoCardLayoutCombo?.SelectedItem is PhaDoCardLayoutItem item)
             {
-                return 1;
+                return item.Index;
             }
 
             return 0;
@@ -227,15 +416,44 @@ namespace vietnamgiapha
 
         private void SetPhaDoCardLayoutIndex(int index)
         {
-            if (phaDoLayoutNgang == null)
+            if (phaDoCardLayoutCombo == null || _phaDoCardLayoutItems.Count == 0)
             {
                 return;
             }
 
             index = Math.Max(0, Math.Min(2, index));
-            phaDoLayoutNgang.IsChecked = index == 0;
-            phaDoLayoutDoc.IsChecked = index == 1;
-            phaDoLayoutDocTu.IsChecked = index == 2;
+            for (int i = 0; i < _phaDoCardLayoutItems.Count; i++)
+            {
+                if (_phaDoCardLayoutItems[i].Index == index)
+                {
+                    phaDoCardLayoutCombo.SelectedIndex = i;
+                    UpdatePhaDoCardLayoutComboToolTip();
+                    return;
+                }
+            }
+        }
+
+        private void PhaDoCardLayoutCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            UpdatePhaDoCardLayoutComboToolTip();
+        }
+
+        private void UpdatePhaDoCardLayoutComboToolTip()
+        {
+            if (phaDoCardLayoutCombo == null)
+            {
+                return;
+            }
+
+            if (phaDoCardLayoutCombo.SelectedItem is PhaDoCardLayoutItem item
+                && !string.IsNullOrWhiteSpace(item.Label))
+            {
+                phaDoCardLayoutCombo.ToolTip = "Kiểu chữ: " + item.Label;
+            }
+            else
+            {
+                phaDoCardLayoutCombo.ToolTip = "Kiểu chữ trong ô gia đình";
+            }
         }
 
         private void ApplySelectedPhaDoCardLayoutMode(GiaPhaRenderOptions options)
@@ -283,9 +501,9 @@ namespace vietnamgiapha
         {
             switch (index)
             {
-                case 1: return "thẻ dọc từng ký tự";
-                case 2: return "thẻ dọc theo từ (Word)";
-                default: return "thẻ ngang";
+                case 1: return "Chữ dọc";
+                case 2: return "Dọc theo từ";
+                default: return "Chữ ngang";
             }
         }
 
@@ -310,6 +528,23 @@ namespace vietnamgiapha
             if (tag is PhaDoBoxBackgroundTag bgTag)
             {
                 return bgTag.Family?.familyInfo?.FamilyId ?? 0;
+            }
+
+            if (tag is GiaPhaRender.PhaDoBoxZoneTag zoneTag)
+            {
+                return zoneTag.FamilyId;
+            }
+
+            if (tag is PhaDoScopeStartMarkerTag markerTag)
+            {
+                return markerTag.FamilyId;
+            }
+
+            if (tag is GiaPhaRender.PhaDoZoneSvgPreviewTag previewTag
+                && !previewTag.IsTitleBlock
+                && previewTag.FamilyId > 0)
+            {
+                return previewTag.FamilyId;
             }
 
             var family = tag as FamilyViewModel;
@@ -352,27 +587,180 @@ namespace vietnamgiapha
             return node != null;
         }
 
-        /// <summary>Chỉ viền chọn trên ô phả đồ (không đụng TreeView / ô Text).</summary>
-        private void SelectPhaDoBoxOutline(int familyId, int? personSlot = null)
+        /// <summary>Hit vào nền ô / zone / handle — không tính click trên text người.</summary>
+        private bool TryResolveFamilyBoxBackgroundHit(
+            DependencyObject source,
+            out int familyId,
+            out GiaPhaPlacedNode node)
+        {
+            familyId = 0;
+            node = null;
+            if (TryResolvePersonElementHit(source, out _, out _, out _))
+            {
+                return false;
+            }
+
+            return TryResolveFamilyFromCanvasHit(source, out familyId, out node);
+        }
+
+        /// <summary>Chỉ chọn ô gia đình (viền + toolbar SVG), không chọn text bên trong.</summary>
+        private void SelectPhaDoBoxOutline(int familyId)
         {
             if (familyId <= 0)
             {
                 return;
             }
 
-            bool familyChanged = _phaDoSelectedFamilyId != familyId;
+            ClearTitleSelection();
+            ClearGenLabelSelection();
+            CancelPendingPersonDrag();
+            ClearPersonSelectionHighlight();
+
             _phaDoSelectedFamilyId = familyId;
-            if (personSlot.HasValue)
-            {
-                _phaDoSelectedPersonSlot = personSlot.Value;
-            }
-            else if (familyChanged)
-            {
-                _phaDoSelectedPersonSlot = -1;
-            }
+            _phaDoSelectedPersonSlot = null;
 
             DrawSelectionOverlay(familyId);
+            DrawMultiSelectionOverlays();
+            DrawDirectChildHighlights(familyId);
+            BringScopeStartMarkersToFront();
             UpdatePhaDoSelectedBoxSizeStatus(familyId);
+            SyncPhaDoToolbarFromBoxStyle(familyId);
+        }
+
+        /// <summary>Chỉ chọn text trong ô — không gọi logic toolbar/viền box đầy đủ.</summary>
+        private void SelectPhaDoFamilyText(int familyId, int personSlot)
+        {
+            if (familyId <= 0)
+            {
+                return;
+            }
+
+            ClearTitleSelection();
+            ClearGenLabelSelection();
+            CancelPendingPersonDrag();
+
+            _phaDoSelectedFamilyId = familyId;
+            _phaDoSelectedPersonSlot = personSlot;
+
+            // Chỉ highlight phần chữ + toolbar font (không bật nhóm SVG box)
+            ClearSelectionOverlay();
+            DrawMultiSelectionOverlays();
+            UpdatePersonSelectionHighlight();
+            UpdatePhaDoSelectedBoxSizeStatus(familyId);
+            SyncToolbarFromFamilyPersonText(familyId, personSlot);
+        }
+
+        /// <summary>Vẽ viền cho các box đang multi-select (trừ box primary đã có viền dashed).</summary>
+        private void DrawMultiSelectionOverlays()
+        {
+            var old = theCanvas.Children
+                .OfType<FrameworkElement>()
+                .Where(fe => Equals(fe.Tag, "__PhaDoMultiSelectionOverlay"))
+                .Cast<UIElement>()
+                .ToList();
+            foreach (var el in old)
+            {
+                theCanvas.Children.Remove(el);
+            }
+
+            foreach (int familyId in _phaDoMultiSelectedFamilyIds)
+            {
+                if (familyId <= 0 || familyId == _phaDoSelectedFamilyId)
+                {
+                    continue;
+                }
+                if (!TryGetFamilyBackgroundBounds(familyId, out double left, out double top, out double boxW, out double boxH))
+                {
+                    continue;
+                }
+
+                var outline = new Rectangle
+                {
+                    Width = Math.Max(1, boxW + 3),
+                    Height = Math.Max(1, boxH + 3),
+                    Stroke = new SolidColorBrush(Color.FromRgb(38, 122, 255)),
+                    StrokeThickness = 1.2,
+                    Fill = new SolidColorBrush(Color.FromArgb(45, 38, 122, 255)),
+                    IsHitTestVisible = false,
+                    Tag = "__PhaDoMultiSelectionOverlay"
+                };
+                Canvas.SetLeft(outline, left - 1.5);
+                Canvas.SetTop(outline, top - 1.5);
+                Panel.SetZIndex(outline, 998);
+                theCanvas.Children.Add(outline);
+
+                // Vẽ 4 góc để user thấy rõ object đang nằm trong nhóm chọn.
+                const double corner = 7.0;
+                void AddCorner(double x, double y)
+                {
+                    var c = new Rectangle
+                    {
+                        Width = corner,
+                        Height = corner,
+                        Fill = new SolidColorBrush(Color.FromRgb(38, 122, 255)),
+                        Stroke = Brushes.White,
+                        StrokeThickness = 0.9,
+                        RadiusX = 1.2,
+                        RadiusY = 1.2,
+                        IsHitTestVisible = false,
+                        Tag = "__PhaDoMultiSelectionOverlay"
+                    };
+                    Canvas.SetLeft(c, x - corner / 2.0);
+                    Canvas.SetTop(c, y - corner / 2.0);
+                    Panel.SetZIndex(c, 999);
+                    theCanvas.Children.Add(c);
+                }
+
+                double x0 = left - 1.5;
+                double y0 = top - 1.5;
+                double x1 = left + boxW + 1.5;
+                double y1 = top + boxH + 1.5;
+                AddCorner(x0, y0);
+                AddCorner(x1, y0);
+                AddCorner(x0, y1);
+                AddCorner(x1, y1);
+            }
+        }
+
+        /// <summary>Xóa toàn bộ trạng thái chọn box (single + multi) trên canvas phả đồ.</summary>
+        private void ClearTitleSelection()
+        {
+            CancelPendingTitleDrag();
+            if (_phaDoIsDraggingTitleLine)
+            {
+                EndTitleLineDrag();
+            }
+
+            if (_phaDoIsDraggingTitleBlock)
+            {
+                EndTitleBlockDrag();
+            }
+
+            _phaDoTitleSelected = false;
+            _phaDoTitleSelectedLine = -1;
+            ClearTitleLineHighlight();
+            ClearTitleSelectionOverlay();
+            HideContextToolbar();
+        }
+
+        /// <summary>Xóa trạng thái chọn nhãn "Đời X" và overlay tương ứng.</summary>
+        private void ClearGenLabelSelection()
+        {
+            _phaDoSelectedGenLevel = -1;
+            ClearGenLabelSelectionOverlay();
+        }
+
+        private void ClearPhaDoBoxSelections()
+        {
+            CancelPendingPersonDrag();
+            _phaDoSelectedFamilyId = 0;
+            _phaDoSelectedPersonSlot = null;
+            _phaDoMultiSelectedFamilyIds.Clear();
+            ClearSelectionOverlay();
+            DrawMultiSelectionOverlays();
+            ClearDirectChildHighlights();
+            UpdatePhaDoSelectedBoxSizeStatus(0);
+            HideContextToolbar();
         }
 
         private void UpdatePhaDoSelectedBoxSizeStatus(int familyId)
@@ -455,11 +843,20 @@ namespace vietnamgiapha
             DependencyObject cursor = source;
             while (cursor != null)
             {
-                if (cursor is FrameworkElement fe
-                    && fe.Tag is PhaDoBoxBackgroundTag bg
-                    && (bg.Family?.familyInfo?.FamilyId ?? 0) == familyId)
+                if (cursor is FrameworkElement fe)
                 {
-                    return true;
+                    if (fe.Tag is PhaDoBoxBackgroundTag bg
+                        && (bg.Family?.familyInfo?.FamilyId ?? 0) == familyId)
+                    {
+                        return true;
+                    }
+
+                    if (fe.Tag is GiaPhaRender.PhaDoZoneSvgPreviewTag p
+                        && !p.IsTitleBlock
+                        && p.FamilyId == familyId)
+                    {
+                        return true;
+                    }
                 }
 
                 cursor = VisualTreeHelper.GetParent(cursor);
@@ -575,15 +972,89 @@ namespace vietnamgiapha
             }
         }
 
-        private void UpdatePersonSelectionHighlight()
+        /// <summary>Bề rộng vùng chữ trong ô (box trừ padding hai bên).</summary>
+        private bool TryGetFamilyInnerContentWidthPx(int familyId, out double innerWidthPx, out double contentLeftPx)
         {
-            ClearPersonSelectionHighlight();
-            if (_phaDoSelectedFamilyId <= 0 || _phaDoSelectedPersonSlot < 0)
+            innerWidthPx = 0;
+            contentLeftPx = 0;
+            if (!TryGetFamilyBackgroundBounds(familyId, out double boxLeft, out _, out double boxW, out _))
+            {
+                return false;
+            }
+
+            double padPx = MmToPx(_phaDoCurrentOptions?.CardPaddingMm ?? 2);
+            contentLeftPx = boxLeft + padPx;
+            innerWidthPx = Math.Max(4, boxW - 2 * padPx);
+            return innerWidthPx > 0;
+        }
+
+        /// <summary>Cập nhật Width/MaxWidth của TextBlock người theo bề rộng ô (sau resize).</summary>
+        private void SyncFamilyPersonTextWidthsToBox(int familyId)
+        {
+            if (!TryGetFamilyInnerContentWidthPx(familyId, out double innerW, out _))
             {
                 return;
             }
 
-            var element = FindPersonVisual(_phaDoSelectedFamilyId, _phaDoSelectedPersonSlot);
+            foreach (var fe in theCanvas.Children.OfType<FrameworkElement>())
+            {
+                if (!(fe.Tag is PhaDoBoxVisualTag tag)
+                    || (tag.Family?.familyInfo?.FamilyId ?? 0) != familyId)
+                {
+                    continue;
+                }
+
+                if (tag.ElementKind != PhaDoBoxElementKind.Person
+                    && tag.ElementKind != PhaDoBoxElementKind.ExtraNote
+                    && tag.ElementKind != PhaDoBoxElementKind.GenerationLabel)
+                {
+                    continue;
+                }
+
+                if (fe is TextBlock tb)
+                {
+                    tb.Width = innerW;
+                    tb.MaxWidth = innerW;
+                    continue;
+                }
+
+                if (fe is StackPanel column)
+                {
+                    column.Width = innerW;
+                    foreach (var line in column.Children.OfType<TextBlock>())
+                    {
+                        line.Width = innerW;
+                        line.MaxWidth = innerW;
+                    }
+                }
+            }
+        }
+
+        private void RefreshFamilySelectionVisuals(int familyId)
+        {
+            if (_phaDoSelectedFamilyId != familyId)
+            {
+                return;
+            }
+
+            if (_phaDoSelectedPersonSlot.HasValue)
+            {
+                UpdatePersonSelectionHighlight();
+                return;
+            }
+
+            DrawSelectionOverlay(familyId);
+        }
+
+        private void UpdatePersonSelectionHighlight()
+        {
+            ClearPersonSelectionHighlight();
+            if (_phaDoSelectedFamilyId <= 0 || !_phaDoSelectedPersonSlot.HasValue)
+            {
+                return;
+            }
+
+            var element = FindPersonVisual(_phaDoSelectedFamilyId, _phaDoSelectedPersonSlot.Value);
             if (element == null)
             {
                 return;
@@ -602,31 +1073,59 @@ namespace vietnamgiapha
                 top = 0;
             }
 
-            double w = element.ActualWidth;
-            double h = element.ActualHeight;
-            if (w < 1 || h < 1)
+            if (!TryMeasurePersonTextSelectionBounds(element, out left, out top, out double w, out double h))
             {
-                element.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-                w = element.DesiredSize.Width;
-                h = element.DesiredSize.Height;
+                GetPersonElementSize(element, out w, out h);
             }
 
             const double pad = 2;
+            double boxW = Math.Max(4, w + pad * 2);
+            double boxH = Math.Max(4, h + pad * 2);
+            double x0 = left - pad;
+            double y0 = top - pad;
+
             var outline = new Rectangle
             {
-                Width = Math.Max(4, w + pad * 2),
-                Height = Math.Max(4, h + pad * 2),
-                Stroke = Brushes.DarkOrange,
+                Width = boxW,
+                Height = boxH,
+                Stroke = new SolidColorBrush(Color.FromRgb(30, 120, 220)),
                 StrokeThickness = 1.5,
-                StrokeDashArray = new DoubleCollection { 3, 2 },
-                Fill = Brushes.Transparent,
+                StrokeDashArray = new DoubleCollection { 4, 2 },
+                Fill = new SolidColorBrush(Color.FromArgb(30, 30, 120, 220)),
                 IsHitTestVisible = false,
                 Tag = "__PhaDoPersonSelection"
             };
-            Canvas.SetLeft(outline, left - pad);
-            Canvas.SetTop(outline, top - pad);
+            Canvas.SetLeft(outline, x0);
+            Canvas.SetTop(outline, y0);
             Panel.SetZIndex(outline, 1003);
             theCanvas.Children.Add(outline);
+
+            // 4 góc vuông — giống chọn text / resize nhỏ
+            const double handle = 7;
+            AddPersonTextSelectionHandle(x0, y0, handle);
+            AddPersonTextSelectionHandle(x0 + boxW, y0, handle);
+            AddPersonTextSelectionHandle(x0, y0 + boxH, handle);
+            AddPersonTextSelectionHandle(x0 + boxW, y0 + boxH, handle);
+        }
+
+        private void AddPersonTextSelectionHandle(double cornerX, double cornerY, double size)
+        {
+            var h = new Rectangle
+            {
+                Width = size,
+                Height = size,
+                Fill = Brushes.White,
+                Stroke = new SolidColorBrush(Color.FromRgb(30, 120, 220)),
+                StrokeThickness = 1.2,
+                RadiusX = 1,
+                RadiusY = 1,
+                IsHitTestVisible = false,
+                Tag = "__PhaDoPersonSelection"
+            };
+            Canvas.SetLeft(h, cornerX - size / 2.0);
+            Canvas.SetTop(h, cornerY - size / 2.0);
+            Panel.SetZIndex(h, 1004);
+            theCanvas.Children.Add(h);
         }
 
         private void GetPersonElementSize(FrameworkElement element, out double width, out double height)
@@ -640,6 +1139,140 @@ namespace vietnamgiapha
                 width = element.DesiredSize.Width;
                 height = element.DesiredSize.Height;
             }
+        }
+
+        /// <summary>Đo khung chọn quanh chữ — không dùng Width layout (= bề rộng ô).</summary>
+        private static bool TryMeasurePersonTextSelectionBounds(
+            FrameworkElement element,
+            out double leftPx,
+            out double topPx,
+            out double widthPx,
+            out double heightPx)
+        {
+            widthPx = 0;
+            heightPx = 0;
+            leftPx = Canvas.GetLeft(element);
+            topPx = Canvas.GetTop(element);
+            if (double.IsNaN(leftPx))
+            {
+                leftPx = 0;
+            }
+
+            if (double.IsNaN(topPx))
+            {
+                topPx = 0;
+            }
+
+            if (element is TextBlock tb)
+            {
+                if (!TryMeasureTextBlockTextSizePx(tb, out widthPx, out heightPx))
+                {
+                    return false;
+                }
+
+                double layoutW = tb.ActualWidth > 1
+                    ? tb.ActualWidth
+                    : (!double.IsNaN(tb.Width) && tb.Width > 0 ? tb.Width : widthPx);
+                if (tb.TextAlignment == TextAlignment.Center)
+                {
+                    leftPx += Math.Max(0, (layoutW - widthPx) / 2.0);
+                }
+                else if (tb.TextAlignment == TextAlignment.Right)
+                {
+                    leftPx += Math.Max(0, layoutW - widthPx);
+                }
+
+                return true;
+            }
+
+            if (element is StackPanel column)
+            {
+                double maxW = 0;
+                double totalH = 0;
+                foreach (var child in column.Children.OfType<TextBlock>())
+                {
+                    if (!TryMeasureTextBlockTextSizePx(child, out double lineW, out double lineH))
+                    {
+                        continue;
+                    }
+
+                    maxW = Math.Max(maxW, lineW);
+                    totalH += lineH;
+                }
+
+                if (maxW < 1 || totalH < 1)
+                {
+                    return false;
+                }
+
+                widthPx = maxW;
+                heightPx = totalH;
+                double colW = column.ActualWidth > 1
+                    ? column.ActualWidth
+                    : (!double.IsNaN(column.Width) && column.Width > 0 ? column.Width : maxW);
+                leftPx += Math.Max(0, (colW - widthPx) / 2.0);
+                return true;
+            }
+
+            element.UpdateLayout();
+            widthPx = element.ActualWidth;
+            heightPx = element.ActualHeight;
+            if (widthPx < 1 || heightPx < 1)
+            {
+                element.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                widthPx = element.DesiredSize.Width;
+                heightPx = element.DesiredSize.Height;
+            }
+
+            return widthPx > 0 && heightPx > 0;
+        }
+
+        private static bool TryMeasureTextBlockTextSizePx(TextBlock tb, out double widthPx, out double heightPx)
+        {
+            widthPx = 0;
+            heightPx = 0;
+            if (tb == null || string.IsNullOrWhiteSpace(tb.Text))
+            {
+                return false;
+            }
+
+            double maxLayoutW = double.PositiveInfinity;
+            if (!double.IsNaN(tb.Width) && tb.Width > 0)
+            {
+                maxLayoutW = tb.Width;
+            }
+            else if (!double.IsNaN(tb.MaxWidth) && tb.MaxWidth > 0)
+            {
+                maxLayoutW = tb.MaxWidth;
+            }
+
+            double pixelsPerDip = 1.0;
+            try
+            {
+                pixelsPerDip = VisualTreeHelper.GetDpi(tb).PixelsPerDip;
+            }
+            catch
+            {
+                pixelsPerDip = 1.0;
+            }
+
+            var formatted = new FormattedText(
+                tb.Text,
+                CultureInfo.CurrentUICulture,
+                FlowDirection.LeftToRight,
+                new Typeface(tb.FontFamily, tb.FontStyle, tb.FontWeight, tb.FontStretch),
+                tb.FontSize,
+                Brushes.Black,
+                pixelsPerDip);
+            if (maxLayoutW < double.PositiveInfinity)
+            {
+                formatted.MaxTextWidth = maxLayoutW;
+            }
+
+            // .NET 4.6: Width (không khoảng trắng cuối) — khớp PhaDoTitleBlockMetrics
+            widthPx = Math.Ceiling(formatted.Width);
+            heightPx = Math.Ceiling(formatted.Height);
+            return widthPx > 0.5 && heightPx > 0.5;
         }
 
         private void ApplyPersonOffsetClamped(
@@ -670,10 +1303,393 @@ namespace vietnamgiapha
             _phaDoBoxStyleByFamilyId[familyId] = style;
         }
 
-        private void BeginPersonDrag(MouseButtonEventArgs e, int familyId, int personSlot, FrameworkElement element)
+        /// <summary>Ghi nhận gesture kéo text — không đổi selection (caller đã chọn text).</summary>
+        private void QueuePersonTextDrag(int familyId, int personSlot, FrameworkElement element, Point canvasPoint)
         {
-            SelectPhaDoBoxOutline(familyId, personSlot);
+            CancelPendingPersonDrag();
 
+            _phaDoPendingPersonDrag = true;
+            _phaDoPendingPersonFamilyId = familyId;
+            _phaDoPendingPersonSlot = personSlot;
+            _phaDoPendingPersonElement = element;
+            _phaDoPendingPersonDragStart = canvasPoint;
+        }
+
+        /// <summary>MouseDown trên text trong ô — chỉ luồng text, không lẫn select box.</summary>
+        private void HandleFamilyBoxTextMouseDown(
+            MouseButtonEventArgs e,
+            int familyId,
+            int personSlot,
+            FrameworkElement element)
+        {
+            if (!_phaDoMultiSelectedFamilyIds.Contains(familyId))
+            {
+                _phaDoMultiSelectedFamilyIds.Clear();
+                _phaDoMultiSelectedFamilyIds.Add(familyId);
+            }
+
+            SelectPhaDoFamilyText(familyId, personSlot);
+            QueuePersonTextDrag(familyId, personSlot, element, e.GetPosition(theCanvas));
+            e.Handled = true;
+        }
+
+        private void QueueTitleLineDrag(int lineIndex, FrameworkElement element, Point canvasPoint)
+        {
+            CancelPendingTitleDrag();
+            _phaDoPendingTitleDrag = true;
+            _phaDoPendingTitleLine = lineIndex;
+            _phaDoPendingTitleElement = element;
+            _phaDoPendingTitleDragStart = canvasPoint;
+        }
+
+        /// <summary>MouseDown trên dòng chữ khi khối title đã chọn — chỉ luồng text (chọn dòng + chờ kéo).</summary>
+        private void HandleTitleTextMouseDown(MouseButtonEventArgs e, int lineIndex, FrameworkElement element)
+        {
+            SelectTitleTextLine(lineIndex);
+            QueueTitleLineDrag(lineIndex, element, e.GetPosition(theCanvas));
+            e.Handled = true;
+        }
+
+        private void CancelPendingTitleDrag()
+        {
+            _phaDoPendingTitleDrag = false;
+            _phaDoPendingTitleLine = -1;
+            _phaDoPendingTitleElement = null;
+        }
+
+        private void TryStartPendingTitleDrag(Point canvasPoint)
+        {
+            if (!_phaDoPendingTitleDrag || _phaDoIsDraggingTitleLine || _phaDoPendingTitleElement == null)
+            {
+                return;
+            }
+
+            var delta = canvasPoint - _phaDoPendingTitleDragStart;
+            if (Math.Abs(delta.X) < 3 && Math.Abs(delta.Y) < 3)
+            {
+                return;
+            }
+
+            int lineIndex = _phaDoPendingTitleLine;
+            var element = _phaDoPendingTitleElement;
+            Point start = _phaDoPendingTitleDragStart;
+            CancelPendingTitleDrag();
+            BeginTitleLineDrag(lineIndex, element, start);
+            UpdateTitleLineDrag(canvasPoint);
+        }
+
+        private PhaDoPersonLayoutOffset GetTitleLineOffset(int lineIndex)
+        {
+            if (_phaDoTitleStyle?.LineOffsetsByIndex != null
+                && _phaDoTitleStyle.LineOffsetsByIndex.TryGetValue(lineIndex, out var offset)
+                && offset != null)
+            {
+                return offset;
+            }
+
+            return new PhaDoPersonLayoutOffset();
+        }
+
+        private void SetTitleLineOffset(int lineIndex, double deltaXmm, double deltaYmm)
+        {
+            if (_phaDoTitleStyle == null)
+            {
+                _phaDoTitleStyle = new PhaDoTitleStyle();
+            }
+
+            if (_phaDoTitleStyle.LineOffsetsByIndex == null)
+            {
+                _phaDoTitleStyle.LineOffsetsByIndex = new Dictionary<int, PhaDoPersonLayoutOffset>();
+            }
+
+            if (Math.Abs(deltaXmm) < 0.01 && Math.Abs(deltaYmm) < 0.01)
+            {
+                _phaDoTitleStyle.LineOffsetsByIndex.Remove(lineIndex);
+            }
+            else
+            {
+                _phaDoTitleStyle.LineOffsetsByIndex[lineIndex] = new PhaDoPersonLayoutOffset
+                {
+                    DeltaXmm = deltaXmm,
+                    DeltaYmm = deltaYmm
+                };
+            }
+        }
+
+        private void ApplyTitleLineOffsets()
+        {
+            if (_phaDoTitleStyle?.LineOffsetsByIndex == null || _phaDoTitleStyle.LineOffsetsByIndex.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var child in theCanvas.Children.OfType<FrameworkElement>())
+            {
+                if (child.Tag is PhaDoTitleTextLineTag tag
+                    && _phaDoTitleStyle.LineOffsetsByIndex.TryGetValue(tag.LineIndex, out var offset)
+                    && offset != null)
+                {
+                    double left = Canvas.GetLeft(child);
+                    double top = Canvas.GetTop(child);
+                    if (double.IsNaN(left))
+                    {
+                        left = 0;
+                    }
+
+                    if (double.IsNaN(top))
+                    {
+                        top = 0;
+                    }
+
+                    Canvas.SetLeft(child, left + MmToPxRender(offset.DeltaXmm));
+                    Canvas.SetTop(child, top + MmToPxRender(offset.DeltaYmm));
+                }
+            }
+        }
+
+        private bool TryGetTitleBlockBoundsPx(out double leftPx, out double topPx, out double widthPx, out double heightPx)
+        {
+            leftPx = topPx = widthPx = heightPx = 0;
+            if (theCanvas == null)
+            {
+                return false;
+            }
+
+            // Ưu tiên hit rect trên canvas — khớp vùng kéo/select thực tế
+            var hitRect = theCanvas.Children
+                .OfType<FrameworkElement>()
+                .FirstOrDefault(fe => fe.Tag is PhaDoTitleHitTag);
+            if (hitRect != null)
+            {
+                leftPx = Canvas.GetLeft(hitRect);
+                topPx = Canvas.GetTop(hitRect);
+                if (double.IsNaN(leftPx))
+                {
+                    leftPx = 0;
+                }
+
+                if (double.IsNaN(topPx))
+                {
+                    topPx = 0;
+                }
+
+                if (TryGetFrameworkElementSizePx(hitRect, out widthPx, out heightPx))
+                {
+                    return true;
+                }
+            }
+
+            if (_phaDoCurrentOptions == null || _phaDoRenderedLayout == null)
+            {
+                return false;
+            }
+
+            var layout = PhaDoTitleBlockMetrics.Measure(_phaDoCurrentOptions, GetPhaDoRenderDpi());
+            if (layout.WidthMm < 0.1 || layout.HeightMm < 0.1)
+            {
+                return false;
+            }
+
+            leftPx = MmToPxRender(layout.LeftMm);
+            topPx = MmToPxRender(layout.TopMm);
+            widthPx = MmToPxRender(layout.WidthMm);
+            heightPx = MmToPxRender(layout.HeightMm);
+            return true;
+        }
+
+        private void ApplyTitleLineOffsetClamped(
+            int lineIndex,
+            FrameworkElement element,
+            double deltaXmm,
+            double deltaYmm)
+        {
+            if (!TryGetTitleBlockBoundsPx(out double boxLeft, out double boxTop, out double boxW, out double boxH))
+            {
+                return;
+            }
+
+            GetPersonElementSize(element, out double elW, out double elH);
+            double newLeft = _phaDoTitleLineNaturalLeftPx + MmToPxRender(deltaXmm);
+            double newTop = _phaDoTitleLineNaturalTopPx + MmToPxRender(deltaYmm);
+            newLeft = Math.Max(boxLeft, Math.Min(boxLeft + boxW - elW, newLeft));
+            newTop = Math.Max(boxTop, Math.Min(boxTop + boxH - elH, newTop));
+
+            Canvas.SetLeft(element, newLeft);
+            Canvas.SetTop(element, newTop);
+
+            deltaXmm = PxToMmRender(newLeft - _phaDoTitleLineNaturalLeftPx);
+            deltaYmm = PxToMmRender(newTop - _phaDoTitleLineNaturalTopPx);
+            SetTitleLineOffset(lineIndex, deltaXmm, deltaYmm);
+        }
+
+        private void BeginTitleLineDrag(int lineIndex, FrameworkElement element, Point canvasStart)
+        {
+            var offset = GetTitleLineOffset(lineIndex);
+            double left = Canvas.GetLeft(element);
+            double top = Canvas.GetTop(element);
+            if (double.IsNaN(left))
+            {
+                left = 0;
+            }
+
+            if (double.IsNaN(top))
+            {
+                top = 0;
+            }
+
+            _phaDoIsDraggingTitleLine = true;
+            _phaDoDraggingTitleLine = lineIndex;
+            _phaDoDraggingTitleElement = element;
+            _phaDoTitleLineNaturalLeftPx = left - MmToPxRender(offset.DeltaXmm);
+            _phaDoTitleLineNaturalTopPx = top - MmToPxRender(offset.DeltaYmm);
+            _phaDoTitleLineDragStartCanvas = canvasStart;
+            _phaDoTitleLineDragStartDeltaXmm = offset.DeltaXmm;
+            _phaDoTitleLineDragStartDeltaYmm = offset.DeltaYmm;
+            theCanvas.CaptureMouse();
+            theCanvas.Cursor = Cursors.SizeAll;
+        }
+
+        private void UpdateTitleLineDrag(Point canvasPoint)
+        {
+            if (!_phaDoIsDraggingTitleLine || _phaDoDraggingTitleElement == null)
+            {
+                return;
+            }
+
+            var delta = GetPhaDoCanvasDeltaMmRender(canvasPoint, _phaDoTitleLineDragStartCanvas);
+            double newDeltaX = _phaDoTitleLineDragStartDeltaXmm + delta.X;
+            double newDeltaY = _phaDoTitleLineDragStartDeltaYmm + delta.Y;
+            ApplyTitleLineOffsetClamped(
+                _phaDoDraggingTitleLine,
+                _phaDoDraggingTitleElement,
+                newDeltaX,
+                newDeltaY);
+            DrawTitleLineHighlight(_phaDoDraggingTitleLine);
+        }
+
+        private void EndTitleLineDrag()
+        {
+            if (!_phaDoIsDraggingTitleLine)
+            {
+                return;
+            }
+
+            _phaDoIsDraggingTitleLine = false;
+            _phaDoDraggingTitleLine = -1;
+            _phaDoDraggingTitleElement = null;
+            theCanvas.ReleaseMouseCapture();
+            theCanvas.Cursor = null;
+
+            if (_phaDoTitleSelectedLine >= 0)
+            {
+                DrawTitleLineHighlight(_phaDoTitleSelectedLine);
+            }
+
+            SaveWorkspaceSession();
+        }
+
+        /// <summary>MouseDown trên nền ô — chỉ luồng box (select/drag cả ô).</summary>
+        private void HandleFamilyBoxBackgroundMouseDown(
+            MouseButtonEventArgs e,
+            int familyId,
+            GiaPhaPlacedNode node)
+        {
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+            {
+                if (_phaDoMultiSelectedFamilyIds.Contains(familyId))
+                {
+                    _phaDoMultiSelectedFamilyIds.Remove(familyId);
+                    if (_phaDoSelectedFamilyId == familyId)
+                    {
+                        _phaDoSelectedFamilyId = _phaDoMultiSelectedFamilyIds.FirstOrDefault();
+                    }
+                }
+                else
+                {
+                    _phaDoMultiSelectedFamilyIds.Add(familyId);
+                    _phaDoSelectedFamilyId = familyId;
+                }
+
+                if (_phaDoSelectedFamilyId > 0)
+                {
+                    SelectPhaDoBoxOutline(_phaDoSelectedFamilyId);
+                }
+                else
+                {
+                    ClearPhaDoBoxSelections();
+                }
+
+                e.Handled = true;
+                return;
+            }
+
+            if (!_phaDoMultiSelectedFamilyIds.Contains(familyId))
+            {
+                _phaDoMultiSelectedFamilyIds.Clear();
+                _phaDoMultiSelectedFamilyIds.Add(familyId);
+            }
+
+            SelectPhaDoBoxOutline(familyId);
+
+            if (!IsHitOnBoxBackground(e.OriginalSource as DependencyObject, familyId))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            CancelPendingPersonDrag();
+            _phaDoIsDragging = true;
+            _phaDoMouseMovedWhileDrag = false;
+            _phaDoDraggingFamilyId = familyId;
+            _phaDoDragStartPoint = e.GetPosition(theCanvas);
+            _phaDoDragStartNodeXmm = node.Xmm;
+            _phaDoDragStartXmmByFamilyId.Clear();
+            foreach (var id in _phaDoMultiSelectedFamilyIds)
+            {
+                var n = FindNodeByFamilyId(id);
+                if (n != null)
+                {
+                    _phaDoDragStartXmmByFamilyId[id] = n.Xmm;
+                }
+            }
+
+            theCanvas.CaptureMouse();
+            e.Handled = true;
+        }
+
+        private void CancelPendingPersonDrag()
+        {
+            _phaDoPendingPersonDrag = false;
+            _phaDoPendingPersonFamilyId = 0;
+            _phaDoPendingPersonSlot = -1;
+            _phaDoPendingPersonElement = null;
+        }
+
+        /// <summary>Sau mousedown, chỉ bắt drag khi user kéo quá vài px (tránh nhầm click thường).</summary>
+        private void TryStartPendingPersonDrag(Point canvasPoint)
+        {
+            if (!_phaDoPendingPersonDrag || _phaDoIsDraggingPerson || _phaDoPendingPersonElement == null)
+            {
+                return;
+            }
+
+            var delta = canvasPoint - _phaDoPendingPersonDragStart;
+            if (Math.Abs(delta.X) < 3 && Math.Abs(delta.Y) < 3)
+            {
+                return;
+            }
+
+            int familyId = _phaDoPendingPersonFamilyId;
+            int personSlot = _phaDoPendingPersonSlot;
+            var element = _phaDoPendingPersonElement;
+            Point start = _phaDoPendingPersonDragStart;
+            CancelPendingPersonDrag();
+            BeginPersonDrag(familyId, personSlot, element, start);
+            UpdatePersonDrag(canvasPoint);
+        }
+
+        private void BeginPersonDrag(int familyId, int personSlot, FrameworkElement element, Point canvasStart)
+        {
             var style = GetBoxStyleForFamily(familyId);
             var offset = GetPersonOffset(style, personSlot);
             double left = Canvas.GetLeft(element);
@@ -694,7 +1710,7 @@ namespace vietnamgiapha
             _phaDoDraggingPersonElement = element;
             _phaDoPersonNaturalLeftPx = left - MmToPx(offset.DeltaXmm);
             _phaDoPersonNaturalTopPx = top - MmToPx(offset.DeltaYmm);
-            _phaDoPersonDragStartCanvas = e.GetPosition(theCanvas);
+            _phaDoPersonDragStartCanvas = canvasStart;
             _phaDoPersonDragStartDeltaXmm = offset.DeltaXmm;
             _phaDoPersonDragStartDeltaYmm = offset.DeltaYmm;
             theCanvas.CaptureMouse();
@@ -733,7 +1749,17 @@ namespace vietnamgiapha
             _phaDoDraggingPersonElement = null;
             theCanvas.ReleaseMouseCapture();
             theCanvas.Cursor = null;
-            DrawSelectionOverlay(_phaDoSelectedFamilyId);
+
+            // Kết thúc kéo text — giữ highlight text, không chuyển sang mode chọn box
+            if (_phaDoSelectedPersonSlot.HasValue && _phaDoSelectedFamilyId > 0)
+            {
+                UpdatePersonSelectionHighlight();
+            }
+            else if (_phaDoSelectedFamilyId > 0)
+            {
+                DrawSelectionOverlay(_phaDoSelectedFamilyId);
+            }
+
             SaveWorkspaceSession();
         }
 
@@ -796,6 +1822,24 @@ namespace vietnamgiapha
             }
 
             PhaDoSvgCatalog.ResolveShapeIntoStyle(style, gp?.SvgShapesById);
+            EnsureFamilyBoxFrameMarkupResolved(style);
+
+            // Đánh dấu trực quan phả con (màu tươi, không dùng đỏ):
+            // - phacon: xanh dương — nhánh đủ lớn, sẽ tách scope sau
+            // - phacon-stop: xanh ngọc — nhánh nhỏ, vẽ tiếp trong phả cha
+            if (_phaConStopFamilyIds.Contains(familyId))
+            {
+                style.FillColorHex = "#4DD0E1";
+                style.Main.ForegroundHex = "#004D40";
+                style.Spouse.ForegroundHex = "#00695C";
+            }
+            else if (_phaConFamilyIds.Contains(familyId))
+            {
+                style.FillColorHex = "#42A5F5";
+                style.Main.ForegroundHex = "#FFFFFF";
+                style.Spouse.ForegroundHex = "#E1F5FE";
+            }
+
             return style;
         }
 
@@ -890,8 +1934,25 @@ namespace vietnamgiapha
                 }
 
                 PhaDoSvgCatalog.ResolveShapeIntoStyle(style, gp.SvgShapesById);
+                EnsureFamilyBoxFrameMarkupResolved(style);
                 _phaDoBoxStyleByFamilyId[familyId] = style;
             }
+        }
+
+        /// <summary>Nạp markup family_* từ thư mục zone khi chỉ có ShapeSvgId (preview dùng zone, catalog GP có thể không có).</summary>
+        private void EnsureFamilyBoxFrameMarkupResolved(PhaDoBoxStyle style)
+        {
+            if (style == null || string.IsNullOrWhiteSpace(style.ShapeSvgId))
+            {
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(style.CustomShapeSvg))
+            {
+                return;
+            }
+
+            ApplyZoneSvgAsFamilyBoxFrame(style, style.ShapeSvgId);
         }
 
         private List<int> GetFamilyIdsInSameLevel(int familyId)
@@ -997,7 +2058,14 @@ namespace vietnamgiapha
             }
 
             await RenderPhaDoCoreAsync(resetZoom: false, resetScroll: false).ConfigureAwait(true);
-            SelectPhaDoBoxOutline(sourceFamilyId, _phaDoSelectedPersonSlot >= 0 ? _phaDoSelectedPersonSlot : (int?)null);
+            if (_phaDoSelectedPersonSlot.HasValue)
+            {
+                SelectPhaDoFamilyText(sourceFamilyId, _phaDoSelectedPersonSlot.Value);
+            }
+            else
+            {
+                SelectPhaDoBoxOutline(sourceFamilyId);
+            }
             SaveWorkspaceSession();
             viewModel?.AddUserAction(actionLabel + ": " + targetFamilyIds.Count + " ô.");
         }
@@ -1024,11 +2092,18 @@ namespace vietnamgiapha
         {
             var win = new SvgLibraryManagerWindow(
                 viewModel?.FamilyTree?.GP,
-                () => viewModel != null && viewModel.SaveFileCommandFunc())
+                () => viewModel != null && viewModel.SaveFileCommandFunc(),
+                () => PopulateZoneCombos())
             {
                 Owner = this
             };
             win.Show();
+        }
+
+        private void OpenHelpDialog_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new HelpDialog { Owner = this };
+            dlg.ShowDialog();
         }
 
         private async void OpenSettingsDialog_Click(object sender, RoutedEventArgs e)
@@ -1479,18 +2554,1228 @@ namespace vietnamgiapha
             }
         }
 
+        // ═══════════════════════════════════════════════════════════════
+        //  Thanh công cụ ngữ cảnh (context toolbar) phả đồ
+        // ═══════════════════════════════════════════════════════════════
+
+        private enum PhaDoCtxSelType { None, GenLabel, Box, TitleBlock, TitleText, PersonText }
+        private PhaDoCtxSelType _phaDoCtxSelType = PhaDoCtxSelType.None;
+
+        /// <summary>Item đơn giản cho ComboBox zone SVG.</summary>
+        private sealed class PhaDoZoneComboItem
+        {
+            public string SvgId { get; }
+            public string Display { get; }
+            public PhaDoZoneComboItem(string svgId, string display) { SvgId = svgId; Display = display; }
+        }
+
+        /// <summary>SVG đọc từ thư mục ZoneSvg (title_* / family_*).</summary>
+        private Dictionary<string, GiaPhaRender.PhaDoSvgShape> _phaDoZoneSvgFromFolder
+            = new Dictionary<string, GiaPhaRender.PhaDoSvgShape>(StringComparer.OrdinalIgnoreCase);
+
+        private List<PhaDoZoneComboItem> _phaDoTitleZoneComboItems = new List<PhaDoZoneComboItem>();
+        private List<PhaDoZoneComboItem> _phaDoFamilyZoneComboItems = new List<PhaDoZoneComboItem>();
+
+        /// <summary>Tránh áp dụng SVG khi đang đồng bộ combo từ style hiện có.</summary>
+        private bool _phaDoToolbarZoneComboSyncing;
+
+        /// <summary>Ô gia đình đang xem trước khung SVG (để khôi phục sau khi hủy preview).</summary>
+        private int _phaDoZonePreviewFamilyId;
+
+        /// <summary>Đánh dấu loại object, highlight nhóm active trên toolbar bằng Opacity.</summary>
+        private void ShowContextToolbar(PhaDoCtxSelType selType)
+        {
+            _phaDoCtxSelType = selType;
+            bool fontActive = selType == PhaDoCtxSelType.GenLabel
+                || selType == PhaDoCtxSelType.TitleText
+                || selType == PhaDoCtxSelType.PersonText;
+            bool svgActive = selType == PhaDoCtxSelType.Box
+                || selType == PhaDoCtxSelType.TitleBlock;
+
+            if (phaDoCtxFontGroup != null)
+            {
+                phaDoCtxFontGroup.Opacity = fontActive ? 1.0 : 0.4;
+            }
+
+            if (phaDoCtxSvgGroup != null)
+            {
+                phaDoCtxSvgGroup.Opacity = svgActive ? 1.0 : 0.4;
+            }
+
+            // Khối title: chỉ combo Title Box; ô gia đình: chỉ combo Family Box
+            bool titleBlockMode = selType == PhaDoCtxSelType.TitleBlock;
+            bool familyBoxMode = selType == PhaDoCtxSelType.Box;
+            if (phaDoCtxTitleZoneCombo != null)
+            {
+                phaDoCtxTitleZoneCombo.IsEnabled = titleBlockMode;
+                phaDoCtxTitleZoneCombo.Opacity = titleBlockMode ? 1.0 : 0.4;
+            }
+
+            if (phaDoCtxFamilyBoxFrameCombo != null)
+            {
+                phaDoCtxFamilyBoxFrameCombo.IsEnabled = familyBoxMode;
+                phaDoCtxFamilyBoxFrameCombo.Opacity = familyBoxMode ? 1.0 : 0.4;
+            }
+        }
+
+        private void HideContextToolbar()
+        {
+            HideZoneSvgToolbarPreview();
+            _phaDoCtxSelType = PhaDoCtxSelType.None;
+            // Cả 2 nhóm về mờ khi không có gì được chọn
+            if (phaDoCtxFontGroup != null) phaDoCtxFontGroup.Opacity = 0.4;
+            if (phaDoCtxSvgGroup  != null) phaDoCtxSvgGroup.Opacity  = 0.4;
+        }
+
+        /// <summary>Điền font size + màu + bold vào toolbar từ GenLabelStyle hiện tại.</summary>
+        private void SyncToolbarFromGenLabel()
+        {
+            ShowContextToolbar(PhaDoCtxSelType.GenLabel);
+            var st = _phaDoCurrentOptions?.GenLabelStyle;
+            bool vertical = _phaDoCurrentOptions != null &&
+                            GiaPhaRenderOptions.IsVerticalCardLayout(_phaDoCurrentOptions.CardLayoutMode);
+            double defPt = vertical
+                ? (_phaDoCurrentOptions?.VerticalGenerationLabelFontPt ?? 10)
+                : (_phaDoCurrentOptions?.HeaderFontPt ?? 7);
+
+            if (phaDoCtxFontSizeBox != null)
+                phaDoCtxFontSizeBox.Text = (st?.FontPt > 0 ? st.FontPt : defPt).ToString("0.#");
+
+            // Chọn font family (null = mặc định theo options)
+            if (phaDoCtxFontFamilyCombo != null)
+            {
+                string family = !string.IsNullOrWhiteSpace(st?.FontFamily) ? st.FontFamily : "(mặc định)";
+                phaDoCtxFontFamilyCombo.SelectedItem = family;
+                if (phaDoCtxFontFamilyCombo.SelectedItem == null && phaDoCtxFontFamilyCombo.Items.Count > 0)
+                {
+                    phaDoCtxFontFamilyCombo.SelectedIndex = 0;
+                }
+            }
+
+            string defColor = vertical ? "#19376A" : "#5A5A5A";
+            if (phaDoCtxColorBox != null)
+                phaDoCtxColorBox.Text = !string.IsNullOrWhiteSpace(st?.ForegroundHex)
+                    ? st.ForegroundHex : defColor;
+            PhaDoCtxColorBox_RefreshPreview();
+
+            if (phaDoCtxBoldBtn != null)
+                phaDoCtxBoldBtn.IsChecked = st?.Bold ?? vertical;
+        }
+
+        /// <summary>Điền toolbar font từ style của phần chữ đang chọn trong ô gia đình.</summary>
+        private void SyncToolbarFromFamilyPersonText(int familyId, int personSlot)
+        {
+            ShowContextToolbar(PhaDoCtxSelType.PersonText);
+            var element = FindPersonVisual(familyId, personSlot);
+            if (!(element?.Tag is PhaDoBoxVisualTag visualTag))
+            {
+                return;
+            }
+
+            var resolved = ResolvePersonTextStyle(familyId, visualTag, out bool boldDefault);
+            double dpi = _phaDoCurrentOptions?.PrintDpi ?? 96;
+            double pt = resolved?.FontPt ?? GetDefaultFontPtForVisualTag(visualTag);
+            string hex = resolved?.ForegroundHex ?? GetDefaultForegroundHexForVisualTag(visualTag);
+            string fontFamily = resolved?.FontFamilyName;
+            bool bold = resolved?.Bold ?? boldDefault;
+
+            // Ưu tiên giá trị đang hiển thị trên canvas nếu có
+            if (element is TextBlock tb)
+            {
+                pt = tb.FontSize * 72.0 / dpi;
+                bold = tb.FontWeight >= FontWeights.SemiBold;
+                try
+                {
+                    if (tb.Foreground is SolidColorBrush scb)
+                    {
+                        hex = scb.Color.ToString();
+                    }
+                }
+                catch { }
+                if (tb.FontFamily != null)
+                {
+                    fontFamily = tb.FontFamily.Source;
+                }
+            }
+
+            if (phaDoCtxFontSizeBox != null)
+            {
+                phaDoCtxFontSizeBox.Text = pt.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            if (phaDoCtxFontFamilyCombo != null)
+            {
+                string comboVal = string.IsNullOrWhiteSpace(fontFamily) ? "(mặc định)" : fontFamily;
+                phaDoCtxFontFamilyCombo.SelectedItem = comboVal;
+                if (phaDoCtxFontFamilyCombo.SelectedItem == null && phaDoCtxFontFamilyCombo.Items.Count > 0)
+                {
+                    phaDoCtxFontFamilyCombo.SelectedIndex = 0;
+                }
+            }
+
+            if (phaDoCtxColorBox != null)
+            {
+                phaDoCtxColorBox.Text = hex;
+            }
+
+            PhaDoCtxColorBox_RefreshPreview();
+
+            if (phaDoCtxBoldBtn != null)
+            {
+                phaDoCtxBoldBtn.IsChecked = bold;
+            }
+        }
+
+        private double GetDefaultFontPtForVisualTag(PhaDoBoxVisualTag tag)
+        {
+            if (_phaDoCurrentOptions == null || tag == null)
+            {
+                return 9;
+            }
+
+            switch (tag.ElementKind)
+            {
+                case PhaDoBoxElementKind.GenerationLabel:
+                    return _phaDoCurrentOptions.HeaderFontPt;
+                case PhaDoBoxElementKind.ExtraNote:
+                    return _phaDoCurrentOptions.NoteFontPt > 0 ? _phaDoCurrentOptions.NoteFontPt : 6.5;
+                case PhaDoBoxElementKind.Person:
+                    return tag.Role == PhaDoPersonTextRole.Main
+                        ? _phaDoCurrentOptions.MainNameFontPt
+                        : _phaDoCurrentOptions.SpouseFontPt;
+                default:
+                    return _phaDoCurrentOptions.MainNameFontPt;
+            }
+        }
+
+        private string GetDefaultForegroundHexForVisualTag(PhaDoBoxVisualTag tag)
+        {
+            if (tag == null)
+            {
+                return "#000000";
+            }
+
+            switch (tag.ElementKind)
+            {
+                case PhaDoBoxElementKind.GenerationLabel:
+                    return "#464646";
+                case PhaDoBoxElementKind.ExtraNote:
+                    return "#5A606C";
+                default:
+                    return "#000000";
+            }
+        }
+
+        private PhaDoPersonTextStyle ResolvePersonTextStyle(int familyId, PhaDoBoxVisualTag tag, out bool boldDefault)
+        {
+            boldDefault = tag?.Role == PhaDoPersonTextRole.Main;
+            var boxStyle = GetBoxStyleForFamily(familyId);
+            if (boxStyle?.PersonTextStylesBySlot != null
+                && tag != null
+                && boxStyle.PersonTextStylesBySlot.TryGetValue(tag.PersonSlotIndex, out var custom)
+                && custom != null
+                && !custom.IsEmpty())
+            {
+                boldDefault = custom.Bold ?? boldDefault;
+                return custom;
+            }
+
+            if (tag?.ElementKind == PhaDoBoxElementKind.Person)
+            {
+                var roleStyle = tag.Role == PhaDoPersonTextRole.Main ? boxStyle.Main : boxStyle.Spouse;
+                if (roleStyle != null && !roleStyle.IsEmpty())
+                {
+                    boldDefault = roleStyle.Bold ?? boldDefault;
+                    return roleStyle.Clone();
+                }
+            }
+
+            return new PhaDoPersonTextStyle
+            {
+                FontPt = GetDefaultFontPtForVisualTag(tag),
+                ForegroundHex = GetDefaultForegroundHexForVisualTag(tag),
+                Bold = boldDefault
+            };
+        }
+
+        private PhaDoPersonTextStyle ReadPersonTextStyleFromToolbar(PhaDoBoxVisualTag tag)
+        {
+            double.TryParse(phaDoCtxFontSizeBox?.Text,
+                System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out double pt);
+
+            string hex = phaDoCtxColorBox?.Text?.Trim();
+            try { ColorConverter.ConvertFromString(hex); } catch { hex = null; }
+
+            string fontFamily = (phaDoCtxFontFamilyCombo?.SelectedItem as string) == "(mặc định)"
+                ? null
+                : (phaDoCtxFontFamilyCombo?.SelectedItem as string);
+
+            return new PhaDoPersonTextStyle
+            {
+                FontPt = pt > 0 ? pt : GetDefaultFontPtForVisualTag(tag),
+                ForegroundHex = hex,
+                FontFamilyName = fontFamily,
+                Bold = phaDoCtxBoldBtn?.IsChecked == true
+            };
+        }
+
+        private void ApplyToolbarToFamilyPersonText(int familyId, int personSlot)
+        {
+            var element = FindPersonVisual(familyId, personSlot);
+            if (!(element?.Tag is PhaDoBoxVisualTag visualTag))
+            {
+                return;
+            }
+
+            var personStyle = ReadPersonTextStyleFromToolbar(visualTag);
+            var boxStyle = GetBoxStyleForFamily(familyId);
+            if (boxStyle.PersonTextStylesBySlot == null)
+            {
+                boxStyle.PersonTextStylesBySlot = new Dictionary<int, PhaDoPersonTextStyle>();
+            }
+
+            boxStyle.PersonTextStylesBySlot[personSlot] = personStyle;
+            _phaDoBoxStyleByFamilyId[familyId] = boxStyle;
+
+            ApplyPersonVisualStyle(element, visualTag, personStyle);
+            UpdatePersonSelectionHighlight();
+            SaveWorkspaceSession();
+        }
+
+        private void ApplyPersonVisualStyle(FrameworkElement element, PhaDoBoxVisualTag tag, PhaDoPersonTextStyle personStyle)
+        {
+            double dpi = _phaDoCurrentOptions?.PrintDpi ?? 96;
+            string defaultFont = _phaDoCurrentOptions?.FontFamilyName ?? "Segoe UI";
+            double defaultPt = GetDefaultFontPtForVisualTag(tag);
+            bool boldDefault = tag.Role == PhaDoPersonTextRole.Main;
+
+            if (element is TextBlock tb)
+            {
+                ApplyPersonTextStyle(tb, personStyle, defaultPt, defaultFont, dpi, boldDefault);
+                return;
+            }
+
+            if (element is StackPanel column)
+            {
+                foreach (var line in column.Children.OfType<TextBlock>())
+                {
+                    ApplyPersonTextStyle(line, personStyle, defaultPt, defaultFont, dpi, boldDefault);
+                }
+            }
+        }
+
         private void SyncPhaDoToolbarFromBoxStyle(int familyId)
         {
+            ShowContextToolbar(PhaDoCtxSelType.Box);
             var style = GetBoxStyleForFamily(familyId);
-            double pt = style.Main?.FontPt ?? _phaDoCurrentOptions?.MainNameFontPt ?? 9;
+            PopulateZoneCombos();
+            SelectZoneComboItem(phaDoCtxFamilyBoxFrameCombo, GetFamilyBoxFrameSvgIdForToolbar(style));
+            // Preview chỉ khi đổi combo — không gọi ở đây để giữ tag nền và viền chọn.
+        }
+
+        /// <summary>Điền toolbar khi chọn khối title — combo Title Box = khung title.</summary>
+        private void SyncToolbarFromTitleBlock()
+        {
+            ShowContextToolbar(PhaDoCtxSelType.TitleBlock);
+            PopulateZoneCombos();
+            SelectZoneComboItem(
+                phaDoCtxTitleZoneCombo,
+                GetTitleBlockFrameSvgIdForToolbar(_phaDoTitleStyle));
+        }
+
+        /// <summary>Id SVG khung title (title_*) cho combo Title Box.</summary>
+        private string GetTitleBlockFrameSvgIdForToolbar(PhaDoTitleStyle titleStyle)
+        {
+            if (titleStyle == null)
+            {
+                return null;
+            }
+
+            if (!string.IsNullOrWhiteSpace(titleStyle.ShapeSvgId)
+                && titleStyle.ShapeSvgId.StartsWith(
+                    GiaPhaRender.PhaDoZoneSvgFolderLoader.TitlePrefix,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return titleStyle.ShapeSvgId;
+            }
+
+            string markup = titleStyle.CustomShapeSvg;
+            if (string.IsNullOrWhiteSpace(markup) || _phaDoZoneSvgFromFolder == null)
+            {
+                return titleStyle.ShapeSvgId;
+            }
+
+            foreach (var kv in _phaDoZoneSvgFromFolder)
+            {
+                if (!kv.Key.StartsWith(
+                        GiaPhaRender.PhaDoZoneSvgFolderLoader.TitlePrefix,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string candidate = kv.Value?.GetSvgMarkup();
+                if (!string.IsNullOrWhiteSpace(candidate) && candidate == markup)
+                {
+                    return kv.Key;
+                }
+            }
+
+            return titleStyle.ShapeSvgId;
+        }
+
+        /// <summary>Gán title_*.svg làm khung/nền khối tiêu đề.</summary>
+        private void ApplyZoneSvgAsTitleBlockFrame(PhaDoTitleStyle titleStyle, string svgId)
+        {
+            if (titleStyle == null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(svgId))
+            {
+                titleStyle.ShapeSvgId = null;
+                titleStyle.CustomShapeSvg = null;
+                return;
+            }
+
+            if (TryGetZoneSvgShape(svgId, out var shape) && shape != null)
+            {
+                titleStyle.CustomShapeSvg = shape.GetSvgMarkup();
+                titleStyle.CustomShapeViewBoxWidth = shape.ViewBoxWidth > 0 ? shape.ViewBoxWidth : 100;
+                titleStyle.CustomShapeViewBoxHeight = shape.ViewBoxHeight > 0 ? shape.ViewBoxHeight : 80;
+                titleStyle.ShapeSvgId = svgId;
+                return;
+            }
+
+            var catalog = viewModel?.FamilyTree?.GP?.SvgShapesById;
+            if (catalog != null)
+            {
+                titleStyle.ShapeSvgId = svgId;
+                PhaDoSvgCatalog.ResolveShapeIntoFrame(titleStyle, catalog);
+            }
+        }
+
+        /// <summary>Áp dụng title_*.svg từ combo Title Box lên khối tiêu đề.</summary>
+        private void ApplyTitleBlockToolbarSvg()
+        {
+            HideZoneSvgToolbarPreview();
+
+            if (_phaDoCurrentOptions == null)
+            {
+                return;
+            }
+
+            string titleFrameId = (phaDoCtxTitleZoneCombo?.SelectedItem as PhaDoZoneComboItem)?.SvgId;
+            if (_phaDoTitleStyle == null)
+            {
+                _phaDoTitleStyle = new PhaDoTitleStyle();
+            }
+
+            ApplyZoneSvgAsTitleBlockFrame(_phaDoTitleStyle, titleFrameId);
+            ApplyPhaDoTitleStyleToOptions(_phaDoCurrentOptions);
+            RedrawTitleBlockOnly();
+
+            if (_phaDoTitleSelectedLine >= 0)
+            {
+                DrawTitleLineHighlight(_phaDoTitleSelectedLine);
+            }
+            else if (_phaDoTitleSelected)
+            {
+                DrawTitleSelectionOverlay();
+            }
+
+            SaveWorkspaceSession();
+        }
+
+        /// <summary>Id SVG khung ô gia đình (family_*) để hiển thị trên combo Family Box.</summary>
+        private string GetFamilyBoxFrameSvgIdForToolbar(PhaDoBoxStyle style)
+        {
+            if (style == null)
+            {
+                return null;
+            }
+
+            if (!string.IsNullOrWhiteSpace(style.ShapeSvgId)
+                && style.ShapeSvgId.StartsWith(
+                    GiaPhaRender.PhaDoZoneSvgFolderLoader.FamilyPrefix,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return style.ShapeSvgId;
+            }
+
+            string markup = style.CustomShapeSvg;
+            if (string.IsNullOrWhiteSpace(markup) || _phaDoZoneSvgFromFolder == null)
+            {
+                return style.ShapeSvgId;
+            }
+
+            foreach (var kv in _phaDoZoneSvgFromFolder)
+            {
+                if (!kv.Key.StartsWith(
+                        GiaPhaRender.PhaDoZoneSvgFolderLoader.FamilyPrefix,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string candidate = kv.Value?.GetSvgMarkup();
+                if (!string.IsNullOrWhiteSpace(candidate) && candidate == markup)
+                {
+                    return kv.Key;
+                }
+            }
+
+            return style.ShapeSvgId;
+        }
+
+        /// <summary>Gán family_*.svg làm khung/nền cả ô — không gán vào vùng strip Right.</summary>
+        private void ApplyZoneSvgAsFamilyBoxFrame(PhaDoBoxStyle style, string svgId)
+        {
+            if (style == null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(svgId))
+            {
+                style.ShapeSvgId = null;
+                style.CustomShapeSvg = null;
+                return;
+            }
+
+            if (TryGetZoneSvgShape(svgId, out var shape) && shape != null)
+            {
+                style.CustomShapeSvg = shape.GetSvgMarkup();
+                style.CustomShapeViewBoxWidth = shape.ViewBoxWidth > 0 ? shape.ViewBoxWidth : 100;
+                style.CustomShapeViewBoxHeight = shape.ViewBoxHeight > 0 ? shape.ViewBoxHeight : 80;
+                style.ShapeSvgId = svgId;
+                return;
+            }
+
+            var catalog = viewModel?.FamilyTree?.GP?.SvgShapesById;
+            if (catalog != null)
+            {
+                style.ShapeSvgId = svgId;
+                PhaDoSvgCatalog.ResolveShapeIntoStyle(style, catalog);
+            }
+        }
+
+        /// <summary>Áp dụng toolbar SVG khi chọn ô gia đình — chỉ family_* (khung ô).</summary>
+        private void ApplyFamilyBoxToolbarSvg(int familyId)
+        {
+            HideZoneSvgToolbarPreview();
+
+            string familyFrameId = (phaDoCtxFamilyBoxFrameCombo?.SelectedItem as PhaDoZoneComboItem)?.SvgId;
+
+            var style = GetBoxStyleForFamily(familyId);
+            ApplyZoneSvgAsFamilyBoxFrame(style, familyFrameId);
+            // family_* là khung ô — không gán strip vùng phải (dữ liệu cũ có thể còn RightZoneSvgId)
+            style.RightZoneSvgId = null;
+            _phaDoBoxStyleByFamilyId[familyId] = style;
+
+            SetFamilyPhaDoShapeSvgId(
+                familyId,
+                string.IsNullOrWhiteSpace(familyFrameId) ? null : familyFrameId);
+
+            ApplyBoxStyleToFamilyVisuals(familyId);
+            SaveWorkspaceSession();
+        }
+
+        /// <summary>Quét thư mục ZoneSvg — title_* → Left, family_* → Right.</summary>
+        private void ReloadPhaDoZoneSvgFromFolder()
+        {
+            string folder = GiaPhaRender.PhaDoZoneSvgFolderLoader.ResolveFolderPath();
+            var loaded = GiaPhaRender.PhaDoZoneSvgFolderLoader.Load(folder);
+
+            _phaDoZoneSvgFromFolder = loaded.ShapesById ?? new Dictionary<string, GiaPhaRender.PhaDoSvgShape>(
+                StringComparer.OrdinalIgnoreCase);
+
+            _phaDoTitleZoneComboItems = BuildZoneComboItems(loaded.TitleEntries);
+            _phaDoFamilyZoneComboItems = BuildZoneComboItems(loaded.FamilyEntries);
+
+            log.Info(string.Format(
+                "Zone SVG: thư mục={0}, tồn tại={1}, title={2}, family={3}",
+                folder,
+                Directory.Exists(folder),
+                loaded.TitleEntries.Count,
+                loaded.FamilyEntries.Count));
+        }
+
+        /// <summary>Gắn danh sách zone lên combobox (gọi lúc khởi động và khi chọn ô).</summary>
+        private void BindPhaDoZoneComboItems()
+        {
+            if (phaDoCtxTitleZoneCombo != null)
+            {
+                phaDoCtxTitleZoneCombo.ItemsSource = null;
+                phaDoCtxTitleZoneCombo.ItemsSource = _phaDoTitleZoneComboItems;
+            }
+
+            if (phaDoCtxFamilyBoxFrameCombo != null)
+            {
+                phaDoCtxFamilyBoxFrameCombo.ItemsSource = null;
+                phaDoCtxFamilyBoxFrameCombo.ItemsSource = _phaDoFamilyZoneComboItems;
+            }
+        }
+
+        private static List<PhaDoZoneComboItem> BuildZoneComboItems(
+            List<GiaPhaRender.PhaDoZoneSvgFileEntry> entries)
+        {
+            var items = new List<PhaDoZoneComboItem>
+            {
+                new PhaDoZoneComboItem(null, "Không")
+            };
+            if (entries == null)
+            {
+                return items;
+            }
+
+            foreach (var entry in entries)
+            {
+                if (string.IsNullOrWhiteSpace(entry?.Id))
+                {
+                    continue;
+                }
+
+                items.Add(new PhaDoZoneComboItem(entry.Id, entry.Display ?? entry.Id));
+            }
+
+            return items;
+        }
+
+        /// <summary>Nạp ComboBox zone: Left = title_*.svg, Right = family_*.svg từ thư mục ZoneSvg.</summary>
+        private void PopulateZoneCombos()
+        {
+            ReloadPhaDoZoneSvgFromFolder();
+            BindPhaDoZoneComboItems();
+        }
+
+        private bool TryGetZoneSvgShape(string svgId, out GiaPhaRender.PhaDoSvgShape shape)
+        {
+            shape = null;
+            if (string.IsNullOrWhiteSpace(svgId))
+            {
+                return false;
+            }
+
+            if (_phaDoZoneSvgFromFolder != null
+                && _phaDoZoneSvgFromFolder.TryGetValue(svgId, out shape)
+                && shape != null)
+            {
+                return true;
+            }
+
+            var catalog = viewModel?.FamilyTree?.GP?.SvgShapesById;
+            if (catalog != null && catalog.TryGetValue(svgId, out shape) && shape != null)
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private void SelectZoneComboItem(System.Windows.Controls.ComboBox combo, string svgId)
+        {
+            if (combo?.ItemsSource == null)
+            {
+                return;
+            }
+
+            _phaDoToolbarZoneComboSyncing = true;
+            try
+            {
+                foreach (PhaDoZoneComboItem item in combo.Items)
+                {
+                    if (item.SvgId == svgId)
+                    {
+                        combo.SelectedItem = item;
+                        return;
+                    }
+                }
+
+                if (combo.Items.Count > 0)
+                {
+                    combo.SelectedIndex = 0;
+                }
+            }
+            finally
+            {
+                _phaDoToolbarZoneComboSyncing = false;
+            }
+        }
+
+        /// <summary>Đổi title_* trên combo → xem trước trên khối title (Áp dụng mới ghi).</summary>
+        private void PhaDoCtxTitleZoneCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_phaDoToolbarZoneComboSyncing)
+            {
+                return;
+            }
+
+            if (_phaDoCtxSelType != PhaDoCtxSelType.TitleBlock)
+            {
+                return;
+            }
+
+            if (e.AddedItems == null || e.AddedItems.Count == 0)
+            {
+                return;
+            }
+
+            string svgId = (phaDoCtxTitleZoneCombo?.SelectedItem as PhaDoZoneComboItem)?.SvgId;
+            ShowZoneSvgToolbarPreview(svgId);
+        }
+
+        /// <summary>Đổi family_* trên combo → xem trước trên ô đang chọn.</summary>
+        private void PhaDoCtxFamilyBoxFrameCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_phaDoToolbarZoneComboSyncing)
+            {
+                return;
+            }
+
+            if (_phaDoCtxSelType != PhaDoCtxSelType.Box || _phaDoSelectedFamilyId <= 0)
+            {
+                return;
+            }
+
+            if (e.AddedItems == null || e.AddedItems.Count == 0)
+            {
+                return;
+            }
+
+            string svgId = (phaDoCtxFamilyBoxFrameCombo?.SelectedItem as PhaDoZoneComboItem)?.SvgId;
+            ShowZoneSvgToolbarPreview(svgId);
+        }
+
+        /// <summary>Xóa preview toolbar và khôi phục visual đã lưu.</summary>
+        private void HideZoneSvgToolbarPreview()
+        {
+            if (theCanvas == null)
+            {
+                _phaDoZonePreviewFamilyId = 0;
+                return;
+            }
+
+            var previewEls = theCanvas.Children
+                .OfType<FrameworkElement>()
+                .Where(fe => fe.Tag is GiaPhaRender.PhaDoZoneSvgPreviewTag)
+                .Cast<UIElement>()
+                .ToList();
+            foreach (var el in previewEls)
+            {
+                theCanvas.Children.Remove(el);
+            }
+
+            if (_phaDoZonePreviewFamilyId > 0)
+            {
+                int fid = _phaDoZonePreviewFamilyId;
+                _phaDoZonePreviewFamilyId = 0;
+                RemoveFamilyBoxSvgPreviewLayer(fid);
+                if (_phaDoSelectedFamilyId == fid)
+                {
+                    DrawSelectionOverlay(fid);
+                }
+            }
+        }
+
+        /// <summary>Hiển thị khung SVG tạm trên title box hoặc ô gia đình đang chọn.</summary>
+        private void ShowZoneSvgToolbarPreview(string svgId)
+        {
+            if (theCanvas == null || _phaDoRenderedLayout == null)
+            {
+                return;
+            }
+
+            HideZoneSvgToolbarPreview();
+
+            if (_phaDoCtxSelType == PhaDoCtxSelType.TitleBlock)
+            {
+                ShowTitleBlockZoneSvgPreview(svgId);
+                return;
+            }
+
+            if (_phaDoCtxSelType == PhaDoCtxSelType.Box && _phaDoSelectedFamilyId > 0)
+            {
+                ShowFamilyBoxZoneSvgPreview(_phaDoSelectedFamilyId, svgId);
+            }
+        }
+
+        private void ShowTitleBlockZoneSvgPreview(string svgId)
+        {
+            if (_phaDoCurrentOptions == null)
+            {
+                return;
+            }
+
+            if (!TryGetTitleBlockBoundsPx(out double left, out double top, out double w, out double h))
+            {
+                return;
+            }
+
+            FrameworkElement previewEl;
+            if (string.IsNullOrWhiteSpace(svgId))
+            {
+                previewEl = new System.Windows.Shapes.Rectangle
+                {
+                    Width = w,
+                    Height = h,
+                    Fill = Brushes.Transparent,
+                    Stroke = new SolidColorBrush(Color.FromArgb(160, 30, 136, 229)),
+                    StrokeThickness = 2,
+                    StrokeDashArray = new DoubleCollection { 4, 3 },
+                    IsHitTestVisible = false
+                };
+            }
+            else
+            {
+                if (!TryGetZoneSvgShape(svgId, out var shape) || shape == null)
+                {
+                    return;
+                }
+
+                string markup = shape.GetSvgMarkup();
+                if (string.IsNullOrWhiteSpace(markup))
+                {
+                    return;
+                }
+
+                double vbW = shape.ViewBoxWidth > 0 ? shape.ViewBoxWidth : 100;
+                double vbH = shape.ViewBoxHeight > 0 ? shape.ViewBoxHeight : 80;
+                previewEl = PhaDoBoxSvgWpfRenderer.CreateBackgroundElement(
+                    markup,
+                    vbW,
+                    vbH,
+                    w,
+                    h,
+                    null,
+                    _phaDoCurrentOptions.TitleFillColorHex);
+                if (previewEl == null)
+                {
+                    return;
+                }
+
+                previewEl.Opacity = 0.92;
+                previewEl.IsHitTestVisible = false;
+            }
+
+            previewEl.Tag = new GiaPhaRender.PhaDoZoneSvgPreviewTag { IsTitleBlock = true };
+            Canvas.SetLeft(previewEl, left);
+            Canvas.SetTop(previewEl, top);
+            Panel.SetZIndex(previewEl, 6);
+            theCanvas.Children.Add(previewEl);
+
+            if (_phaDoTitleSelected && _phaDoTitleSelectedLine < 0)
+            {
+                DrawTitleSelectionOverlay();
+            }
+        }
+
+        private void ShowFamilyBoxZoneSvgPreview(int familyId, string svgId)
+        {
+            var node = FindNodeByFamilyId(familyId);
+            if (node?.Family == null)
+            {
+                return;
+            }
+
+            _phaDoZonePreviewFamilyId = familyId;
+            RemoveFamilyBoxSvgPreviewLayer(familyId);
+
+            double x = MmToPx(node.Xmm);
+            double y = MmToPx(node.Ymm);
+            double w = MmToPx(node.Metrics.WidthMm);
+            double h = MmToPx(node.Metrics.HeightMm);
+
+            FrameworkElement previewEl;
+            if (string.IsNullOrWhiteSpace(svgId))
+            {
+                previewEl = new System.Windows.Shapes.Rectangle
+                {
+                    Width = w,
+                    Height = h,
+                    Fill = Brushes.Transparent,
+                    Stroke = new SolidColorBrush(Color.FromArgb(160, 30, 136, 229)),
+                    StrokeThickness = 2,
+                    StrokeDashArray = new DoubleCollection { 4, 3 },
+                    IsHitTestVisible = false
+                };
+            }
+            else
+            {
+                var previewStyle = GetBoxStyleForFamily(familyId).Clone();
+                ApplyZoneSvgAsFamilyBoxFrame(previewStyle, svgId);
+                if (!previewStyle.HasCustomShape)
+                {
+                    return;
+                }
+
+                string fillHex = string.IsNullOrWhiteSpace(previewStyle.FillColorHex)
+                    ? null
+                    : previewStyle.FillColorHex;
+                previewEl = PhaDoBoxSvgWpfRenderer.CreateBackgroundElement(
+                    previewStyle.CustomShapeSvg,
+                    previewStyle.CustomShapeViewBoxWidth,
+                    previewStyle.CustomShapeViewBoxHeight,
+                    w,
+                    h,
+                    node.Family,
+                    fillHex);
+                if (previewEl == null)
+                {
+                    return;
+                }
+
+                previewEl.Opacity = 0.92;
+                previewEl.IsHitTestVisible = false;
+            }
+
+            previewEl.Tag = new GiaPhaRender.PhaDoZoneSvgPreviewTag { FamilyId = familyId };
+            Canvas.SetLeft(previewEl, x);
+            Canvas.SetTop(previewEl, y);
+            Panel.SetZIndex(previewEl, 12);
+            theCanvas.Children.Add(previewEl);
+
+            DrawSelectionOverlay(familyId);
+        }
+
+        /// <summary>Xóa lớp preview family_* — không đụng nền ô đang lưu (tag PhaDoBoxBackgroundTag).</summary>
+        private void RemoveFamilyBoxSvgPreviewLayer(int familyId)
+        {
+            if (theCanvas == null || familyId <= 0)
+            {
+                return;
+            }
+
+            var toRemove = theCanvas.Children
+                .OfType<FrameworkElement>()
+                .Where(fe => fe.Tag is GiaPhaRender.PhaDoZoneSvgPreviewTag p
+                    && p.FamilyId == familyId
+                    && !p.IsTitleBlock)
+                .Cast<UIElement>()
+                .ToList();
+            foreach (var el in toRemove)
+            {
+                theCanvas.Children.Remove(el);
+            }
+        }
+
+        private void PhaDoCtxColorBox_TextChanged(object sender,
+            System.Windows.Controls.TextChangedEventArgs e)
+        {
+            if (phaDoCtxColorPreview == null || phaDoCtxColorBox == null) return;
+            try
+            {
+                var c = (Color)ColorConverter.ConvertFromString(phaDoCtxColorBox.Text.Trim());
+                phaDoCtxColorPreview.Background = new SolidColorBrush(c);
+            }
+            catch { phaDoCtxColorPreview.Background = Brushes.Transparent; }
+        }
+
+        private sealed class PhaDoColorComboItem
+        {
+            public string Hex { get; }
+            public string Display { get; }
+            public PhaDoColorComboItem(string hex, string display) { Hex = hex; Display = display; }
+            public override string ToString() => Display;
+        }
+
+        private void InitPhaDoContextFontControls()
+        {
+            // Danh sách font (đổ 1 lần sau InitializeComponent)
+            if (phaDoCtxFontFamilyCombo != null)
+            {
+                var fonts = Fonts.SystemFontFamilies
+                    .Select(f => f.Source)
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                fonts.Insert(0, "(mặc định)");
+                phaDoCtxFontFamilyCombo.ItemsSource = fonts;
+                if (phaDoCtxFontFamilyCombo.SelectedIndex < 0)
+                {
+                    phaDoCtxFontFamilyCombo.SelectedIndex = 0;
+                }
+            }
+
+            // Danh sách màu thường dùng (hex)
+            if (phaDoCtxColorBox != null)
+            {
+                var items = new System.Collections.Generic.List<PhaDoColorComboItem>
+                {
+                    new PhaDoColorComboItem("#000000", "Đen (#000000)"),
+                    new PhaDoColorComboItem("#333333", "Xám đậm (#333333)"),
+                    new PhaDoColorComboItem("#595959", "Xám (#595959)"),
+                    new PhaDoColorComboItem("#888888", "Xám nhạt (#888888)"),
+                    new PhaDoColorComboItem("#19376A", "Xanh đậm (#19376A)"),
+                    new PhaDoColorComboItem("#1E78DC", "Xanh dương (#1E78DC)"),
+                    new PhaDoColorComboItem("#E53935", "Đỏ (#E53935)"),
+                    new PhaDoColorComboItem("#FB8C00", "Cam (#FB8C00)"),
+                    new PhaDoColorComboItem("#43A047", "Xanh lá (#43A047)")
+                };
+                phaDoCtxColorBox.DisplayMemberPath = nameof(PhaDoColorComboItem.Display);
+                phaDoCtxColorBox.SelectedValuePath = nameof(PhaDoColorComboItem.Hex);
+                phaDoCtxColorBox.ItemsSource = items;
+            }
+        }
+
+        private static bool TryParsePt(string raw, out double pt)
+        {
+            return double.TryParse(raw,
+                System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out pt);
+        }
+
+        private void NudgeCtxFontSize(double delta)
+        {
+            if (phaDoCtxFontSizeBox == null) return;
+            if (!TryParsePt(phaDoCtxFontSizeBox.Text, out double pt)) pt = 0;
+            pt = Math.Max(1, Math.Min(200, pt + delta));
+            phaDoCtxFontSizeBox.Text = pt.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private void PhaDoCtxFontSizeBox_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            // Lăn chuột trên ô cỡ chữ: tăng/giảm nhanh, không cần focus chỗ khác
+            NudgeCtxFontSize(e.Delta > 0 ? 0.5 : -0.5);
+            e.Handled = true;
+        }
+
+        private void PhaDoCtxFontSizeUp_Click(object sender, RoutedEventArgs e) => NudgeCtxFontSize(0.5);
+        private void PhaDoCtxFontSizeDown_Click(object sender, RoutedEventArgs e) => NudgeCtxFontSize(-0.5);
+
+        private void PhaDoCtxFontFamilyCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // Không apply ngay — chỉ thay đổi giá trị “đang chọn” trên toolbar
+        }
+
+        private void PhaDoCtxColorBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // Chọn từ list → tự fill mã hex vào Text
+            if (phaDoCtxColorBox?.SelectedValue is string hex && !string.IsNullOrWhiteSpace(hex))
+            {
+                phaDoCtxColorBox.Text = hex;
+            }
+            PhaDoCtxColorBox_RefreshPreview();
+        }
+
+        private void PhaDoCtxColorBox_KeyUp(object sender, KeyEventArgs e)
+        {
+            PhaDoCtxColorBox_RefreshPreview();
+        }
+
+        private void PhaDoCtxColorBox_RefreshPreview()
+        {
+            if (phaDoCtxColorPreview == null || phaDoCtxColorBox == null) return;
+            try
+            {
+                var c = (Color)ColorConverter.ConvertFromString(phaDoCtxColorBox.Text.Trim());
+                phaDoCtxColorPreview.Background = new SolidColorBrush(c);
+            }
+            catch { phaDoCtxColorPreview.Background = Brushes.Transparent; }
+        }
+
+        /// <summary>Đọc giá trị font từ toolbar vào GenLabelStyle.</summary>
+        private GiaPhaRender.PhaDoGenLabelStyle ReadGenLabelStyleFromToolbar()
+        {
+            double.TryParse(phaDoCtxFontSizeBox?.Text,
+                System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out double pt);
+
+            string hex = phaDoCtxColorBox?.Text?.Trim();
+            try { ColorConverter.ConvertFromString(hex); } catch { hex = null; }
+
+            return new GiaPhaRender.PhaDoGenLabelStyle
+            {
+                FontPt   = pt > 0 ? pt : 0,
+                ForegroundHex = hex,
+                FontFamily = (phaDoCtxFontFamilyCombo?.SelectedItem as string) == "(mặc định)"
+                    ? null
+                    : (phaDoCtxFontFamilyCombo?.SelectedItem as string),
+                Bold     = phaDoCtxBoldBtn?.IsChecked == true
+            };
+        }
+
+        /// <summary>Áp dụng style toolbar cho object đang chọn.</summary>
+        private void PhaDoCtxApply_Click(object sender, RoutedEventArgs e)
+        {
+            HideZoneSvgToolbarPreview();
+
+            switch (_phaDoCtxSelType)
+            {
+                case PhaDoCtxSelType.GenLabel:
+                    if (_phaDoCurrentOptions == null) return;
+                    _phaDoCurrentOptions.GenLabelStyle = ReadGenLabelStyleFromToolbar();
+                    RedrawGenerationBandsOnly();
+                    break;
+                case PhaDoCtxSelType.TitleBlock:
+                    ApplyTitleBlockToolbarSvg();
+                    break;
+                case PhaDoCtxSelType.TitleText when _phaDoTitleSelectedLine >= 0:
+                    ApplyToolbarToTitleLine(_phaDoTitleSelectedLine);
+                    break;
+                case PhaDoCtxSelType.PersonText
+                    when _phaDoSelectedFamilyId > 0 && _phaDoSelectedPersonSlot.HasValue:
+                    ApplyToolbarToFamilyPersonText(_phaDoSelectedFamilyId, _phaDoSelectedPersonSlot.Value);
+                    break;
+                case PhaDoCtxSelType.Box when _phaDoSelectedFamilyId > 0:
+                    ApplyFamilyBoxToolbarSvg(_phaDoSelectedFamilyId);
+                    break;
+            }
+        }
+
+        /// <summary>Áp dụng cho tất cả object cùng đời (generation level).</summary>
+        private void PhaDoCtxApplyAllGen_Click(object sender, RoutedEventArgs e)
+        {
+            switch (_phaDoCtxSelType)
+            {
+                // Nhãn Đời + Title text: "cùng đời" = tất cả (chỉ 1 title block / 1 bộ nhãn)
+                case PhaDoCtxSelType.GenLabel:
+                case PhaDoCtxSelType.TitleBlock:
+                case PhaDoCtxSelType.TitleText:
+                case PhaDoCtxSelType.PersonText:
+                    PhaDoCtxApplyAllPha_Click(sender, e);
+                    return;
+                case PhaDoCtxSelType.Box when _phaDoSelectedFamilyId > 0 &&
+                                              _phaDoRenderedLayout?.Nodes != null:
+                    var node = FindNodeByFamilyId(_phaDoSelectedFamilyId);
+                    if (node == null) return;
+                    int level = node.Level;
+                    var sameGen = _phaDoRenderedLayout.Nodes
+                        .Where(n => n.Level == level && (n.Family?.familyInfo?.FamilyId ?? 0) > 0)
+                        .Select(n => n.Family.familyInfo.FamilyId).Distinct().ToList();
+                    foreach (int fid in sameGen)
+                    {
+                        ApplyFamilyBoxToolbarSvg(fid);
+                    }
+                    break;
+            }
+        }
+
+        /// <summary>Áp dụng cho toàn bộ object cùng loại trong phả.</summary>
+        private void PhaDoCtxApplyAllPha_Click(object sender, RoutedEventArgs e)
+        {
+            switch (_phaDoCtxSelType)
+            {
+                case PhaDoCtxSelType.GenLabel:
+                    if (_phaDoCurrentOptions == null) return;
+                    _phaDoCurrentOptions.GenLabelStyle = ReadGenLabelStyleFromToolbar();
+                    RedrawGenerationBandsOnly();
+                    break;
+                case PhaDoCtxSelType.TitleBlock:
+                    ApplyTitleBlockToolbarSvg();
+                    break;
+                case PhaDoCtxSelType.TitleText:
+                    // "Tất cả phả" với title text = áp dụng cho dòng đang chọn (chỉ 1 title block)
+                    if (_phaDoTitleSelectedLine >= 0)
+                        ApplyToolbarToTitleLine(_phaDoTitleSelectedLine);
+                    break;
+                case PhaDoCtxSelType.PersonText
+                    when _phaDoSelectedFamilyId > 0 && _phaDoSelectedPersonSlot.HasValue:
+                    ApplyToolbarToFamilyPersonText(_phaDoSelectedFamilyId, _phaDoSelectedPersonSlot.Value);
+                    break;
+                case PhaDoCtxSelType.Box when _phaDoRenderedLayout?.Nodes != null:
+                    var allIds = _phaDoRenderedLayout.Nodes
+                        .Select(n => n.Family?.familyInfo?.FamilyId ?? 0)
+                        .Where(id => id > 0).Distinct().ToList();
+                    foreach (int fid in allIds)
+                    {
+                        ApplyFamilyBoxToolbarSvg(fid);
+                    }
+                    break;
+            }
+        }
+
+        /// <summary>Xóa visual zone SVG quanh box của 1 gia đình.</summary>
+        private void RemoveBoxZonesFromCanvas(int familyId)
+        {
+            var toRemove = theCanvas.Children
+                .OfType<FrameworkElement>()
+                .Where(fe => fe.Tag is GiaPhaRender.PhaDoBoxZoneTag zt && zt.FamilyId == familyId)
+                .Cast<UIElement>().ToList();
+            foreach (var el in toRemove) theCanvas.Children.Remove(el);
+        }
+
+        /// <summary>Vẽ 4 vùng SVG trang trí quanh ô gia đình.</summary>
+        private void DrawBoxZonesOnCanvas(int familyId, GiaPhaRender.PhaDoBoxStyle boxStyle)
+        {
+            RemoveBoxZonesFromCanvas(familyId);
+            if (boxStyle == null) return;
+            var node = FindNodeByFamilyId(familyId);
+            if (node == null) return;
+
+            double dpi  = _phaDoCurrentOptions?.PrintDpi ?? 96;
+            double mmPx = dpi / 25.4;
+            double x    = node.Xmm * mmPx;
+            double y    = node.Ymm * mmPx;
+            double w    = node.Metrics.WidthMm  * mmPx;
+            double h    = node.Metrics.HeightMm * mmPx;
+            double sz   = Math.Max(1, boxStyle.ZoneSizeMm) * mmPx;
+
+            DrawOneBoxZone(familyId, GiaPhaRender.PhaDoBoxZone.Top,    boxStyle.TopZoneSvgId,    x, y, w, h, sz, dpi);
+            DrawOneBoxZone(familyId, GiaPhaRender.PhaDoBoxZone.Bottom, boxStyle.BottomZoneSvgId, x, y, w, h, sz, dpi);
+            DrawOneBoxZone(familyId, GiaPhaRender.PhaDoBoxZone.Left,   boxStyle.LeftZoneSvgId,   x, y, w, h, sz, dpi);
+            DrawOneBoxZone(familyId, GiaPhaRender.PhaDoBoxZone.Right,  boxStyle.RightZoneSvgId,  x, y, w, h, sz, dpi);
+        }
+
+        private void DrawOneBoxZone(int familyId, GiaPhaRender.PhaDoBoxZone zone,
+            string svgId,
+            double xPx, double yPx, double wPx, double hPx, double szPx, double dpi)
+        {
+            if (string.IsNullOrWhiteSpace(svgId)) return;
+            if (!TryGetZoneSvgShape(svgId, out var shape) || shape == null) return;
+
+            double elW, elH, elLeft, elTop;
+            switch (zone)
+            {
+                case GiaPhaRender.PhaDoBoxZone.Top:
+                    elW = wPx; elH = szPx; elLeft = xPx; elTop = yPx - szPx; break;
+                case GiaPhaRender.PhaDoBoxZone.Bottom:
+                    elW = wPx; elH = szPx; elLeft = xPx; elTop = yPx + hPx;  break;
+                case GiaPhaRender.PhaDoBoxZone.Left:
+                    elW = szPx; elH = hPx; elLeft = xPx - szPx; elTop = yPx; break;
+                default: // Right
+                    elW = szPx; elH = hPx; elLeft = xPx + wPx;  elTop = yPx; break;
+            }
+
+            string markup = shape.GetSvgMarkup();
+            if (string.IsNullOrWhiteSpace(markup)) return;
+            double vbW = shape.ViewBoxWidth  > 0 ? shape.ViewBoxWidth  : 100;
+            double vbH = shape.ViewBoxHeight > 0 ? shape.ViewBoxHeight : 100;
+            var el = GiaPhaRender.PhaDoBoxSvgWpfRenderer.CreateBackgroundElement(
+                markup, vbW, vbH, elW, elH, null, null);
+            if (el == null) return;
+
+            el.Tag = new GiaPhaRender.PhaDoBoxZoneTag(familyId, zone);
+            Canvas.SetLeft(el, elLeft); Canvas.SetTop(el, elTop);
+            Panel.SetZIndex(el, 2);
+            theCanvas.Children.Add(el);
         }
 
         private void RemoveFamilyBackgroundVisual(int familyId)
         {
             var toRemove = theCanvas.Children
                 .OfType<FrameworkElement>()
-                .Where(fe => fe.Tag is PhaDoBoxBackgroundTag t
-                    && (t.Family?.familyInfo?.FamilyId ?? 0) == familyId)
+                .Where(fe =>
+                {
+                    if (fe.Tag is PhaDoBoxBackgroundTag t
+                        && (t.Family?.familyInfo?.FamilyId ?? 0) == familyId)
+                    {
+                        return true;
+                    }
+
+                    // Nền đang preview toolbar — tag đã đổi, vẫn phải xóa theo familyId
+                    if (fe.Tag is GiaPhaRender.PhaDoZoneSvgPreviewTag p
+                        && p.FamilyId == familyId
+                        && !p.IsTitleBlock)
+                    {
+                        return true;
+                    }
+
+                    return false;
+                })
                 .Cast<UIElement>()
                 .ToList();
             foreach (var el in toRemove)
@@ -1545,75 +3830,89 @@ namespace vietnamgiapha
         private bool TryGetFamilyBackgroundBounds(int familyId, out double left, out double top, out double width, out double height)
         {
             left = top = width = height = 0;
-            var bg = theCanvas.Children
+            var bg = FindFamilyBackgroundElement(familyId);
+            if (bg != null)
+            {
+                left = Canvas.GetLeft(bg);
+                top = Canvas.GetTop(bg);
+                if (double.IsNaN(left))
+                {
+                    left = 0;
+                }
+
+                if (double.IsNaN(top))
+                {
+                    top = 0;
+                }
+
+                if (TryGetFrameworkElementSizePx(bg, out width, out height))
+                {
+                    return true;
+                }
+            }
+
+            // Fallback layout khi chưa có / mất visual nền
+            var node = FindNodeByFamilyId(familyId);
+            if (node?.Metrics != null)
+            {
+                left = MmToPx(node.Xmm);
+                top = MmToPx(node.Ymm);
+                width = MmToPx(node.Metrics.WidthMm);
+                height = MmToPx(node.Metrics.HeightMm);
+                return width > 0 && height > 0;
+            }
+
+            return false;
+        }
+
+        /// <summary>Nền ô thật (không tính lớp preview toolbar).</summary>
+        private FrameworkElement FindFamilyBackgroundElement(int familyId)
+        {
+            if (theCanvas == null || familyId <= 0)
+            {
+                return null;
+            }
+
+            return theCanvas.Children
                 .OfType<FrameworkElement>()
                 .FirstOrDefault(fe => fe.Tag is PhaDoBoxBackgroundTag t
                     && (t.Family?.familyInfo?.FamilyId ?? 0) == familyId);
-            if (bg == null)
-            {
-                return false;
-            }
-
-            left = Canvas.GetLeft(bg);
-            top = Canvas.GetTop(bg);
-            if (double.IsNaN(left))
-            {
-                left = 0;
-            }
-
-            if (double.IsNaN(top))
-            {
-                top = 0;
-            }
-
-            width = double.IsNaN(bg.Width) ? bg.ActualWidth : bg.Width;
-            height = double.IsNaN(bg.Height) ? bg.ActualHeight : bg.Height;
-            if (width < 1 || height < 1)
-            {
-                bg.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-                width = bg.DesiredSize.Width;
-                height = bg.DesiredSize.Height;
-            }
-
-            return width > 0 && height > 0;
         }
 
         /// <summary>Áp dụng kiểu đã lưu lên visual một ô (nền SVG/rect + chữ chính/phụ theo tag).</summary>
         private void ApplyBoxStyleToFamilyVisuals(int familyId)
         {
             var boxStyle = GetBoxStyleForFamily(familyId);
+            EnsureFamilyBoxFrameMarkupResolved(boxStyle);
 
             ReplaceFamilyBackgroundVisual(familyId, boxStyle);
+            // Vẽ lại 4 vùng zone SVG trang trí quanh ô
+            DrawBoxZonesOnCanvas(familyId, boxStyle);
 
             double dpi = _phaDoCurrentOptions?.PrintDpi ?? 96;
             string defaultFont = _phaDoCurrentOptions?.FontFamilyName ?? "Segoe UI";
-            double defaultMainPt = _phaDoCurrentOptions?.MainNameFontPt ?? 9;
-            double defaultSpousePt = _phaDoCurrentOptions?.SpouseFontPt ?? 7.5;
 
             foreach (var child in theCanvas.Children)
             {
-                if (child is TextBlock tb)
+                if (child is TextBlock tb && tb.Tag is PhaDoBoxVisualTag visualTag
+                    && (visualTag.Family?.familyInfo?.FamilyId ?? 0) == familyId
+                    && (visualTag.ElementKind == PhaDoBoxElementKind.Person
+                        || visualTag.ElementKind == PhaDoBoxElementKind.ExtraNote
+                        || visualTag.ElementKind == PhaDoBoxElementKind.GenerationLabel))
                 {
-                    if (TryGetPersonTextRole(tb.Tag, familyId, out var role))
-                    {
-                        ApplyPersonTextStyle(tb, role == PhaDoPersonTextRole.Main ? boxStyle.Main : boxStyle.Spouse,
-                            role == PhaDoPersonTextRole.Main ? defaultMainPt : defaultSpousePt,
-                            defaultFont, dpi, role == PhaDoPersonTextRole.Main);
-                    }
+                    var personStyle = ResolvePersonTextStyle(familyId, visualTag, out bool boldDefault);
+                    double defaultPt = GetDefaultFontPtForVisualTag(visualTag);
+                    ApplyPersonTextStyle(tb, personStyle, defaultPt, defaultFont, dpi, boldDefault);
                 }
-                else if (child is StackPanel column)
+                else if (child is StackPanel column && column.Tag is PhaDoBoxVisualTag columnTag
+                    && (columnTag.Family?.familyInfo?.FamilyId ?? 0) == familyId
+                    && columnTag.ElementKind == PhaDoBoxElementKind.Person)
                 {
-                    if (!TryGetPersonTextRole(column.Tag, familyId, out var role))
-                    {
-                        continue;
-                    }
-
-                    var personStyle = role == PhaDoPersonTextRole.Main ? boxStyle.Main : boxStyle.Spouse;
-                    double defaultPt = role == PhaDoPersonTextRole.Main ? defaultMainPt : defaultSpousePt;
+                    var personStyle = ResolvePersonTextStyle(familyId, columnTag, out bool boldDefault);
+                    double defaultPt = GetDefaultFontPtForVisualTag(columnTag);
                     foreach (var line in column.Children.OfType<TextBlock>())
                     {
-                        ApplyPersonTextStyle(line, personStyle, defaultPt, defaultFont, dpi,
-                            role == PhaDoPersonTextRole.Main);
+                        ApplyPersonTextStyle(line, personStyle, defaultPt, defaultFont, dpi, boldDefault);
                     }
                 }
             }
@@ -1648,7 +3947,8 @@ namespace vietnamgiapha
 
             double pt = personStyle?.FontPt ?? defaultPt;
             tb.FontSize = pt * dpi / 72.0;
-            tb.FontWeight = boldByDefault ? FontWeights.Bold : FontWeights.Normal;
+            bool bold = personStyle?.Bold ?? boldByDefault;
+            tb.FontWeight = bold ? FontWeights.Bold : FontWeights.Normal;
 
             if (!string.IsNullOrWhiteSpace(personStyle?.ForegroundHex))
             {
@@ -1662,8 +3962,20 @@ namespace vietnamgiapha
 
         private void RefreshAllBoxStylesOnCanvas()
         {
-            foreach (int familyId in _phaDoBoxStyleByFamilyId.Keys.ToList())
+            if (_phaDoRenderedLayout?.Nodes == null)
             {
+                return;
+            }
+
+            // Áp style cho toàn bộ box đang render để tránh hiện tượng màu "nhảy cóc"
+            // khi family chưa có custom style trong _phaDoBoxStyleByFamilyId.
+            foreach (var node in _phaDoRenderedLayout.Nodes)
+            {
+                int familyId = node?.Family?.familyInfo?.FamilyId ?? 0;
+                if (familyId <= 0)
+                {
+                    continue;
+                }
                 ApplyBoxStyleToFamilyVisuals(familyId);
             }
         }
@@ -1757,6 +4069,11 @@ namespace vietnamgiapha
                 {
                     target.Main.ForegroundHex = from.Main.ForegroundHex;
                 }
+
+                if (from.Main.Bold.HasValue)
+                {
+                    target.Main.Bold = from.Main.Bold;
+                }
             }
 
             if (from.Spouse != null)
@@ -1774,6 +4091,53 @@ namespace vietnamgiapha
                 if (!string.IsNullOrWhiteSpace(from.Spouse.ForegroundHex))
                 {
                     target.Spouse.ForegroundHex = from.Spouse.ForegroundHex;
+                }
+
+                if (from.Spouse.Bold.HasValue)
+                {
+                    target.Spouse.Bold = from.Spouse.Bold;
+                }
+            }
+
+            if (from.PersonTextStylesBySlot != null)
+            {
+                if (target.PersonTextStylesBySlot == null)
+                {
+                    target.PersonTextStylesBySlot = new Dictionary<int, PhaDoPersonTextStyle>();
+                }
+
+                foreach (var kv in from.PersonTextStylesBySlot)
+                {
+                    if (kv.Value == null || kv.Value.IsEmpty())
+                    {
+                        continue;
+                    }
+
+                    if (!target.PersonTextStylesBySlot.TryGetValue(kv.Key, out var mergedSlot))
+                    {
+                        target.PersonTextStylesBySlot[kv.Key] = kv.Value.Clone();
+                        continue;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(kv.Value.FontFamilyName))
+                    {
+                        mergedSlot.FontFamilyName = kv.Value.FontFamilyName;
+                    }
+
+                    if (kv.Value.FontPt.HasValue)
+                    {
+                        mergedSlot.FontPt = kv.Value.FontPt;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(kv.Value.ForegroundHex))
+                    {
+                        mergedSlot.ForegroundHex = kv.Value.ForegroundHex;
+                    }
+
+                    if (kv.Value.Bold.HasValue)
+                    {
+                        mergedSlot.Bold = kv.Value.Bold;
+                    }
                 }
             }
         }
@@ -1856,6 +4220,56 @@ namespace vietnamgiapha
         {
             var dpi = _phaDoCurrentOptions?.PrintDpi ?? 96;
             return PrintUnits.PixelsToMm(px, dpi);
+        }
+
+        /// <summary>DPI thực khi vẽ phả đồ — khớp GiaPhaTitleBlockRenderer / layout.</summary>
+        private double GetPhaDoRenderDpi()
+        {
+            if (_phaDoRenderedLayout != null && _phaDoRenderedLayout.Dpi > 1)
+            {
+                return _phaDoRenderedLayout.Dpi;
+            }
+
+            return _phaDoCurrentOptions?.PrintDpi ?? 96;
+        }
+
+        private double MmToPxRender(double mm)
+        {
+            return PrintUnits.MmToPixels(mm, GetPhaDoRenderDpi());
+        }
+
+        private double PxToMmRender(double px)
+        {
+            return PrintUnits.PixelsToMm(px, GetPhaDoRenderDpi());
+        }
+
+        private Point GetPhaDoCanvasDeltaMmRender(Point currentCanvasPoint, Point startCanvasPoint)
+        {
+            double dxPx = currentCanvasPoint.X - startCanvasPoint.X;
+            double dyPx = currentCanvasPoint.Y - startCanvasPoint.Y;
+            return new Point(PxToMmRender(dxPx), PxToMmRender(dyPx));
+        }
+
+        private static bool TryGetFrameworkElementSizePx(FrameworkElement element, out double widthPx, out double heightPx)
+        {
+            widthPx = 0;
+            heightPx = 0;
+            if (element == null)
+            {
+                return false;
+            }
+
+            widthPx = element.Width;
+            heightPx = element.Height;
+            if (widthPx > 0 && heightPx > 0)
+            {
+                return true;
+            }
+
+            element.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            widthPx = element.DesiredSize.Width;
+            heightPx = element.DesiredSize.Height;
+            return widthPx > 0 && heightPx > 0;
         }
 
         /// <summary>Dịch ngang mọi phần tử của 1 gia đình (giữ khoảng cách giữa các cột dọc).</summary>
@@ -2042,6 +4456,8 @@ namespace vietnamgiapha
             }
 
             RedrawPhaDoFamilyBox(familyId);
+            SyncFamilyPersonTextWidthsToBox(familyId);
+            RefreshFamilySelectionVisuals(familyId);
 
             int parentId = node.Family?.Parent?.familyInfo?.FamilyId ?? 0;
             if (parentId > 0)
@@ -2056,17 +4472,35 @@ namespace vietnamgiapha
             }
         }
 
+        /// <summary>Cây lớn: chỉ mở gốc — tránh TreeView materialize hết nhánh (STA deadlock / OOM).</summary>
+        private const int GiaPhaAutoExpandAllMaxFamilies = 600;
+
         public void ScheduleExpandGiaPhaTreeView()
         {
-            ExpandGiaPhaTreeViewAll();
+            ExpandGiaPhaTreeViewForCurrentTree();
             Dispatcher.BeginInvoke(
-                new Action(ExpandGiaPhaTreeViewAll),
+                new Action(ExpandGiaPhaTreeViewForCurrentTree),
                 DispatcherPriority.Loaded);
         }
 
-        private void ExpandGiaPhaTreeViewAll()
+        private void ExpandGiaPhaTreeViewForCurrentTree()
         {
-            viewModel?.FamilyTree?.Family?.ExpandAll();
+            var family = viewModel?.FamilyTree?.Family;
+            if (family?.RootPerson == null)
+            {
+                return;
+            }
+
+            int familyCount = CountFamiliesInTree(family.RootPerson);
+            if (familyCount > GiaPhaAutoExpandAllMaxFamilies)
+            {
+                family.ExpandRootOnly();
+                viewModel?.AddUserAction(
+                    "Cây lớn (" + familyCount + " gia đình): chỉ mở gốc — mở từng nhánh khi cần.");
+                return;
+            }
+
+            family.ExpandAll();
         }
 
         private void SelectFamilyInTreeView(FamilyViewModel family)
@@ -2147,11 +4581,100 @@ namespace vietnamgiapha
             ClearPersonSelectionHighlight();
         }
 
+        /// <summary>Xóa highlight các node con/cháu của box đang chọn.</summary>
+        private void ClearDirectChildHighlights()
+        {
+            var highlights = theCanvas.Children
+                .OfType<FrameworkElement>()
+                .Where(fe => Equals(fe.Tag, "__PhaDoDirectChildHighlight"))
+                .Cast<UIElement>()
+                .ToList();
+            foreach (var h in highlights)
+            {
+                theCanvas.Children.Remove(h);
+            }
+        }
+
+        /// <summary>Tô màu đệ quy 2 mức: con trực tiếp + cháu (không lan sâu hơn).</summary>
+        private void DrawDirectChildHighlights(int selectedFamilyId)
+        {
+            ClearDirectChildHighlights();
+            if (selectedFamilyId <= 0)
+            {
+                return;
+            }
+
+            var selectedNode = FindNodeByFamilyId(selectedFamilyId);
+            var directChildren = selectedNode?.Family?.Children;
+            if (directChildren == null || directChildren.Count == 0)
+            {
+                return;
+            }
+
+            var queue = new Queue<(FamilyViewModel Node, int Depth)>();
+            foreach (var child in directChildren)
+            {
+                queue.Enqueue((child, 1));
+            }
+
+            while (queue.Count > 0)
+            {
+                var item = queue.Dequeue();
+                var node = item.Node;
+                int depth = item.Depth;
+                if (node == null || depth > 2)
+                {
+                    continue;
+                }
+
+                int familyId = node.familyInfo?.FamilyId ?? 0;
+                if (familyId <= 0)
+                {
+                    continue;
+                }
+
+                if (!TryGetFamilyBackgroundBounds(familyId, out double left, out double top, out double boxW, out double boxH))
+                {
+                    continue;
+                }
+
+                // Mức 1 đậm hơn mức 2 để phân biệt con/cháu trực quan.
+                byte fillAlpha = depth == 1 ? (byte)125 : (byte)80;
+                byte strokeAlpha = depth == 1 ? (byte)230 : (byte)200;
+                var overlay = new Rectangle
+                {
+                    Width = Math.Max(2, boxW),
+                    Height = Math.Max(2, boxH),
+                    Fill = new SolidColorBrush(Color.FromArgb(fillAlpha, 36, 129, 255)),
+                    Stroke = new SolidColorBrush(Color.FromArgb(strokeAlpha, 20, 87, 184)),
+                    StrokeThickness = depth == 1 ? 1.6 : 1.1,
+                    RadiusX = 4,
+                    RadiusY = 4,
+                    IsHitTestVisible = false,
+                    Tag = "__PhaDoDirectChildHighlight"
+                };
+                Canvas.SetLeft(overlay, left);
+                Canvas.SetTop(overlay, top);
+                Panel.SetZIndex(overlay, 11);
+                theCanvas.Children.Add(overlay);
+
+                if (depth < 2 && node.Children != null)
+                {
+                    foreach (var child in node.Children)
+                    {
+                        queue.Enqueue((child, depth + 1));
+                    }
+                }
+            }
+        }
+
         private void RemoveFamilyVisualsFromCanvas(int familyId)
         {
+            // Xóa visual ô gia đình — không xóa nhãn phả con (tag riêng, vẽ lại bởi DrawScopeStartMarkers).
             var toRemove = theCanvas.Children
                 .OfType<FrameworkElement>()
-                .Where(fe => GetFamilyIdFromElementTag(fe.Tag) == familyId)
+                .Where(fe => GetFamilyIdFromElementTag(fe.Tag) == familyId
+                    && !(fe.Tag is PhaDoScopeStartMarkerTag))
                 .Cast<UIElement>()
                 .ToList();
             foreach (var el in toRemove)
@@ -2188,6 +4711,14 @@ namespace vietnamgiapha
                 if (_phaDoBoxStyleByFamilyId.TryGetValue(familyId, out var style))
                 {
                     ApplyBoxStyleSizeOverride(node, style);
+                }
+
+                if (_phaConFamilyIds.Contains(familyId) && node.Metrics != null)
+                {
+                    // Box family-phacon to hơn để user nhìn thấy đây là nhánh sẽ tách phả con.
+                    node.Metrics.ApplySizeOverride(
+                        node.Metrics.WidthMm * 1.14,
+                        node.Metrics.HeightMm * 1.18);
                 }
             }
         }
@@ -2226,11 +4757,9 @@ namespace vietnamgiapha
 
             ApplyBoxStyleToFamilyVisuals(familyId);
             ApplyPersonOffsetsForFamily(familyId);
-
-            if (_phaDoSelectedFamilyId == familyId)
-            {
-                DrawSelectionOverlay(familyId);
-            }
+            SyncFamilyPersonTextWidthsToBox(familyId);
+            RefreshFamilySelectionVisuals(familyId);
+            BringScopeStartMarkersToFront();
         }
 
         private void TabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -2398,10 +4927,41 @@ namespace vietnamgiapha
                 busRight = mid + _phaDoCurrentOptions.MinBusSpanMm / 2.0;
             }
 
-            foreach (var line in theCanvas.Children.OfType<Line>())
+            bool useCurved = _phaDoCurrentOptions?.ConnectorPathType == GiaPhaConnectorPathType.Curved;
+            foreach (var fe in theCanvas.Children.OfType<FrameworkElement>())
             {
-                var tag = line.Tag as GiaPhaCanvasConnectorTag;
+                var tag = fe.Tag as GiaPhaCanvasConnectorTag;
                 if (tag == null || tag.ParentFamilyId != parentFamilyId)
+                {
+                    continue;
+                }
+
+                if (useCurved
+                    && tag.LineKind == GiaPhaCanvasConnectorLineKind.CurvedBranch
+                    && fe is System.Windows.Shapes.Path curvePath)
+                {
+                    var child = FindNodeByFamilyId(tag.ChildFamilyId);
+                    if (child == null)
+                    {
+                        continue;
+                    }
+                    double childCx2 = child.Xmm + child.Metrics.WidthMm / 2.0;
+                    double startX = MmToPx(parentCx);
+                    double startY = MmToPx(parentBottom);
+                    double endX = MmToPx(childCx2);
+                    double endY = MmToPx(child.Ymm);
+                    double midYpx = (startY + endY) / 2.0;
+                    var figure = new PathFigure { StartPoint = new Point(startX, startY), IsClosed = false, IsFilled = false };
+                    figure.Segments.Add(new BezierSegment(
+                        new Point(startX, midYpx),
+                        new Point(endX, midYpx),
+                        new Point(endX, endY),
+                        true));
+                    curvePath.Data = new PathGeometry(new[] { figure });
+                    continue;
+                }
+
+                if (!(fe is Line line))
                 {
                     continue;
                 }
@@ -2446,6 +5006,11 @@ namespace vietnamgiapha
             //
             InitializeComponent();
             phaDoSubtreeListBox.ItemsSource = _phaDoRenderScopes;
+            UpdatePhaDoSubtreeListBoxToolTip();
+            InitPhaDoCardLayoutCombo();
+            InitPhaDoContextFontControls();
+            ReloadPhaDoZoneSvgFromFolder();
+            BindPhaDoZoneComboItems();
 
             log.Info("Application started...SecurityProtocol ");
             System.Net.ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12 |
@@ -3313,9 +5878,131 @@ namespace vietnamgiapha
             if (e.Row?.Item is PersonGridRow row)
             {
                 row.FamilyGroupLabel = BuildFamilyGroupLabel(row.Family);
+                if (row.Family != null && row.Family.Parent == null)
+                {
+                    viewModel?.FamilyTree?.SyncGiaphaNameFromRootThuyTo();
+                }
             }
 
             SafeRefreshPersonGridView();
+        }
+
+        /// <summary>Xuất các dòng grid đang hiển thị (sau lọc) ra CSV UTF-8 có BOM.</summary>
+        private void ExportPersonGridToCsv_Click(object sender, RoutedEventArgs e)
+        {
+            if (PersonGridView == null)
+            {
+                MessageBox.Show("Chưa có danh sách người. Bấm \"Danh sách\" trước.", "Xuất CSV");
+                return;
+            }
+
+            var rows = PersonGridView.Cast<object>().OfType<PersonGridRow>().ToList();
+            if (rows.Count == 0)
+            {
+                MessageBox.Show("Không có dòng nào để xuất (kiểm tra bộ lọc hoặc tải danh sách).", "Xuất CSV");
+                return;
+            }
+
+            string baseName = (viewModel?.FamilyTree?.GiaphaName ?? "Nguoi").Trim();
+            if (string.IsNullOrEmpty(baseName))
+            {
+                baseName = "Nguoi";
+            }
+
+            baseName = string.Join("_", baseName.Split(Path.GetInvalidFileNameChars(), StringSplitOptions.RemoveEmptyEntries));
+            var dialog = new SaveFileDialog
+            {
+                Filter = "CSV UTF-8 (*.csv)|*.csv|Tất cả (*.*)|*.*",
+                DefaultExt = "csv",
+                FileName = baseName + "_Nguoi.csv"
+            };
+
+            if (dialog.ShowDialog() != true)
+            {
+                return;
+            }
+
+            try
+            {
+                string csv = BuildPersonGridCsv(rows);
+                File.WriteAllText(dialog.FileName, csv, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
+                viewModel?.AddUserAction("Xuất CSV người: " + dialog.FileName + " (" + rows.Count + " dòng)");
+                MessageBox.Show(
+                    "Đã xuất " + rows.Count + " dòng.\n\nFile: " + dialog.FileName,
+                    "Xuất CSV");
+            }
+            catch (Exception ex)
+            {
+                log.Error("Lỗi xuất CSV người.", ex);
+                MessageBox.Show("Lỗi xuất CSV: " + ex.Message, "Có lỗi");
+            }
+        }
+
+        private static string BuildPersonGridCsv(IReadOnlyList<PersonGridRow> rows)
+        {
+            var sb = new StringBuilder(rows.Count * 96 + 128);
+            sb.Append(CsvEscapeField("Gia đình"));
+            sb.Append(',');
+            sb.Append(CsvEscapeField("ID"));
+            sb.Append(',');
+            sb.Append(CsvEscapeField("Vai trò"));
+            sb.Append(',');
+            sb.Append(CsvEscapeField("Đời"));
+            sb.Append(',');
+            sb.Append(CsvEscapeField("Giới tính"));
+            sb.Append(',');
+            sb.Append(CsvEscapeField("Tên người"));
+            sb.Append(',');
+            sb.Append(CsvEscapeField("Ngày sinh"));
+            sb.Append(',');
+            sb.Append(CsvEscapeField("Ngày mất"));
+            sb.Append(',');
+            sb.Append(CsvEscapeField("Ở tại"));
+            sb.Append(',');
+            sb.AppendLine(CsvEscapeField("Chi tiết"));
+
+            foreach (var row in rows)
+            {
+                string familyLabel = !string.IsNullOrEmpty(row.FamilyGroupLabelForDisplay)
+                    ? row.FamilyGroupLabelForDisplay
+                    : (row.FamilyGroupLabel ?? "");
+                sb.Append(CsvEscapeField(familyLabel));
+                sb.Append(',');
+                sb.Append(CsvEscapeField(row.PersonId));
+                sb.Append(',');
+                sb.Append(CsvEscapeField(row.RoleInFamily));
+                sb.Append(',');
+                sb.Append(row.Generation.ToString(CultureInfo.InvariantCulture));
+                sb.Append(',');
+                sb.Append(CsvEscapeField(row.Gender));
+                sb.Append(',');
+                sb.Append(CsvEscapeField(row.PersonName));
+                sb.Append(',');
+                sb.Append(CsvEscapeField(row.BirthDate));
+                sb.Append(',');
+                sb.Append(CsvEscapeField(row.DeathDate));
+                sb.Append(',');
+                sb.Append(CsvEscapeField(row.Place));
+                sb.Append(',');
+                sb.AppendLine(CsvEscapeField(row.Detail));
+            }
+
+            return sb.ToString();
+        }
+
+        private static string CsvEscapeField(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return "";
+            }
+
+            if (value.IndexOfAny(new[] { ',', '"', '\r', '\n' }) < 0)
+            {
+                return value;
+            }
+
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
         }
         public void UpdateHtmlGiaPha()
         {
@@ -3429,6 +6116,10 @@ namespace vietnamgiapha
         {
             await TryRestoreWorkspaceSessionAsync().ConfigureAwait(true);
             ScheduleExpandGiaPhaTreeView();
+            if (leftPaneSearchPanel != null && leftPaneSearchPanel.ActualWidth > 0)
+            {
+                ApplyLeftPaneSearchScale(leftPaneSearchPanel.ActualWidth);
+            }
         }
 
         public void ResetPhaDoWorkspaceState()
@@ -3442,9 +6133,12 @@ namespace vietnamgiapha
             _phaDoIsResizing = false;
             _phaDoResizingFamilyId = 0;
             _phaDoSelectedFamilyId = 0;
-            _phaDoSelectedPersonSlot = -1;
+            _phaDoSelectedPersonSlot = null;
             _phaDoDraggingFamilyId = 0;
             _phaDoIsDraggingPerson = false;
+            _phaDoIsDraggingTitleLine = false;
+            CancelPendingTitleDrag();
+            ClearTitleSelection();
             ClearSelectionOverlay();
             UpdatePhaDoSelectedBoxSizeStatus(0);
         }
@@ -3529,11 +6223,13 @@ namespace vietnamgiapha
                     }
                 }
 
-                if (tabControl != null
-                    && session.SelectedTabIndex >= 0
-                    && session.SelectedTabIndex < tabControl.Items.Count)
+                if (tabControl != null && session.SelectedTabIndex >= 0)
                 {
-                    tabControl.SelectedIndex = session.SelectedTabIndex;
+                    int tabIndex = MapLegacyMainTabIndex(session.SelectedTabIndex);
+                    if (tabIndex < tabControl.Items.Count)
+                    {
+                        tabControl.SelectedIndex = tabIndex;
+                    }
                 }
 
                 var phaDo = session.PhaDo;
@@ -3572,6 +6268,15 @@ namespace vietnamgiapha
                 if (phaDo.TitleStyle != null)
                 {
                     _phaDoTitleStyle = phaDo.TitleStyle.Clone();
+                    // Session cũ: đã có vị trí/kích thước thủ công nhưng chưa có cờ ManualPositionSet
+                    if (!_phaDoTitleStyle.ManualPositionSet
+                        && (_phaDoTitleStyle.ManualWidthMm > 0
+                            || _phaDoTitleStyle.ManualHeightMm > 0
+                            || _phaDoTitleStyle.ManualLeftMm > 0
+                            || _phaDoTitleStyle.ManualTopMm > 0))
+                    {
+                        _phaDoTitleStyle.ManualPositionSet = true;
+                    }
                 }
 
                 SyncPhaDoBoxStylesFromGiaPhaFile();
@@ -3615,7 +6320,9 @@ namespace vietnamgiapha
             bool resetZoom,
             bool resetScroll,
             FamilyViewModel rootOverride = null,
-            int maxGenerationInclusive = int.MaxValue)
+            int maxGenerationInclusive = int.MaxValue,
+            PhaDoRenderScopeItem scopeForContext = null,
+            FamilyViewModel scopeDataRoot = null)
         {
             var progress = await this.ShowProgressAsync(
                 "Đợi vẽ phả đồ...",
@@ -3629,6 +6336,36 @@ namespace vietnamgiapha
                 timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
                 timer.Tick += (_, __) => UpdatePhaDoRenderProgressMessage(progress, sw, completed: false);
                 timer.Start();
+
+                if (scopeForContext != null && scopeDataRoot != null)
+                {
+                    if (scopeForContext.IsDefaultRoot0WithoutAnalyze)
+                    {
+                        progress.SetMessage(
+                            "Đang chuẩn bị phạm vi Root0 (chưa phân tích)...\n\nĐã chờ: "
+                            + (int)sw.Elapsed.TotalSeconds + " giây");
+                    }
+                    else if (scopeForContext.IsWholeTree)
+                    {
+                        progress.SetMessage(
+                            "Đang vẽ toàn phả...\n\nĐã chờ: "
+                            + (int)sw.Elapsed.TotalSeconds + " giây");
+                    }
+
+                    await ApplyRenderScopeContextFromSelectionAsync(scopeForContext, scopeDataRoot).ConfigureAwait(true);
+
+                    if (scopeForContext.IsWholeTree)
+                    {
+                        // Luôn layout từ gốc file — không dùng RootFamily nhánh / không cắt đời.
+                        rootOverride = scopeDataRoot;
+                        maxGenerationInclusive = int.MaxValue;
+                    }
+                    else
+                    {
+                        rootOverride = scopeForContext.RootFamily ?? scopeDataRoot;
+                        maxGenerationInclusive = scopeForContext.MaxGenerationInclusive;
+                    }
+                }
 
                 return await RenderPhaDoCoreAsync(
                     resetZoom,
@@ -3681,7 +6418,17 @@ namespace vietnamgiapha
                 timer.Start();
 
                 // Parse file lớn ở background để UI thread vẫn bơm message.
-                var gp = await Task.Run(() => Database.FromJson(filePath)).ConfigureAwait(true);
+                var gp = await Task.Run(() =>
+                {
+                    var loaded = Database.FromJson(filePath);
+                    if (loaded != null)
+                    {
+                        // Giải phóng bộ nhớ DOM JSON trước khi dựng cây WPF trên STA.
+                        GC.Collect(2, GCCollectionMode.Optimized);
+                    }
+
+                    return loaded;
+                }).ConfigureAwait(true);
                 if (gp != null && afterLoadAsync != null)
                 {
                     // Chỉ đóng progress sau khi dựng xong cây/binding để tránh cảm giác đóng sớm.
@@ -4143,8 +6890,18 @@ namespace vietnamgiapha
             timer.Start();
             try
             {
-                const int analysisMaxLevel = 30;
                 GiaPhaRenderResult layout = await ComputePhaDoLayoutSnapshotAsync(root).ConfigureAwait(true);
+                int analysisMaxLevel = 30;
+                if (layout?.Nodes != null && layout.Nodes.Count > 0)
+                {
+                    int observedFromLayout = layout.Nodes
+                        .Max(n => n?.Family?.familyInfo?.FamilyLevel ?? 0);
+                    if (observedFromLayout > 0)
+                    {
+                        analysisMaxLevel = observedFromLayout;
+                    }
+                }
+
                 int deepSplitMinFamilies = ComputeAdaptiveMinBranchToSplitDeep(layout?.Nodes?.Count ?? 0);
                 int splitLevel = ResolveSuggestedSplitLevel(
                     root,
@@ -4163,6 +6920,29 @@ namespace vietnamgiapha
                     effectiveRoot0Max = Math.Max(1, splitLevel - 1);
                 }
 
+                var map = BuildSubtreeMap(
+                    layout,
+                    effectiveRoot0Max,
+                    splitLevel,
+                    subtreeMaxGeneration: analysisMaxLevel,
+                    minBranchToSplitDeep: deepSplitMinFamilies);
+                // Chỉ 1 phả con (hoặc không tách) → coi như không có phả con, chỉ phả chính Root0.
+                int effectiveSplitLevel = HasMeaningfulPhaiConBranches(map) ? splitLevel : 0;
+                UpdatePhaConFamilyFlags(
+                    root,
+                    effectiveSplitLevel,
+                    analysisMaxLevel,
+                    deepSplitMinFamilies,
+                    map);
+                // Đổ combo trước — báo cáo ghép kế hoạch vẽ khớp từng mục toolbar.
+                UpdatePhaDoRenderScopesFromMap(
+                    root,
+                    map,
+                    effectiveSplitLevel,
+                    analysisMaxLevel,
+                    deepSplitMinFamilies,
+                    effectiveRoot0Max);
+
                 string report = BuildPhaDoSplitAnalysisReport(
                     root,
                     layout,
@@ -4170,23 +6950,15 @@ namespace vietnamgiapha
                     maxLevel: analysisMaxLevel,
                     minCutLevel: 3,
                     rootLevelMax: effectiveRoot0Max,
-                    minBranchToSplitDeep: deepSplitMinFamilies);
-
-                var map = BuildSubtreeMap(
-                    layout,
-                    effectiveRoot0Max,
-                    splitLevel,
-                    subtreeMaxGeneration: analysisMaxLevel,
-                    minBranchToSplitDeep: deepSplitMinFamilies);
-                // Sau khi phân tích xong, đổ list để user chọn nhanh Toàn phả hoặc từng phả con.
-                UpdatePhaDoRenderScopesFromMap(
-                    root,
-                    map,
-                    splitLevel,
-                    analysisMaxLevel,
-                    deepSplitMinFamilies);
+                    minBranchToSplitDeep: deepSplitMinFamilies,
+                    renderScopes: _phaDoRenderScopes,
+                    effectiveSplitLevel: effectiveSplitLevel,
+                    subtreeMap: map);
                 var dlg = new PhaDoSubtreeMapDialog(dpi: 96) { Owner = this };
-                dlg.SetContent(report, map.RootBlock, map.SubTrees, effectiveRoot0Max, splitLevel);
+                var subTreesForDialog = HasMeaningfulPhaiConBranches(map)
+                    ? (IReadOnlyList<PhaDoSubtreeBranchBlock>)map.SubTrees
+                    : Array.Empty<PhaDoSubtreeBranchBlock>();
+                dlg.SetContent(report, map.RootBlock, subTreesForDialog, effectiveRoot0Max, effectiveSplitLevel);
 
                 // Đóng dialog chờ trước khi mở cửa sổ phân tích để tránh cảm giác "kẹt" spinner/đếm.
                 timer.Stop();
@@ -4225,6 +6997,8 @@ namespace vietnamgiapha
             ApplyCustomBoxSizesFromStyles(result);
             GiaPhaManualLayoutService.RebuildConnectorsOnly(result);
             GiaPhaRenderBoundsFitter.FitCanvasToContent(result);
+            _phaDoFullTreeLayoutSnapshot = result;
+            _phaDoFullTreeLayoutSnapshotRootId = root?.familyInfo?.FamilyId ?? 0;
             return result;
         }
 
@@ -4623,6 +7397,12 @@ namespace vietnamgiapha
             public List<PhaDoSubtreeBranchBlock> SubTrees { get; } = new List<PhaDoSubtreeBranchBlock>();
         }
 
+        /// <summary>Chỉ khi có từ 2 phả con trở lên mới coi là đã tách — 1 nhánh = một phả chính Root0.</summary>
+        private static bool HasMeaningfulPhaiConBranches(PhaDoSubtreeMap map)
+        {
+            return map?.SubTrees != null && map.SubTrees.Count > 1;
+        }
+
         private static string GetFamilyMainPersonName(FamilyViewModel family)
         {
             if (family == null)
@@ -4639,6 +7419,208 @@ namespace vietnamgiapha
             }
 
             return (family.Name0 ?? family.Name ?? "Gia đình").Trim();
+        }
+
+        /// <summary>Nhãn combo/tooltip sau Phân tích phả.</summary>
+        private static string FormatPhaiConScopeLabel(PhaDoRenderScopeItem scope, PhaDoSubtreeBranchBlock block)
+        {
+            string plan = string.IsNullOrWhiteSpace(scope?.RenderPlanSummary)
+                ? "Phả con"
+                : scope.RenderPlanSummary.Trim();
+            int gen = block?.Generation ?? scope?.RootFamily?.familyInfo?.FamilyLevel ?? 0;
+            string doi = gen > 0
+                ? "Đời " + gen.ToString(CultureInfo.InvariantCulture)
+                : "Đời ?";
+            string name = block != null
+                ? (string.IsNullOrWhiteSpace(block.MainPersonName)
+                    ? (block.FamilyName ?? "—").Trim()
+                    : block.MainPersonName.Trim())
+                : GetFamilyMainPersonName(scope?.RootFamily);
+            int gdFile = block != null
+                ? Math.Max(0, block.NodeCount)
+                : CountSubtreeFamilies(scope?.RootFamily);
+            int gdLayout = scope?.LayoutFamilyCountEstimate > 0
+                ? scope.LayoutFamilyCountEstimate
+                : gdFile;
+            string gdPart = gdLayout > 0 && gdLayout != gdFile
+                ? ("~" + gdLayout + " GD khi vẽ (file " + gdFile + ")")
+                : (gdLayout + " GD");
+            string sizePart = block != null
+                ? block.WidthCm.ToString("0.#", CultureInfo.InvariantCulture) + "×"
+                  + block.HeightCm.ToString("0.#", CultureInfo.InvariantCulture) + " cm"
+                : "";
+
+            if (string.IsNullOrWhiteSpace(sizePart))
+            {
+                return string.Format(
+                    CultureInfo.InvariantCulture,
+                    "{0} | {1} | {2} | {3}",
+                    plan,
+                    doi,
+                    name,
+                    gdPart);
+            }
+
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                "{0} | {1} | {2} | {3} | {4}",
+                plan,
+                doi,
+                name,
+                gdPart,
+                sizePart);
+        }
+
+        /// <summary>
+        /// Đếm GD khi vẽ: tại đời Root kế — STOP chỉ 1 ô; nhánh nhỏ nối dài tới lá (khớp BuildScopedRenderRoot).
+        /// </summary>
+        private static int CountLayoutFamiliesWithPhaConStopRules(
+            FamilyViewModel node,
+            int stopGenerationLevel,
+            HashSet<int> stopFamilyIdsAtLevel)
+        {
+            if (node == null)
+            {
+                return 0;
+            }
+
+            int count = 1;
+            int level = node.familyInfo?.FamilyLevel ?? 0;
+            int id = node.familyInfo?.FamilyId ?? 0;
+            if (node.Children == null || node.Children.Count == 0)
+            {
+                return count;
+            }
+
+            if (level == stopGenerationLevel
+                && stopFamilyIdsAtLevel != null
+                && stopFamilyIdsAtLevel.Count > 0
+                && stopFamilyIdsAtLevel.Contains(id))
+            {
+                return count;
+            }
+
+            foreach (var child in node.Children)
+            {
+                count += CountLayoutFamiliesWithPhaConStopRules(
+                    child,
+                    stopGenerationLevel,
+                    stopFamilyIdsAtLevel);
+            }
+
+            return count;
+        }
+
+        /// <summary>Đếm GD khi vẽ scope — dùng luật STOP/nối dài, không chỉ subtree file.</summary>
+        private int EstimateScopeLayoutFamilyCount(PhaDoRenderScopeItem scope, FamilyViewModel fileRoot)
+        {
+            if (scope == null || fileRoot == null)
+            {
+                return 0;
+            }
+
+            if (scope.IsWholeTree)
+            {
+                return CountSubtreeFamilies(fileRoot);
+            }
+
+            var sourceRoot = scope.RootFamily ?? fileRoot;
+            if (scope.MaxGenerationInclusive == int.MaxValue)
+            {
+                return CountSubtreeFamilies(sourceRoot);
+            }
+
+            if (scope.ExpandSmallBranchesAtStopLevel
+                && scope.MaxGenerationInclusive > 0
+                && scope.StopFamilyIdsAtMaxLevel != null
+                && scope.StopFamilyIdsAtMaxLevel.Count > 0)
+            {
+                return CountLayoutFamiliesWithPhaConStopRules(
+                    sourceRoot,
+                    scope.MaxGenerationInclusive,
+                    scope.StopFamilyIdsAtMaxLevel);
+            }
+
+            bool savedExpand = _phaDoScopeExpandSmallBranchesAtStopLevel;
+            int savedMin = _phaDoScopeMinBranchForStopLevel;
+            HashSet<int> savedStop = _phaDoScopeStopFamilyIdsAtMaxLevel;
+            try
+            {
+                _phaDoScopeExpandSmallBranchesAtStopLevel = scope.ExpandSmallBranchesAtStopLevel;
+                _phaDoScopeMinBranchForStopLevel = Math.Max(0, scope.MinBranchForStopLevel);
+                _phaDoScopeStopFamilyIdsAtMaxLevel = scope.StopFamilyIdsAtMaxLevel != null
+                    ? new HashSet<int>(scope.StopFamilyIdsAtMaxLevel)
+                    : new HashSet<int>();
+                FamilyViewModel scoped = BuildScopedRenderRoot(sourceRoot, scope.MaxGenerationInclusive);
+                return CountSubtreeFamilies(scoped);
+            }
+            finally
+            {
+                _phaDoScopeExpandSmallBranchesAtStopLevel = savedExpand;
+                _phaDoScopeMinBranchForStopLevel = savedMin;
+                _phaDoScopeStopFamilyIdsAtMaxLevel = savedStop ?? new HashSet<int>();
+            }
+        }
+
+        /// <summary>Chi tiết STOP vs nối dài tại đời Root kế — cho KẾ HOẠCH VẼ combo Root kế.</summary>
+        private static void AppendScopeStopLevelBreakdown(
+            StringBuilder sb,
+            PhaDoRenderScopeItem scope,
+            int minBranchToSplitDeep)
+        {
+            if (scope == null
+                || scope.IsWholeTree
+                || !scope.ExpandSmallBranchesAtStopLevel
+                || scope.MaxGenerationInclusive <= 0
+                || scope.MaxGenerationInclusive == int.MaxValue
+                || scope.RootFamily == null)
+            {
+                return;
+            }
+
+            int stopLevel = scope.MaxGenerationInclusive;
+            var stopIds = scope.StopFamilyIdsAtMaxLevel ?? new HashSet<int>();
+            if (stopIds.Count == 0)
+            {
+                return;
+            }
+
+            var rootsAtStop = CollectRootsAtLevelFromBase(new[] { scope.RootFamily }, stopLevel);
+            if (rootsAtStop.Count == 0)
+            {
+                return;
+            }
+
+            var extendRoots = rootsAtStop
+                .Where(r => (r?.familyInfo?.FamilyId ?? 0) > 0 && !stopIds.Contains(r.familyInfo.FamilyId))
+                .OrderByDescending(CountSubtreeFamilies)
+                .ThenBy(r => r?.familyInfo?.FamilyId ?? 0)
+                .ToList();
+            int extendLineCount = extendRoots.Count;
+            int extendGdTotal = extendRoots.Sum(r => CountSubtreeFamilies(r));
+
+            sb.AppendLine("    ── Chi tiết tại đời " + stopLevel + " (trên combo này) ──");
+            sb.AppendLine("    A) STOP (≥ " + minBranchToSplitDeep + " GD): " + stopIds.Count
+                + " dòng — chỉ 1 box/dòng, không vẽ con; xem trang lá combo riêng.");
+            sb.AppendLine("    B) Nối dài (< " + minBranchToSplitDeep + " GD): " + extendLineCount
+                + " dòng | Tổng " + extendGdTotal + " GD (vẽ tới hết lá trên combo này):");
+
+            int idx = 1;
+            foreach (var r in extendRoots)
+            {
+                int id = r?.familyInfo?.FamilyId ?? 0;
+                int sub = CountSubtreeFamilies(r);
+                sb.AppendLine("       " + idx.ToString(CultureInfo.InvariantCulture) + ". ID " + id
+                    + " | " + GetFamilyMainPersonName(r) + " | " + sub + " GD");
+                idx++;
+            }
+
+            int totalLayout = CountLayoutFamiliesWithPhaConStopRules(
+                scope.RootFamily,
+                stopLevel,
+                stopIds);
+            sb.AppendLine("    → Tổng GD khi vẽ combo này (ước lượng): " + totalLayout
+                + " = đoạn giữa + " + stopIds.Count + "×STOP(1) + " + extendGdTotal + " GD từ nhánh nối dài.");
         }
 
         private static string GetFamilyDisplayName(FamilyViewModel family)
@@ -5124,7 +8106,10 @@ namespace vietnamgiapha
             int maxLevel,
             int minCutLevel,
             int rootLevelMax = 4,
-            int minBranchToSplitDeep = 500)
+            int minBranchToSplitDeep = 500,
+            IReadOnlyList<PhaDoRenderScopeItem> renderScopes = null,
+            int effectiveSplitLevel = 0,
+            PhaDoSubtreeMap subtreeMap = null)
         {
             // Phân tích: đếm số gia đình theo đời + ước lượng size subtree + bounds layout (cm).
             if (root == null)
@@ -5244,8 +8229,10 @@ namespace vietnamgiapha
             var sb = new StringBuilder();
             sb.AppendLine("Tổng số gia đình: " + nodes.Count);
             sb.AppendLine("Đời tối đa quan sát: " + observedMaxLevel + " (giới hạn phân tích: " + effectiveMax + ")");
-            sb.AppendLine("Mục tiêu mềm kích thước phả con: ~" + PhaDoTargetFamilyCountPerSubtree + " gia đình");
-            sb.AppendLine("Ngưỡng tách sâu động: ≥ " + minBranchToSplitDeep + " gia đình");
+            sb.AppendLine("Mục tiêu mềm kích thước phả con: ~" + PhaDoTargetFamilyCountPerSubtree
+                + " gia đình (chọn mốc tách — KHÔNG phải số ô trên một trang vẽ)");
+            sb.AppendLine("Ngưỡng tách sâu động: ≥ " + minBranchToSplitDeep
+                + " gia đình (đủ lớn mới STOP / có box riêng)");
             sb.AppendLine();
             sb.AppendLine("Số gia đình theo đời:");
             for (int lvl = minLevel; lvl <= effectiveMax; lvl++)
@@ -5267,6 +8254,18 @@ namespace vietnamgiapha
                             + FormatBoundsCm(rMinX, rMinY, rMaxX, rMaxY));
                     }
                 }
+
+                if (renderScopes != null && renderScopes.Count > 0)
+                {
+                    AppendPhaConRenderPlanToReport(
+                        sb,
+                        renderScopes,
+                        effectiveSplitLevel,
+                        minBranchToSplitDeep,
+                        subtreeMap,
+                        effectiveSplitLevel);
+                }
+
                 return sb.ToString().TrimEnd();
             }
 
@@ -5275,6 +8274,17 @@ namespace vietnamgiapha
             {
                 sb.AppendLine("Không tìm thấy đời phù hợp để chia nhánh (cần đời có ≥ 2 gia đình).");
                 sb.AppendLine("Gợi ý: thử tăng giới hạn đời hoặc chọn đời cắt thấp hơn/cao hơn.");
+                if (renderScopes != null && renderScopes.Count > 0)
+                {
+                    AppendPhaConRenderPlanToReport(
+                        sb,
+                        renderScopes,
+                        effectiveSplitLevel,
+                        minBranchToSplitDeep,
+                        subtreeMap,
+                        effectiveSplitLevel);
+                }
+
                 return sb.ToString().TrimEnd();
             }
 
@@ -5333,9 +8343,10 @@ namespace vietnamgiapha
             }
 
             sb.AppendLine();
-            sb.AppendLine("Cách dùng:");
-            sb.AppendLine("- Chỉ root đủ ngưỡng mới tách thành phả con riêng; root nhỏ sẽ gộp vào phả cha.");
-            sb.AppendLine("- Nhánh nào ~size lớn nhất sẽ là trang nặng nhất.");
+            sb.AppendLine("Quy tắc tách (khớp khi vẽ):");
+            sb.AppendLine("- Root đủ ngưỡng → box phả con riêng; nhỏ hơn ngưỡng → gộp vào phả cha.");
+            sb.AppendLine("- Tại mốc Root kế: ≥ ngưỡng → STOP; < ngưỡng → vẽ tiếp tới lá (Root0→Root1, Root1→Root2).");
+            sb.AppendLine("- Cuối báo cáo: mục KẾ HOẠCH VẼ liệt kê từng combo — chọn rồi bấm Vẽ.");
 
             // --- Phân tích sâu theo stride tự động ---
             sb.AppendLine();
@@ -5416,6 +8427,13 @@ namespace vietnamgiapha
                     sb.AppendLine("  - Có box nhưng đoạn quá ngắn, không tách cấp sau: " + boxOnlyNoContinue.Count);
                 }
 
+                AppendCapLevelBranchDetailLines(
+                    sb,
+                    rootsAtCap,
+                    splitMetrics,
+                    minBranchToSplitDeep,
+                    renderScopes);
+
                 var topSegment = eligibleForContinue
                     .Select(r => new
                     {
@@ -5467,7 +8485,426 @@ namespace vietnamgiapha
                 capIndex++;
             }
 
+            AppendPhaConCoverageVerification(
+                sb,
+                root,
+                nodes.Count,
+                splitMetrics,
+                bestLevel,
+                nodesByLevel,
+                renderScopes,
+                minBranchToSplitDeep);
+
+            if (renderScopes != null && renderScopes.Count > 0)
+            {
+                AppendPhaConRenderPlanToReport(
+                    sb,
+                    renderScopes,
+                    effectiveSplitLevel,
+                    minBranchToSplitDeep,
+                    subtreeMap,
+                    bestLevel);
+            }
+
             return sb.ToString().TrimEnd();
+        }
+
+        /// <summary>Đối soát: phân vùng nhánh có cộng đúng tổng file; combo lá không cộng chồng với Root kế.</summary>
+        private static void AppendPhaConCoverageVerification(
+            StringBuilder sb,
+            FamilyViewModel root,
+            int totalFamilies,
+            PhaConSplitMetrics splitMetrics,
+            int firstSplitLevel,
+            Dictionary<int, List<FamilyViewModel>> nodesByLevel,
+            IReadOnlyList<PhaDoRenderScopeItem> renderScopes,
+            int minBranchToSplitDeep)
+        {
+            sb.AppendLine();
+            sb.AppendLine("══════════════════════════════════════");
+            sb.AppendLine("ĐỐI SOÁT SỐ GIA ĐÌNH");
+            sb.AppendLine("══════════════════════════════════════");
+            sb.AppendLine("Tổng file: " + totalFamilies + " GD.");
+            AppendPhaConIntuitiveTotalSummary(
+                sb,
+                totalFamilies,
+                firstSplitLevel,
+                nodesByLevel,
+                renderScopes,
+                minBranchToSplitDeep);
+
+            if (firstSplitLevel <= 0
+                || nodesByLevel == null
+                || !nodesByLevel.TryGetValue(firstSplitLevel, out var rootsAtFirstSplit)
+                || rootsAtFirstSplit.Count == 0)
+            {
+                sb.AppendLine("(Không có mốc tách — bỏ qua đối soát phân vùng.)");
+                return;
+            }
+
+            int sumBranchSubtrees = 0;
+            sb.AppendLine();
+            sb.AppendLine("① Phân vùng tại đời cắt đầu (đời " + firstSplitLevel
+                + ") — các nhánh con KHÔNG chồng nhau:");
+            foreach (var r in rootsAtFirstSplit.OrderBy(r => r?.familyInfo?.FamilyId ?? 0))
+            {
+                int sub = splitMetrics.SubtreeSize(r);
+                sumBranchSubtrees += sub;
+                sb.AppendLine("    · ID " + (r?.familyInfo?.FamilyId ?? 0) + " | "
+                    + GetFamilyMainPersonName(r) + " | subtree = " + sub + " GD");
+            }
+
+            int ancestorOnly = totalFamilies - sumBranchSubtrees;
+            int checkTotal = ancestorOnly + sumBranchSubtrees;
+            sb.AppendLine("    → Tổng subtree các nhánh: " + sumBranchSubtrees
+                + " + tổ tiên (đời < " + firstSplitLevel + ", không nằm trong subtree nhánh): "
+                + ancestorOnly + " = " + checkTotal
+                + (checkTotal == totalFamilies ? " ✓ khớp tổng file." : " ✗ KHÔNG khớp tổng file."));
+            sb.AppendLine("    (Nhánh nhỏ gộp Root0 vẫn nằm trong subtree đó — không tách combo riêng.)");
+
+            foreach (var r in rootsAtFirstSplit)
+            {
+                if (!splitMetrics.CanContinueSplit(r))
+                {
+                    continue;
+                }
+
+                if (!splitMetrics.TrySelectNextSplitLevel(
+                        r,
+                        out int probeLevel,
+                        out List<FamilyViewModel> eligibleAtProbe,
+                        out int segment))
+                {
+                    continue;
+                }
+
+                int parentSub = splitMetrics.SubtreeSize(r);
+                var allAtProbe = CollectRootsAtLevelFromBase(new[] { r }, probeLevel);
+                int sumAllProbeSubtrees = allAtProbe.Sum(splitMetrics.SubtreeSize);
+                int sumEligibleOnly = eligibleAtProbe?.Sum(splitMetrics.SubtreeSize) ?? 0;
+                int reconstructed = 1 + segment + sumAllProbeSubtrees;
+                sb.AppendLine();
+                sb.AppendLine("② Trong nhánh ID " + (r?.familyInfo?.FamilyId ?? 0)
+                    + " (subtree " + parentSub + " GD), tách tiếp tại đời " + probeLevel + ":");
+                sb.AppendLine("    · Đoạn đời " + ((r?.familyInfo?.FamilyLevel ?? 0) + 1) + "–"
+                    + (probeLevel - 1) + " (không gồm root đời " + probeLevel + "): " + segment + " GD");
+                sb.AppendLine("    · Số dòng đời " + probeLevel + " dưới nhánh này: " + allAtProbe.Count
+                    + " | Tổng subtree các dòng (phân vùng, không chồng): " + sumAllProbeSubtrees + " GD");
+                sb.AppendLine("    · Chỉ " + (eligibleAtProbe?.Count ?? 0) + " dòng ≥ " + minBranchToSplitDeep
+                    + " GD có combo trang lá [3][4][5] — tổng subtree 3 dòng: " + sumEligibleOnly + " GD");
+                sb.AppendLine("    · Kiểm tra: 1 + " + segment + " + " + sumAllProbeSubtrees + " = "
+                    + reconstructed
+                    + (reconstructed == parentSub
+                        ? " ✓ khớp subtree cha."
+                        : " ✗ lệch subtree cha (" + parentSub + ")."));
+                if (sumEligibleOnly > 0 && sumEligibleOnly < parentSub)
+                {
+                    sb.AppendLine("    → " + sumEligibleOnly + " (3 trang lá) KHÔNG cộng bằng "
+                        + parentSub + " hay " + totalFamilies + " — đúng thiết kế:");
+                    sb.AppendLine("      · " + sumEligibleOnly + " = chỉ 3 dòng lớn tại đời " + probeLevel
+                        + " (zoom riêng).");
+                    sb.AppendLine("      · ~" + (parentSub - sumEligibleOnly) + " GD còn lại = đoạn 5–11 + "
+                        + (allAtProbe.Count - (eligibleAtProbe?.Count ?? 0)) + " dòng nhỏ đời "
+                        + probeLevel + " + mọi hậu duệ — nằm trong combo [2] (đời ≤" + probeLevel + ").");
+                }
+            }
+
+            if (renderScopes != null && renderScopes.Count > 1)
+            {
+                sb.AppendLine();
+                sb.AppendLine("③ Số GD khi vẽ từng combo (ước lượng clone — KHÔNG cộng để so tổng file):");
+                int sumLayoutEst = 0;
+                foreach (var s in renderScopes)
+                {
+                    if (s == null || s.IsWholeTree)
+                    {
+                        continue;
+                    }
+
+                    int c = s.LayoutFamilyCountEstimate > 0
+                        ? s.LayoutFamilyCountEstimate
+                        : CountSubtreeFamilies(s.RootFamily);
+                    sumLayoutEst += c;
+                    string role = s.ComboIndexHint == 1
+                        ? " (màn hình đầu, ~vài GD)"
+                        : (s.MaxGenerationInclusive != int.MaxValue && s.MaxGenerationInclusive < int.MaxValue / 2
+                            ? " (phần lớn phả, đến đời " + s.MaxGenerationInclusive + ")"
+                            : " (một dòng zoom)");
+                    sb.AppendLine("    · Combo #" + s.ComboIndexHint + ": ~" + c + " GD khi vẽ" + role
+                        + " | gốc ID " + s.FamilyId);
+                }
+
+                sb.AppendLine("    → Cộng thô #" + string.Join("+", renderScopes
+                        .Where(s => s != null && !s.IsWholeTree)
+                        .Select(s => s.ComboIndexHint.ToString(CultureInfo.InvariantCulture)))
+                    + " ≈ " + sumLayoutEst + " GD — KHÔNG được so với " + totalFamilies
+                    + " (trùng: [2] đã chứa gần hết; [3][4][5] là tập con của [2]).");
+                sb.AppendLine("    → Công thức đúng cho tổng file: xem mục 「TÓM TẮT」 phía trên (①).");
+            }
+        }
+
+        /// <summary>Giải thích vì sao 10949 ≠ tổng 3 trang lá — tránh nhầm với mục tiêu ~300 GD.</summary>
+        private static void AppendPhaConIntuitiveTotalSummary(
+            StringBuilder sb,
+            int totalFamilies,
+            int firstSplitLevel,
+            Dictionary<int, List<FamilyViewModel>> nodesByLevel,
+            IReadOnlyList<PhaDoRenderScopeItem> renderScopes,
+            int minBranchToSplitDeep)
+        {
+            var leafScopesForHint = renderScopes?
+                .Where(s => s != null && !s.IsWholeTree && s.MaxGenerationInclusive == int.MaxValue)
+                .ToList();
+            int leafSumHint = leafScopesForHint != null && leafScopesForHint.Count > 0
+                ? leafScopesForHint.Sum(s => s.LayoutFamilyCountEstimate > 0
+                    ? s.LayoutFamilyCountEstimate
+                    : CountSubtreeFamilies(s.RootFamily))
+                : 0;
+
+            sb.AppendLine();
+            sb.AppendLine("── TÓM TẮT (đọc trước) ──");
+            sb.AppendLine("• " + totalFamilies + " = TOÀN BỘ cây gia phả (mọi đời 1–23).");
+            if (leafSumHint > 0)
+            {
+                sb.AppendLine("• KHÔNG phải: " + totalFamilies + " = tổng " + leafScopesForHint.Count
+                    + " trang lá (~" + leafSumHint + " GD). Đó chỉ là zoom 3 dòng lớn, không phải cả phả.");
+            }
+
+            sb.AppendLine("• ~300 / ~295 trong báo cáo = ngưỡng chọn mốc tách, không phải tổng ô vẽ.");
+
+            if (firstSplitLevel <= 0 || nodesByLevel == null
+                || !nodesByLevel.TryGetValue(firstSplitLevel, out var rootsAtSplit))
+            {
+                return;
+            }
+
+            int sumBranches = rootsAtSplit.Sum(r =>
+            {
+                int id = r?.familyInfo?.FamilyId ?? 0;
+                return id > 0 ? CountSubtreeFamilies(r) : 0;
+            });
+            int ancestors = totalFamilies - sumBranches;
+
+            sb.AppendLine();
+            sb.AppendLine("Chia toàn phả tại đời " + firstSplitLevel + " (mỗi GD chỉ thuộc 1 nhánh):");
+            sb.AppendLine("  " + totalFamilies + " = " + ancestors + " (tổ tiên đời < " + firstSplitLevel + ")"
+                + " + tổng subtree " + rootsAtSplit.Count + " nhánh đời " + firstSplitLevel + " (" + sumBranches + ").");
+
+            if (leafScopesForHint != null && leafScopesForHint.Count > 0)
+            {
+                sb.AppendLine("  " + leafScopesForHint.Count + " trang lá ≈ " + leafSumHint
+                    + " GD — TẬP CON của nhánh lớn, không cộng thêm vào " + totalFamilies + ".");
+            }
+
+            var mainScope = renderScopes?
+                .FirstOrDefault(s => s != null && !s.IsWholeTree
+                    && s.MaxGenerationInclusive != int.MaxValue
+                    && s.LayoutFamilyCountEstimate > 500);
+            if (mainScope != null)
+            {
+                sb.AppendLine("  Combo [2] ~" + mainScope.LayoutFamilyCountEstimate
+                    + " GD khi vẽ — xem chi tiết STOP / nối dài trong mục [2] bên dưới.");
+            }
+
+            sb.AppendLine("── Hết tóm tắt ──");
+            sb.AppendLine();
+        }
+
+        /// <summary>Liệt kê từng nhánh tại một cấp cap: STOP / CONTINUE / gộp và mục combo tương ứng.</summary>
+        private static void AppendCapLevelBranchDetailLines(
+            StringBuilder sb,
+            List<FamilyViewModel> rootsAtCap,
+            PhaConSplitMetrics splitMetrics,
+            int minBranchToSplitDeep,
+            IReadOnlyList<PhaDoRenderScopeItem> renderScopes)
+        {
+            if (rootsAtCap == null || rootsAtCap.Count == 0)
+            {
+                return;
+            }
+
+            var comboByFamilyId = new Dictionary<int, PhaDoRenderScopeItem>();
+            if (renderScopes != null)
+            {
+                foreach (var s in renderScopes)
+                {
+                    if (s == null || s.IsWholeTree || s.FamilyId <= 0)
+                    {
+                        continue;
+                    }
+
+                    comboByFamilyId[s.FamilyId] = s;
+                }
+            }
+
+            sb.AppendLine("  - Chi tiết từng nhánh (STOP / CONTINUE / gộp):");
+            foreach (var r in rootsAtCap
+                         .OrderByDescending(splitMetrics.SubtreeSize)
+                         .ThenBy(r => r?.familyInfo?.FamilyId ?? 0))
+            {
+                int id = r?.familyInfo?.FamilyId ?? 0;
+                if (id <= 0)
+                {
+                    continue;
+                }
+
+                int sub = splitMetrics.SubtreeSize(r);
+                int gen = r?.familyInfo?.FamilyLevel ?? 0;
+                string name = GetFamilyMainPersonName(r);
+                bool hasBox = sub >= minBranchToSplitDeep;
+                bool canContinue = hasBox && splitMetrics.CanContinueSplit(r);
+                int segment = canContinue ? splitMetrics.SegmentSizeToNextSplit(r) : 0;
+                string action;
+                if (!hasBox)
+                {
+                    action = "GỘP vào phả cha (< " + minBranchToSplitDeep + " GD)";
+                }
+                else if (!canContinue)
+                {
+                    action = "STOP — có box, không tách cấp sau";
+                }
+                else
+                {
+                    action = "CONTINUE — tách cấp sau, đoạn ~" + segment + " GD";
+                }
+
+                string comboHint = "";
+                if (comboByFamilyId.TryGetValue(id, out var scope) && scope != null)
+                {
+                    comboHint = " | Combo #" + scope.ComboIndexHint;
+                    if (!string.IsNullOrWhiteSpace(scope.RenderPlanSummary))
+                    {
+                        comboHint += " (" + scope.RenderPlanSummary + ")";
+                    }
+
+                }
+                else if (!hasBox)
+                {
+                    comboHint = " | (chỉ trong Root0, không có mục combo riêng)";
+                }
+
+                string subLabel = canContinue && comboByFamilyId.TryGetValue(id, out var sc) && sc != null
+                    && sc.LayoutFamilyCountEstimate > 0
+                    ? (sub + " GD file | ~" + sc.LayoutFamilyCountEstimate + " GD khi vẽ")
+                    : (sub + " GD");
+                sb.AppendLine("    · Đời " + gen + " | ID " + id + " | " + name
+                    + " | " + subLabel + " | " + action + comboHint);
+            }
+        }
+
+        /// <summary>Kế hoạch vẽ sau Phân tích phả — khớp combo toolbar.</summary>
+        private static void AppendPhaConRenderPlanToReport(
+            StringBuilder sb,
+            IReadOnlyList<PhaDoRenderScopeItem> renderScopes,
+            int effectiveSplitLevel,
+            int minBranchToSplitDeep,
+            PhaDoSubtreeMap subtreeMap,
+            int firstSplitGenerationLevel)
+        {
+            sb.AppendLine();
+            sb.AppendLine("══════════════════════════════════════");
+            sb.AppendLine("KẾ HOẠCH VẼ (combo trên toolbar)");
+            sb.AppendLine("══════════════════════════════════════");
+            sb.AppendLine("Sau bước này: chọn mục combo → bấm Vẽ. Không cần phân tích lại.");
+            if (effectiveSplitLevel > 0)
+            {
+                sb.AppendLine("Đời cắt phả con đầu (Root1): đời " + effectiveSplitLevel
+                    + " | Ngưỡng STOP: ≥ " + minBranchToSplitDeep + " GD");
+            }
+
+            sb.AppendLine();
+            foreach (var scope in renderScopes)
+            {
+                if (scope == null)
+                {
+                    continue;
+                }
+
+                string title = string.IsNullOrWhiteSpace(scope.RenderPlanSummary)
+                    ? (scope.IsWholeTree ? "Toàn phả" : "Phả con")
+                    : scope.RenderPlanSummary;
+                sb.AppendLine("[" + scope.ComboIndexHint + "] " + title);
+                if (!string.IsNullOrWhiteSpace(scope.Label))
+                {
+                    sb.AppendLine("    " + scope.Label);
+                }
+
+                if (scope.IsWholeTree)
+                {
+                    sb.AppendLine("    → Layout toàn file, mọi đời.");
+                }
+                else
+                {
+                    string maxGenText = scope.MaxGenerationInclusive == int.MaxValue
+                        ? "∞ (full nhánh)"
+                        : scope.MaxGenerationInclusive.ToString(CultureInfo.InvariantCulture);
+                    if (scope.LayoutFamilyCountEstimate > 0)
+                    {
+                        sb.AppendLine("    → Ước lượng " + scope.LayoutFamilyCountEstimate
+                            + " GD khi vẽ (số node layout ≈ số này)");
+                    }
+
+                    sb.AppendLine("    → Gốc ID " + scope.FamilyId
+                        + " | max đời (layout): " + maxGenText);
+                    if (scope.ExpandSmallBranchesAtStopLevel)
+                    {
+                        sb.AppendLine("    → Nhánh < " + (scope.MinBranchForStopLevel > 0
+                                ? scope.MinBranchForStopLevel
+                                : minBranchToSplitDeep)
+                            + " GD tại mốc kế: vẽ tiếp xuống lá; nhánh ≥ ngưỡng: STOP (box tách).");
+                    }
+                    else if (scope.MaxGenerationInclusive != int.MaxValue)
+                    {
+                        sb.AppendLine("    → Trang lá: layout full subtree đã chọn.");
+                    }
+
+                    int stopCount = scope.StopFamilyIdsAtMaxLevel?.Count ?? 0;
+                    if (stopCount > 0)
+                    {
+                        sb.AppendLine("    → " + stopCount + " ID STOP tại đời "
+                            + scope.MaxGenerationInclusive + " (không nối con).");
+                    }
+
+                    if (scope.HighlightStartLevel > 0)
+                    {
+                        sb.AppendLine("    → Marker Root kế: đời " + scope.HighlightStartLevel
+                            + (string.IsNullOrWhiteSpace(scope.HighlightStartLabel)
+                                ? ""
+                                : " (" + scope.HighlightStartLabel + ")"));
+                    }
+
+                    AppendScopeStopLevelBreakdown(sb, scope, minBranchToSplitDeep);
+                }
+
+                sb.AppendLine();
+            }
+
+            if (subtreeMap?.SubTrees != null && effectiveSplitLevel > 0 && firstSplitGenerationLevel > 0)
+            {
+                var inCombo = new HashSet<int>(
+                    renderScopes.Where(s => s != null && !s.IsWholeTree).Select(s => s.FamilyId));
+                var mergedOnly = subtreeMap.SubTrees
+                    .Where(b => b != null && b.Generation == firstSplitGenerationLevel
+                        && b.FamilyId > 0 && !inCombo.Contains(b.FamilyId))
+                    .ToList();
+                if (mergedOnly.Count > 0)
+                {
+                    sb.AppendLine("Nhánh đời " + firstSplitGenerationLevel
+                        + " gộp vào Root0 (không có combo riêng):");
+                    foreach (var b in mergedOnly.OrderBy(b => b.FamilyId))
+                    {
+                        sb.AppendLine("    · ID " + b.FamilyId + " | "
+                            + (string.IsNullOrWhiteSpace(b.MainPersonName) ? b.FamilyName : b.MainPersonName)
+                            + " | " + b.NodeCount + " GD");
+                    }
+                    sb.AppendLine();
+                }
+            }
+
+            sb.AppendLine("Gợi ý thao tác:");
+            sb.AppendLine("- Xem Root0: combo [1] Root0→Root1 → Vẽ.");
+            sb.AppendLine("- Xem nhánh lớn có tách tiếp (vd. ID 4880): chọn combo Root1→Root2 tương ứng → Vẽ.");
+            sb.AppendLine("- Nhánh đời sâu chỉ STOP (không CONTINUE): chọn Trang lá → Vẽ full nhánh.");
         }
 
         private async Task<GiaPhaRenderResult> RenderPhaDoCoreAsync(
@@ -5476,21 +8913,39 @@ namespace vietnamgiapha
             FamilyViewModel rootOverride = null,
             int maxGenerationInclusive = int.MaxValue)
         {
-            var root = rootOverride ?? viewModel.FamilyTree?.Family?.RootPerson;
+            var fileRoot = viewModel.FamilyTree?.Family?.RootPerson;
+            var root = rootOverride ?? fileRoot;
             if (root == null)
             {
                 return null;
             }
 
-            var options = BuildPhaDoRenderOptions();
-            _phaDoCurrentOptions = options;
-
-            if (resetZoom)
+            // Toàn phả: layout cả file. Phả con: luôn gốc = RootFamily đã chọn (Root0 hoặc nhánh Root1…).
+            FamilyViewModel scopedRoot;
+            bool renderWholeFileTree = maxGenerationInclusive == int.MaxValue
+                && (rootOverride == null
+                    || fileRoot == null
+                    || ReferenceEquals(rootOverride, fileRoot));
+            if (renderWholeFileTree)
             {
-                ResetPhaDoZoom();
+                scopedRoot = fileRoot ?? root;
+            }
+            else if (maxGenerationInclusive == int.MaxValue)
+            {
+                // Nhánh lá (không tách Root kế): layout full subtree đã chọn, không clone.
+                scopedRoot = root;
+            }
+            else
+            {
+                // Root0→Root1 / Root1→Root2: clone từ RootFamily (gốc scope), tại đời Root kế STOP hoặc nối dài — rồi ComputeLayoutAsync.
+                scopedRoot = BuildScopedRenderRoot(root, maxGenerationInclusive) ?? root;
             }
 
-            var baseResult = await GiaPhaRenderService.ComputeLayoutAsync(root, options).ConfigureAwait(true);
+            var options = BuildPhaDoRenderOptions();
+            options.GetFamilyBoxNotes = BuildFamilyBoxExtraNotes;
+            _phaDoCurrentOptions = options;
+
+            var baseResult = await GiaPhaRenderService.ComputeLayoutAsync(scopedRoot, options).ConfigureAwait(true);
             CapturePhaDoBaseLayout(baseResult);
 
             GiaPhaRenderResult result = GiaPhaManualLayoutService.ApplyManualOffsets(
@@ -5498,10 +8953,35 @@ namespace vietnamgiapha
                 _phaDoOffsetXmmByFamilyId,
                 _phaDoOffsetYmmByFamilyId);
             ApplyCustomBoxSizesFromStyles(result);
-            // Cắt theo cấp root đang chọn: chỉ giữ node tới mốc đời yêu cầu.
-            TrimRenderResultByMaxGeneration(result, maxGenerationInclusive);
+            // Nhánh nhỏ nối dài tới lá — không trim theo max đời; STOP đã cắt lúc clone.
+            if (!(_phaDoScopeExpandSmallBranchesAtStopLevel && maxGenerationInclusive < int.MaxValue)
+                && maxGenerationInclusive > 0
+                && maxGenerationInclusive != int.MaxValue)
+            {
+                TrimRenderResultByMaxGeneration(result, maxGenerationInclusive);
+            }
             GiaPhaManualLayoutService.RebuildConnectorsOnly(result);
             GiaPhaRenderBoundsFitter.FitCanvasToContent(result);
+
+            if (result.Nodes == null || result.Nodes.Count == 0)
+            {
+                await Dispatcher.InvokeAsync(
+                    () =>
+                    {
+                        theCanvas?.Children.Clear();
+                        MessageBox.Show(
+                            "Layout xong nhưng không còn gia đình nào để vẽ (sau cắt đời / scope).\n"
+                            + "Thử chọn scope khác hoặc bấm Phân tích phả lại.",
+                            "Phả đồ",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                    },
+                    DispatcherPriority.Normal).Task.ConfigureAwait(true);
+                return result;
+            }
+
+            // Populate dòng 3 + 4 tự động: đếm từ layout result trước khi vẽ
+            PopulateTitleAutoLines(result);
 
             await Dispatcher.InvokeAsync(
                 () => GiaPhaRenderService.PaintToCanvas(theCanvas, result),
@@ -5510,14 +8990,35 @@ namespace vietnamgiapha
             _phaDoRenderedLayout = result;
             RefreshAllBoxStylesOnCanvas();
             RefreshAllPersonOffsetsOnCanvas();
+            ApplyTitleLineOffsets();
+            DrawScopeSummaryNotes(result);
+            DrawScopeStartMarkers(result);
+            BringScopeStartMarkersToFront();
 
             if (_phaDoSelectedFamilyId > 0)
             {
                 DrawSelectionOverlay(_phaDoSelectedFamilyId);
+                DrawMultiSelectionOverlays();
+                DrawDirectChildHighlights(_phaDoSelectedFamilyId);
                 UpdatePhaDoSelectedBoxSizeStatus(_phaDoSelectedFamilyId);
+                // Cập nhật toolbar ngữ cảnh theo box đang chọn
+                SyncPhaDoToolbarFromBoxStyle(_phaDoSelectedFamilyId);
+            }
+            else
+            {
+                ClearDirectChildHighlights();
+                DrawMultiSelectionOverlays();
+                HideContextToolbar();
             }
 
-            if (resetScroll)
+            if (resetZoom)
+            {
+                await Dispatcher.InvokeAsync(
+                    () => FitPhaDoViewToContent(result),
+                    DispatcherPriority.Loaded).Task.ConfigureAwait(true);
+            }
+
+            if (resetScroll && !resetZoom)
             {
                 var scroll = phaDoScrollViewer ?? FindParent<ScrollViewer>(theCanvas);
                 if (scroll != null)
@@ -5530,6 +9031,75 @@ namespace vietnamgiapha
             return result;
         }
 
+        /// <summary>Thu nhỏ zoom + cuộn tới góc nội dung — phả hàng chục nghìn px không nhìn thấy ở 100%.</summary>
+        private void FitPhaDoViewToContent(GiaPhaRenderResult result)
+        {
+            if (result == null || theCanvas == null)
+            {
+                ResetPhaDoZoom();
+                return;
+            }
+
+            var scroll = phaDoScrollViewer ?? FindParent<ScrollViewer>(theCanvas);
+            scroll?.UpdateLayout();
+            theCanvas.UpdateLayout();
+
+            double canvasW = result.CanvasWidthPixels > 0
+                ? result.CanvasWidthPixels
+                : (theCanvas.Width > 0 ? theCanvas.Width : 1);
+            double canvasH = result.CanvasHeightPixels > 0
+                ? result.CanvasHeightPixels
+                : (theCanvas.Height > 0 ? theCanvas.Height : 1);
+
+            double vpW = scroll?.ViewportWidth ?? 0;
+            double vpH = scroll?.ViewportHeight ?? 0;
+            if (vpW < 20 || vpH < 20)
+            {
+                // ScrollViewer chưa đo xong — thử lại sau layout pass.
+                Dispatcher.BeginInvoke(new Action(() => FitPhaDoViewToContent(result)), DispatcherPriority.Loaded);
+                return;
+            }
+
+            const double margin = 0.94;
+            double fitZoom = Math.Min(vpW / canvasW, vpH / canvasH) * margin;
+            if (double.IsNaN(fitZoom) || double.IsInfinity(fitZoom) || fitZoom <= 0)
+            {
+                fitZoom = 1.0;
+            }
+
+            fitZoom = Math.Max(PhaDoZoomFitMin, Math.Min(1.0, fitZoom));
+            // null layout: không chỉnh scroll theo neo — Fit tự cuộn tới góc nội dung bên dưới.
+            ApplyPhaDoZoomValue(fitZoom, scroll, layoutForAnchor: null);
+
+            double minXmm = double.MaxValue;
+            double minYmm = double.MaxValue;
+            foreach (var node in result.Nodes)
+            {
+                if (node?.Metrics == null)
+                {
+                    continue;
+                }
+
+                minXmm = Math.Min(minXmm, node.Xmm);
+                minYmm = Math.Min(minYmm, node.Ymm);
+            }
+
+            if (minXmm < double.MaxValue && scroll != null)
+            {
+                double dpi = result.Dpi > 0 ? result.Dpi : 96;
+                double padPx = PrintUnits.MmToPixels(result.Options?.MarginMm ?? 5, dpi);
+                double scrollX = Math.Max(0, PrintUnits.MmToPixels(minXmm, dpi) * _phaDoZoom - padPx);
+                double scrollY = Math.Max(0, PrintUnits.MmToPixels(minYmm, dpi) * _phaDoZoom - padPx);
+                scroll.ScrollToHorizontalOffset(scrollX);
+                scroll.ScrollToVerticalOffset(scrollY);
+            }
+            else if (scroll != null)
+            {
+                scroll.ScrollToHorizontalOffset(0);
+                scroll.ScrollToVerticalOffset(0);
+            }
+        }
+
         void searchTextBox_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter)
@@ -5537,40 +9107,520 @@ namespace vietnamgiapha
                 viewModel.FamilyTree.Family.SearchCommand.Execute(null);
             }
         }
-        //private double treeViewHorizScrollPos = 0.0;
-        //private bool treeViewResetHorizScroll = false;
-        //private ScrollViewer treeViewScrollViewer = null;
-        private bool mSuppressRequestBringIntoView;
 
-        private void TreeViewItem_RequestBringIntoView(object sender, RequestBringIntoViewEventArgs e)
+        private void LeftPaneSearchPanel_SizeChanged(object sender, SizeChangedEventArgs e)
         {
-            // Ignore re-entrant calls
-            if (mSuppressRequestBringIntoView)
-                return;
-
-            // Cancel the current scroll attempt
-            e.Handled = true;
-
-            // Call BringIntoView using a rectangle that extends into "negative space" to the left of our
-            // actual control. This allows the vertical scrolling behaviour to operate without adversely
-            // affecting the current horizontal scroll position.
-            mSuppressRequestBringIntoView = true;
-
-            TreeViewItem tvi = sender as TreeViewItem;
-            if (tvi != null)
-            {
-                Rect newTargetRect = new Rect(-200, 0, tvi.ActualWidth + 1000, tvi.ActualHeight);
-                tvi.BringIntoView(newTargetRect);
-            }
-
-            mSuppressRequestBringIntoView = false;
+            ApplyLeftPaneSearchScale(e.NewSize.Width);
         }
 
-        // Correctly handle programmatically selected items
+        /// <summary>Pane trái hẹp thì thu nhỏ chữ ô tìm; nút tìm là icon cố định nên không cần thay chữ.</summary>
+        private void ApplyLeftPaneSearchScale(double panelWidth)
+        {
+            if (searchTextBox == null || panelWidth <= 0)
+                return;
+
+            // ~300px: font đầy đủ; dưới ~140px: font tối thiểu
+            double t = Math.Max(0, Math.Min(1.0, (panelWidth - 140) / 160.0));
+            searchTextBox.FontSize = Math.Round(10 + 6 * t, 1);
+        }
+        private void TreeViewItem_RequestBringIntoView(object sender, RequestBringIntoViewEventArgs e)
+        {
+            // Không tự cuộn cây khi click/chọn — giữ vị trí scroll người dùng đang xem
+            e.Handled = true;
+        }
+
+        private void TreeViewItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ChangedButton != MouseButton.Left)
+            {
+                return;
+            }
+
+            var item = sender as TreeViewItem;
+            _treeDragSourceFamily = item?.DataContext as FamilyViewModel;
+            _treeDragStartPoint = e.GetPosition(null);
+            _treeDragStarted = false;
+        }
+
+        private void TreeViewItem_PreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (e.LeftButton != MouseButtonState.Pressed || _treeDragSourceFamily == null)
+            {
+                return;
+            }
+
+            Point pos = e.GetPosition(null);
+            if (!_treeDragStarted)
+            {
+                if (Math.Abs(pos.X - _treeDragStartPoint.X) < SystemParameters.MinimumHorizontalDragDistance
+                    && Math.Abs(pos.Y - _treeDragStartPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
+                {
+                    return;
+                }
+
+                _treeDragStarted = true;
+            }
+
+            var data = new DataObject(typeof(FamilyViewModel), _treeDragSourceFamily);
+            DragDrop.DoDragDrop((DependencyObject)sender, data, DragDropEffects.Move);
+            _treeDragSourceFamily = null;
+            _treeDragStarted = false;
+        }
+
+        private enum TreeFamilyDeleteChoice
+        {
+            Cancel,
+            PromoteChild,
+            DeleteBranch
+        }
+
+        /// <summary>Shift+Delete — chọn cách xóa trước khi thực hiện.</summary>
+        private TreeFamilyDeleteChoice ShowTreeFamilyDeleteChoiceDialog(FamilyViewModel family)
+        {
+            if (family == null)
+            {
+                return TreeFamilyDeleteChoice.Cancel;
+            }
+
+            var dlg = new Window
+            {
+                Title = "Xóa gia đình",
+                Width = 460,
+                SizeToContent = SizeToContent.Height,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = this,
+                ResizeMode = ResizeMode.NoResize,
+                ShowInTaskbar = false
+            };
+
+            var panel = new StackPanel { Margin = new Thickness(16) };
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Gia đình: " + (family.Name ?? family.Name0),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 12),
+                FontSize = 14
+            });
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Chọn thao tác xóa:",
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+
+            var choice = TreeFamilyDeleteChoice.Cancel;
+
+            var btnPromote = new System.Windows.Controls.Button
+            {
+                Content = "1. Xóa GD này, đưa con lên thay (cần đúng 1 con)",
+                Margin = new Thickness(0, 0, 0, 6),
+                Padding = new Thickness(8, 4, 8, 4),
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                IsEnabled = family.Parent != null && family.Children.Count == 1
+            };
+            btnPromote.Click += (s, ev) =>
+            {
+                choice = TreeFamilyDeleteChoice.PromoteChild;
+                dlg.DialogResult = true;
+                dlg.Close();
+            };
+            panel.Children.Add(btnPromote);
+
+            var btnBranch = new System.Windows.Controls.Button
+            {
+                Content = "2. Xóa luôn cả nhánh (tất cả con cháu)",
+                Margin = new Thickness(0, 0, 0, 6),
+                Padding = new Thickness(8, 4, 8, 4),
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                IsEnabled = family.Parent != null
+            };
+            btnBranch.Click += (s, ev) =>
+            {
+                choice = TreeFamilyDeleteChoice.DeleteBranch;
+                dlg.DialogResult = true;
+                dlg.Close();
+            };
+            panel.Children.Add(btnBranch);
+
+            var btnCancel = new System.Windows.Controls.Button
+            {
+                Content = "Hủy",
+                Padding = new Thickness(8, 4, 8, 4),
+                HorizontalAlignment = HorizontalAlignment.Right,
+                MinWidth = 80
+            };
+            btnCancel.Click += (s, ev) =>
+            {
+                choice = TreeFamilyDeleteChoice.Cancel;
+                dlg.DialogResult = false;
+                dlg.Close();
+            };
+            panel.Children.Add(btnCancel);
+
+            dlg.Content = panel;
+            dlg.ShowDialog();
+            return choice;
+        }
+
+        private void HandleTreeFamilyShiftDelete(FamilyViewModel family)
+        {
+            if (family == null)
+            {
+                return;
+            }
+
+            var choice = ShowTreeFamilyDeleteChoiceDialog(family);
+            if (choice == TreeFamilyDeleteChoice.Cancel)
+            {
+                return;
+            }
+
+            FamilyViewModel focusAfter = null;
+            if (choice == TreeFamilyDeleteChoice.PromoteChild)
+            {
+                if (family.TryDeleteFamilyPromoteOnlyChild())
+                {
+                    focusAfter = viewModel?.FamilyTree?.Family?.SelectedFamily;
+                }
+            }
+            else
+            {
+                focusAfter = family.TryDeleteFamilyBranch();
+            }
+
+            if (focusAfter != null)
+            {
+                InvalidatePersonGridCache();
+                SelectFamilyInTreeView(focusAfter);
+            }
+        }
+
+        private void TreeViewGiaPha_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (IsTreeFamilyLabelEditFocused(e.OriginalSource as DependencyObject))
+            {
+                return;
+            }
+
+            if (e.Key == Key.F11)
+            {
+                ToggleFullscreenWithF11();
+                e.Handled = true;
+                return;
+            }
+
+            var family = viewModel?.FamilyTree?.Family?.SelectedFamily;
+            var mods = Keyboard.Modifiers;
+
+            if (family != null && mods == ModifierKeys.Control)
+            {
+                if (e.Key == Key.C)
+                {
+                    family.CopyBranchToClipboard();
+                    e.Handled = true;
+                    return;
+                }
+
+                if (e.Key == Key.V)
+                {
+                    var pasted = family.PasteCopiedBranchAsChild();
+                    if (pasted != null)
+                    {
+                        e.Handled = true;
+                        FocusNewTreeFamilyForEdit(pasted);
+                    }
+
+                    return;
+                }
+            }
+
+            if (family != null && e.Key == Key.F2)
+            {
+                family.IsSelected = true;
+                family.BeginTreeLabelEdit();
+                e.Handled = true;
+                Dispatcher.BeginInvoke(
+                    new Action(() => FocusTreeFamilyEditTextBox(family)),
+                    DispatcherPriority.Input);
+                return;
+            }
+
+            if (family == null || (mods & ModifierKeys.Shift) != ModifierKeys.Shift)
+            {
+                return;
+            }
+
+            FamilyViewModel added = null;
+            if (e.Key == Key.Insert)
+            {
+                added = family.InsertParentFamilyFromTree();
+            }
+            else if (e.Key == Key.Delete)
+            {
+                HandleTreeFamilyShiftDelete(family);
+                e.Handled = true;
+                return;
+            }
+            else if (e.Key == Key.Add || e.Key == Key.OemPlus)
+            {
+                added = family.InsertNewChildFamilyFromTree();
+            }
+            else if (e.Key == Key.E)
+            {
+                added = family.InsertNewSiblingEmFromTree();
+            }
+            else if (e.Key == Key.A)
+            {
+                added = family.InsertNewSiblingAnhFromTree();
+            }
+            else if (e.Key == Key.Up)
+            {
+                if (family.TryMoveSiblingOrderUp())
+                {
+                    e.Handled = true;
+                    SelectFamilyInTreeView(family);
+                }
+
+                return;
+            }
+            else if (e.Key == Key.Down)
+            {
+                if (family.TryMoveSiblingOrderDown())
+                {
+                    e.Handled = true;
+                    SelectFamilyInTreeView(family);
+                }
+
+                return;
+            }
+
+            if (added != null)
+            {
+                e.Handled = true;
+                FocusNewTreeFamilyForEdit(added);
+            }
+        }
+
+        private static bool IsTreeFamilyLabelEditFocused(DependencyObject source)
+        {
+            var textBox = source as TextBox;
+            return textBox != null
+                && textBox.DataContext is FamilyViewModel family
+                && family.IsTreeLabelEditing;
+        }
+
+        /// <summary>Chọn gia đình mới thêm và mở F2 sửa tên ngay.</summary>
+        private void FocusNewTreeFamilyForEdit(FamilyViewModel family)
+        {
+            if (family == null || viewModel?.FamilyTree?.Family == null)
+            {
+                return;
+            }
+
+            viewModel.FamilyTree.Family.SelectFamily(family);
+            InvalidatePersonGridCache();
+
+            Dispatcher.BeginInvoke(
+                new Action(() =>
+                {
+                    ScrollTreeViewToFamily(family);
+                    family.BeginTreeLabelEdit();
+                    FocusTreeFamilyEditTextBox(family);
+                }),
+                DispatcherPriority.Loaded);
+        }
+
+        private void FocusTreeFamilyEditTextBox(FamilyViewModel family)
+        {
+            if (family == null || !family.IsTreeLabelEditing || treeViewGiaPha == null)
+            {
+                return;
+            }
+
+            var item = FindTreeViewItem(treeViewGiaPha, family);
+            if (item == null)
+            {
+                return;
+            }
+
+            var textBox = FindVisualChild<TextBox>(item) as TextBox;
+            if (textBox != null)
+            {
+                textBox.Focus();
+                textBox.SelectAll();
+            }
+        }
+
+        private void TreeFamilyEditTextBox_Loaded(object sender, RoutedEventArgs e)
+        {
+            var textBox = sender as TextBox;
+            var family = textBox?.DataContext as FamilyViewModel;
+            if (family?.IsTreeLabelEditing == true && textBox != null)
+            {
+                textBox.Focus();
+                textBox.SelectAll();
+            }
+        }
+
+        private void TreeFamilyEditTextBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            var family = (sender as TextBox)?.DataContext as FamilyViewModel;
+            if (family == null || !family.IsTreeLabelEditing)
+            {
+                return;
+            }
+
+            if (e.Key == Key.Enter)
+            {
+                family.CommitTreeLabelEdit();
+                e.Handled = true;
+                treeViewGiaPha?.Focus();
+            }
+            else if (e.Key == Key.Escape)
+            {
+                family.CancelTreeLabelEdit();
+                e.Handled = true;
+                treeViewGiaPha?.Focus();
+            }
+        }
+
+        private void TreeFamilyEditTextBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            var family = (sender as TextBox)?.DataContext as FamilyViewModel;
+            if (family == null || !family.IsTreeLabelEditing)
+            {
+                return;
+            }
+
+            family.CommitTreeLabelEdit();
+        }
+
+        private void TreeViewGiaPha_PreviewDragOver(object sender, DragEventArgs e)
+        {
+            var source = GetFamilyFromDragData(e);
+            var target = GetFamilyFromTreeDragEvent(e);
+            if (CanDropFamilyOnTree(source, target))
+            {
+                e.Effects = DragDropEffects.Move;
+                if (target != null)
+                {
+                    target.IsSelected = true;
+                }
+            }
+            else
+            {
+                e.Effects = DragDropEffects.None;
+            }
+
+            e.Handled = true;
+        }
+
+        private void TreeViewGiaPha_DragLeave(object sender, DragEventArgs e)
+        {
+            e.Handled = true;
+        }
+
+        private void TreeViewGiaPha_Drop(object sender, DragEventArgs e)
+        {
+            var source = GetFamilyFromDragData(e);
+            var target = GetFamilyFromTreeDragEvent(e);
+            if (source == null || target == null || !CanDropFamilyOnTree(source, target))
+            {
+                e.Effects = DragDropEffects.None;
+                e.Handled = true;
+                return;
+            }
+
+            string message = FamilyViewModel.DescribeTreeDragMove(source, target);
+            if (MessageBox.Show(
+                    message,
+                    "Xác nhận di chuyển gia đình",
+                    MessageBoxButton.OKCancel,
+                    MessageBoxImage.Question) != MessageBoxResult.OK)
+            {
+                e.Effects = DragDropEffects.None;
+                e.Handled = true;
+                return;
+            }
+
+            CaptureGiaPhaUndoSnapshot("Kéo thả cây gia phả");
+
+            bool moved;
+            if (source.Parent != null
+                && target.Parent != null
+                && ReferenceEquals(source.Parent, target.Parent))
+            {
+                moved = source.TryMoveAsSiblingAfter(target);
+            }
+            else
+            {
+                moved = source.TryMoveAsChildOf(target);
+            }
+
+            if (!moved)
+            {
+                MessageBox.Show("Không thể di chuyển gia đình tới vị trí này.", "Cây gia phả");
+            }
+            else
+            {
+                InvalidatePersonGridCache();
+            }
+
+            e.Effects = moved ? DragDropEffects.Move : DragDropEffects.None;
+            e.Handled = true;
+        }
+
+        private static FamilyViewModel GetFamilyFromDragData(DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(typeof(FamilyViewModel)))
+            {
+                return e.Data.GetData(typeof(FamilyViewModel)) as FamilyViewModel;
+            }
+
+            return null;
+        }
+
+        private FamilyViewModel GetFamilyFromTreeDragEvent(DragEventArgs e)
+        {
+            if (treeViewGiaPha == null)
+            {
+                return null;
+            }
+
+            Point pos = e.GetPosition(treeViewGiaPha);
+            var hit = VisualTreeHelper.HitTest(treeViewGiaPha, pos);
+            if (hit?.VisualHit == null)
+            {
+                return null;
+            }
+
+            var item = VisualUpwardSearch<TreeViewItem>(hit.VisualHit) as TreeViewItem;
+            return item?.DataContext as FamilyViewModel;
+        }
+
+        private static bool CanDropFamilyOnTree(FamilyViewModel source, FamilyViewModel target)
+        {
+            if (source == null || target == null || ReferenceEquals(source, target))
+            {
+                return false;
+            }
+
+            // Gốc cây (không có cha) — chưa hỗ trợ kéo thả
+            if (source.Parent == null)
+            {
+                return false;
+            }
+
+            if (target.IsDescendantOf(source))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
         private void OnSelected(object sender, RoutedEventArgs e)
         {
             TreeViewItem tvi = ((TreeViewItem)sender);
-            tvi.BringIntoView();
             FamilyViewModel personModel = (FamilyViewModel)tvi.DataContext;
             viewModel.FamilyTree.Family.SelectedFamily = personModel;
             log.Info("Chọn trên cây: " + viewModel.FamilyTree.Family.SelectedFamily.Name);
@@ -5629,13 +9679,27 @@ namespace vietnamgiapha
 
             return source;
         }
-        private void Treeview_Family_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        private void Treeview_Family_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            // Auto select người trong gia đình
-            if (viewModel.FamilyTree.Family.SelectedFamily != null )
+            if (e.ClickCount != 2)
             {
-                //viewModel.FamilyTree.Family.SelectedFamily.DebugFamilyClickFunc();
+                return;
             }
+
+            var family = (sender as FrameworkElement)?.DataContext as FamilyViewModel
+                ?? viewModel?.FamilyTree?.Family?.SelectedFamily;
+            if (family == null)
+            {
+                return;
+            }
+
+            family.IsSelected = true;
+            family.BeginTreeLabelEdit();
+            e.Handled = true;
+
+            Dispatcher.BeginInvoke(
+                new Action(() => FocusTreeFamilyEditTextBox(family)),
+                DispatcherPriority.Input);
         }
         private void ListView_ListGiaDinhCon_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
@@ -5697,6 +9761,15 @@ namespace vietnamgiapha
 
         private void MetroWindow_Initialized(object sender, EventArgs e)
         {
+            SizeChanged += MainWindow_SizeChanged;
+        }
+
+        private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (_treePaneImmersive)
+            {
+                ApplyTreePaneFullscreenLayout();
+            }
         }
         
         private void Button_Click(object sender, RoutedEventArgs e)
@@ -5830,6 +9903,19 @@ namespace vietnamgiapha
         {
             try
             {
+                if (e.Key == Key.Insert)
+                {
+                    var family = viewModel?.FamilyTree?.Family?.SelectedFamily;
+                    if (family?.InsertPerson2FamilyClick != null
+                        && family.InsertPerson2FamilyClick.CanExecute(null))
+                    {
+                        family.InsertPerson2FamilyClick.Execute(null);
+                        e.Handled = true;
+                    }
+
+                    return;
+                }
+
                 if (e.Key == Key.Delete)
                 {
                     // XOA
@@ -5935,8 +10021,12 @@ namespace vietnamgiapha
 
         private void ToggleSwitch_Toggled(object sender, RoutedEventArgs e)
         {
-            //log.Error("OKOK");
             PersonInfo personInfo = ((ToggleSwitch)sender).DataContext as PersonInfo;
+            if (personInfo == null)
+            {
+                return;
+            }
+
             if (personInfo.IsMainPerson == 0)
             {
                 if (personInfo._familyInfo != null && personInfo._familyInfo.ListPerson != null)
@@ -6084,14 +10174,17 @@ namespace vietnamgiapha
 
             try
             {
-                // Đổi file/load cây mới thì danh sách phả con cũ không còn hợp lệ, trả về mặc định Toàn phả.
+                // Đổi file hoặc list scope lệch (còn Root0 cũ trước phân tích) → reset chỉ còn Toàn phả.
                 int currentRootId = root.familyInfo?.FamilyId ?? 0;
-                if (_phaDoRenderScopeSourceRootId != currentRootId || _phaDoRenderScopes.Count == 0)
+                bool needsDefaultScopes = _phaDoRenderScopeSourceRootId != currentRootId
+                    || _phaDoRenderScopes.Count == 0
+                    || (!_phaDoRenderScopesFromAnalyze && !IsPreAnalyzeOnlyScopeList());
+                if (needsDefaultScopes)
                 {
                     ResetPhaDoRenderScopes(root);
                 }
 
-                // Luôn lấy scope từ item đang chọn; nếu chưa chọn thì fallback về item đầu (Toàn phả).
+                // Luôn lấy scope từ combo; chưa phân tích thì chỉ có Toàn phả.
                 var selectedScope = phaDoSubtreeListBox?.SelectedItem as PhaDoRenderScopeItem;
                 if (selectedScope == null || !_phaDoRenderScopes.Contains(selectedScope))
                 {
@@ -6101,13 +10194,12 @@ namespace vietnamgiapha
                         phaDoSubtreeListBox.SelectedItem = selectedScope;
                     }
                 }
-                FamilyViewModel renderRoot = selectedScope?.RootFamily ?? root;
-                int maxGeneration = selectedScope?.MaxGenerationInclusive ?? int.MaxValue;
+
                 var result = await RunPhaDoRenderWithWaitDialogAsync(
                     resetZoom: true,
                     resetScroll: true,
-                    rootOverride: renderRoot,
-                    maxGenerationInclusive: maxGeneration).ConfigureAwait(true);
+                    scopeForContext: selectedScope,
+                    scopeDataRoot: root).ConfigureAwait(true);
                 if (result == null)
                 {
                     return;
@@ -6190,11 +10282,781 @@ namespace vietnamgiapha
             }
         }
 
-        /// <summary>Khởi tạo danh sách mặc định chỉ gồm Toàn phả cho cây hiện tại.</summary>
+        /// <summary>Giữ nhãn phả con trên viền chọn box (ZIndex &gt; overlay chọn).</summary>
+        private void BringScopeStartMarkersToFront()
+        {
+            if (theCanvas == null)
+            {
+                return;
+            }
+
+            const int markerZ = 1101;
+            foreach (var fe in theCanvas.Children.OfType<FrameworkElement>())
+            {
+                if (fe.Tag is PhaDoScopeStartMarkerTag)
+                {
+                    Panel.SetZIndex(fe, markerZ);
+                }
+            }
+        }
+
+        /// <summary>Xóa marker highlight của scope phả con trước khi vẽ lại.</summary>
+        private void ClearScopeStartMarkers()
+        {
+            var markers = theCanvas.Children
+                .OfType<FrameworkElement>()
+                .Where(fe => fe.Tag is PhaDoScopeStartMarkerTag)
+                .Cast<UIElement>()
+                .ToList();
+            foreach (var marker in markers)
+            {
+                theCanvas.Children.Remove(marker);
+            }
+        }
+
+        /// <summary>Xóa ghi chú mô tả scope trên khối tiêu đề.</summary>
+        private void ClearScopeSummaryNotes()
+        {
+            var notes = theCanvas.Children
+                .OfType<FrameworkElement>()
+                .Where(fe => Equals(fe.Tag, "__PhaDoScopeSummaryNote"))
+                .Cast<UIElement>()
+                .ToList();
+            foreach (var note in notes)
+            {
+                theCanvas.Children.Remove(note);
+            }
+        }
+
+        /// <summary>Hiển thị mô tả scope ngay dưới title/OTAI để user biết ngữ cảnh bản vẽ hiện tại.</summary>
+        private void DrawScopeSummaryNotes(GiaPhaRenderResult result)
+        {
+            ClearScopeSummaryNotes();
+            if (!_phaDoShowScopeSummaryNote || result == null || _phaDoCurrentOptions == null)
+            {
+                return;
+            }
+
+            double titleBottomMm = PhaDoTitleStyleResolver.TitleBlockHeightMm(_phaDoCurrentOptions) + _phaDoCurrentOptions.MarginMm;
+            double x = MmToPx(_phaDoCurrentOptions.MarginMm + 3);
+            double y = MmToPx(titleBottomMm + 2);
+            string startName = string.IsNullOrWhiteSpace(_phaDoScopeStartFamilyName) ? "(không rõ)" : _phaDoScopeStartFamilyName.Trim();
+            string sizeText = (result.ContentWidthMm / 10.0).ToString("0.#") + " cm x " + (result.ContentHeightMm / 10.0).ToString("0.#") + " cm";
+            string note = "Đây là phả con bắt đầu từ: " + startName
+                + Environment.NewLine + "Kích thước: " + sizeText;
+                //+ Environment.NewLine + "Ô xanh dương: sẽ tách phả con | Ô xanh ngọc: nhánh nhỏ (vẽ tiếp trong phả)"
+                //+ Environment.NewLine + "Nhãn cam / xanh / tím: điểm bắt đầu phả con kế tiếp";
+
+            double noteFontPx = (_phaDoCurrentOptions.TitleLine2FontPt > 0 ? _phaDoCurrentOptions.TitleLine2FontPt : 12)
+                * (_phaDoCurrentOptions.PrintDpi > 0 ? _phaDoCurrentOptions.PrintDpi : 96) / 72.0;
+
+            var textMoTaPhaCon = new TextBlock
+            {
+                Text = note,
+                Foreground = Brushes.DarkSlateGray,
+                FontSize = noteFontPx,
+                TextWrapping = TextWrapping.Wrap,
+                MaxWidth = Math.Max(220, MmToPx(Math.Max(80, result.ContentWidthMm * 0.35))),
+                IsHitTestVisible = false
+            };
+
+            // Một khung viền bao quanh — dễ đọc trên nền phả đồ
+            var boxMoTaPhaCon = new Border
+            {
+                Child = textMoTaPhaCon,
+                Background = new SolidColorBrush(Color.FromArgb(245, 255, 255, 248)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(0x6B, 0x8E, 0xB8)),
+                BorderThickness = new Thickness(1.2),
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(10, 8, 10, 8),
+                IsHitTestVisible = false,
+                Tag = "__PhaDoScopeSummaryNote"
+            };
+            Canvas.SetLeft(boxMoTaPhaCon, x);
+            Canvas.SetTop(boxMoTaPhaCon, y);
+            Panel.SetZIndex(boxMoTaPhaCon, 530);
+            theCanvas.Children.Add(boxMoTaPhaCon);
+        }
+
+        /// <summary>Ghi chú phần 4 trong ô gia đình (phả con, kích thước cm…).</summary>
+        private IReadOnlyList<string> BuildFamilyBoxExtraNotes(int familyId)
+        {
+            var notes = new List<string>();
+            if (familyId <= 0)
+            {
+                return notes;
+            }
+
+            var fullRoot = viewModel?.FamilyTree?.Family?.RootPerson;
+            var family = FindFamilyById(fullRoot, familyId);
+            int level = family?.familyInfo?.FamilyLevel ?? 0;
+
+            if (_phaDoScopeHighlightStartLevel > 0 && level == _phaDoScopeHighlightStartLevel)
+            {
+                var fullFamily = FindFamilyById(fullRoot, familyId);
+                if (fullFamily?.Children != null && fullFamily.Children.Count > 0)
+                {
+                    notes.Add("Khởi đầu phả con: " + CountSubtreeFamilies(fullFamily) + " GD");
+                }
+            }
+
+            if (_phaConFamilyIds.Contains(familyId)
+                && _phaConBoundsCmByFamilyId.TryGetValue(familyId, out var subSize))
+            {
+                notes.Add("phả con có kích thước: W=" + subSize.WidthCm.ToString("0.#")
+                    + " H=" + subSize.HeightCm.ToString("0.#") + " cm");
+            }
+
+            if (_phaConStopFamilyIds.Contains(familyId))
+            {
+                notes.Add("(Nhánh nhỏ nên vẽ luôn trong phả con)");
+            }
+            else if (_phaConFamilyIds.Contains(familyId)
+                && !_phaConBoundsCmByFamilyId.ContainsKey(familyId))
+            {
+                notes.Add("Phả con tiếp theo");
+            }
+
+            return notes;
+        }
+
+        private static int CountSubtreeFamilies(FamilyViewModel family)
+        {
+            if (family == null)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            var stack = new Stack<FamilyViewModel>();
+            stack.Push(family);
+            while (stack.Count > 0)
+            {
+                var cur = stack.Pop();
+                if (cur == null)
+                {
+                    continue;
+                }
+
+                count++;
+                if (cur.Children == null)
+                {
+                    continue;
+                }
+
+                foreach (var child in cur.Children)
+                {
+                    stack.Push(child);
+                }
+            }
+
+            return count;
+        }
+
+        /// <summary>Tô màu + nhãn cho các node bắt đầu phả con (ví dụ Root1 khi đang vẽ Root0).</summary>
+        private void DrawScopeStartMarkers(GiaPhaRenderResult result)
+        {
+            ClearScopeStartMarkers();
+            if (result?.Nodes == null || _phaDoScopeHighlightStartLevel <= 0)
+            {
+                return;
+            }
+
+            string label = string.IsNullOrWhiteSpace(_phaDoScopeHighlightLabel)
+                ? "Khởi đầu phả con"
+                : _phaDoScopeHighlightLabel.Trim();
+
+            GetPhaConMarkerColors(_phaDoScopeHighlightRootIndex, out Color textColor, out Color textBgColor, out Color borderColor);
+
+            var targets = result.Nodes
+                .Where(n => (n?.Family?.familyInfo?.FamilyLevel ?? 0) == _phaDoScopeHighlightStartLevel)
+                .ToList();
+            foreach (var node in targets)
+            {
+                double x = MmToPx(node.Xmm);
+                double y = MmToPx(node.Ymm + 5);
+                double w = MmToPx(node.Metrics.WidthMm);
+
+                int familyId = node.Family?.familyInfo?.FamilyId ?? 0;
+                var fullFamily = FindFamilyById(viewModel?.FamilyTree?.Family?.RootPerson, familyId);
+
+                // Kiểm tra theo cây gốc đầy đủ; scope render có thể đã cắt bớt con cháu.
+                if (fullFamily?.Children == null || fullFamily.Children.Count == 0)
+                {
+                    continue;
+                }
+
+                int subtreeCount = CountSubtreeFamilies(fullFamily);
+                string extraSizeLine = "";
+                if (_phaConFamilyIds.Contains(familyId)
+                    && _phaConBoundsCmByFamilyId.TryGetValue(familyId, out var subSize))
+                {
+                    extraSizeLine = Environment.NewLine
+                        + "Kích thước " + subSize.WidthCm.ToString("0.#")
+                        + " cm x " + subSize.HeightCm.ToString("0.#") + " cm";
+                }
+                var textBlockPhaCon = new TextBlock
+                {
+                    Text = "Khởi đầu phả con: " + subtreeCount + " GD" + extraSizeLine,
+                    Foreground = new SolidColorBrush(textColor),
+                    FontWeight = FontWeights.SemiBold,
+                    TextWrapping = TextWrapping.Wrap,
+                    MaxWidth = Math.Max(160, w - 8),
+                    IsHitTestVisible = false
+                };
+                var markerBoxTextblockPhaCon = new Border
+                {
+                    Child = textBlockPhaCon,
+                    Background = new SolidColorBrush(textBgColor),
+                    BorderBrush = new SolidColorBrush(borderColor),
+                    BorderThickness = new Thickness(1.2),
+                    CornerRadius = new CornerRadius(3),
+                    Padding = new Thickness(6, 3, 6, 3),
+                    IsHitTestVisible = false,
+                    Tag = new PhaDoScopeStartMarkerTag { FamilyId = familyId }
+                };
+                Canvas.SetLeft(markerBoxTextblockPhaCon, x + 4);
+                Canvas.SetTop(markerBoxTextblockPhaCon, y + 4);
+                Panel.SetZIndex(markerBoxTextblockPhaCon, 1101);
+                theCanvas.Children.Add(markerBoxTextblockPhaCon);
+            }
+        }
+
+        /// <summary>Màu nhãn marker phả con theo Root1/2/3 — tông tươi, đồng bộ chú thích.</summary>
+        private static void GetPhaConMarkerColors(int highlightRootIndex, out Color textColor, out Color textBgColor, out Color borderColor)
+        {
+            switch (highlightRootIndex)
+            {
+                case 1:
+                    textColor = Color.FromRgb(245, 124, 0);
+                    textBgColor = Color.FromArgb(245, 255, 248, 225);
+                    borderColor = Color.FromRgb(255, 183, 77);
+                    break;
+                case 2:
+                    textColor = Color.FromRgb(21, 101, 192);
+                    textBgColor = Color.FromArgb(245, 227, 242, 253);
+                    borderColor = Color.FromRgb(100, 181, 246);
+                    break;
+                case 3:
+                    textColor = Color.FromRgb(123, 31, 162);
+                    textBgColor = Color.FromArgb(245, 243, 229, 245);
+                    borderColor = Color.FromRgb(186, 104, 200);
+                    break;
+                default:
+                    textColor = Color.FromRgb(0, 131, 143);
+                    textBgColor = Color.FromArgb(245, 224, 247, 250);
+                    borderColor = Color.FromRgb(77, 208, 225);
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Tại đời Root2 (splitGenerationLevel): đủ GD → STOP (2.1); không đủ → nối dài (2.2).
+        /// Chỉ áp dụng khi family đang đứng đúng đời mốc tách.
+        /// </summary>
+        private bool ShouldStopAtPhaConSplitBoundary(FamilyViewModel family, int splitGenerationLevel)
+        {
+            if (family?.familyInfo == null
+                || family.familyInfo.FamilyLevel != splitGenerationLevel)
+            {
+                return false;
+            }
+
+            if (!_phaDoScopeExpandSmallBranchesAtStopLevel || _phaDoScopeMinBranchForStopLevel <= 0)
+            {
+                return true;
+            }
+
+            int familyId = family.familyInfo.FamilyId;
+            if (_phaDoScopeStopFamilyIdsAtMaxLevel != null && _phaDoScopeStopFamilyIdsAtMaxLevel.Count > 0)
+            {
+                return _phaDoScopeStopFamilyIdsAtMaxLevel.Contains(familyId);
+            }
+
+            return CountSubtreeFamilies(family) >= _phaDoScopeMinBranchForStopLevel;
+        }
+
+        /// <summary>
+        /// Clone cho layout: tại Root kế — STOP (≥ ngưỡng) chỉ 1 box; nhánh nhỏ nối dài tới lá.
+        /// </summary>
+        private FamilyViewModel BuildScopedRenderRoot(FamilyViewModel sourceRoot, int splitGenerationLevel)
+        {
+            if (sourceRoot == null)
+            {
+                return null;
+            }
+
+            if (splitGenerationLevel <= 0 || splitGenerationLevel == int.MaxValue)
+            {
+                return sourceRoot;
+            }
+
+            FamilyInfo CloneBranch(FamilyViewModel src, bool extendAllDescendants)
+            {
+                if (src?.familyInfo == null)
+                {
+                    return null;
+                }
+
+                var srcInfo = src.familyInfo;
+                var clone = new FamilyInfo
+                {
+                    FamilyId = srcInfo.FamilyId,
+                    FamilyUp = srcInfo.FamilyUp,
+                    FamilyOrder = srcInfo.FamilyOrder,
+                    FamilyLevel = srcInfo.FamilyLevel,
+                    FamilyNew = srcInfo.FamilyNew,
+                    X = srcInfo.X,
+                    Y = srcInfo.Y,
+                    Width = srcInfo.Width,
+                    Height = srcInfo.Height,
+                    PhaDoShapeSvgId = srcInfo.PhaDoShapeSvgId
+                };
+
+                if (srcInfo.ListPerson != null)
+                {
+                    clone.ListPerson = new ObservableCollection<PersonInfo>(srcInfo.ListPerson);
+                }
+
+                int level = srcInfo.FamilyLevel;
+
+                // Trên đời Root2: chỉ đi tiếp khi chưa tới mốc (hoặc chưa bật nối dài).
+                if (level < splitGenerationLevel)
+                {
+                    if (src.Children == null || src.Children.Count == 0)
+                    {
+                        return clone;
+                    }
+
+                    foreach (var child in src.Children)
+                    {
+                        int childLevel = child?.familyInfo?.FamilyLevel ?? 0;
+                        if (childLevel > splitGenerationLevel)
+                        {
+                            continue;
+                        }
+
+                        var childClone = CloneBranch(child, extendAllDescendants: false);
+                        if (childClone != null)
+                        {
+                            clone.FamilyChildren.Add(childClone);
+                        }
+                    }
+
+                    return clone;
+                }
+
+                // Đúng đời Root kế
+                if (level == splitGenerationLevel)
+                {
+                    if (!extendAllDescendants && ShouldStopAtPhaConSplitBoundary(src, splitGenerationLevel))
+                    {
+                        return clone;
+                    }
+
+                    extendAllDescendants = true;
+                }
+                else if (!extendAllDescendants)
+                {
+                    // Dưới Root kế mà không được nối dài từ nhánh nhỏ → không thêm nhánh con.
+                    return clone;
+                }
+
+                if (src.Children == null || src.Children.Count == 0)
+                {
+                    return clone;
+                }
+
+                foreach (var child in src.Children)
+                {
+                    if (!extendAllDescendants)
+                    {
+                        int childLevel = child?.familyInfo?.FamilyLevel ?? 0;
+                        if (childLevel > splitGenerationLevel)
+                        {
+                            continue;
+                        }
+                    }
+
+                    var childClone = CloneBranch(child, extendAllDescendants);
+                    if (childClone != null)
+                    {
+                        clone.FamilyChildren.Add(childClone);
+                    }
+                }
+
+                return clone;
+            }
+
+            var rootInfoClone = CloneBranch(sourceRoot, extendAllDescendants: false);
+            if (rootInfoClone == null)
+            {
+                return sourceRoot;
+            }
+
+            return new FamilyViewModel(rootInfoClone, null, viewModel?.FamilyTree);
+        }
+
+        /// <summary>
+        /// Đánh dấu memory cho 2 nhóm:
+        /// - family-phacon: đủ lớn để tách (vẽ tới đây thì dừng)
+        /// - family-phacon-stop: nhánh dừng (tiếp tục vẽ hết con cháu)
+        /// </summary>
+        private void UpdatePhaConFamilyFlags(
+            FamilyViewModel root,
+            int splitLevel,
+            int subtreeMaxGeneration,
+            int minBranchToSplitDeep,
+            PhaDoSubtreeMap map)
+        {
+            _phaConBoundsCmByFamilyId.Clear();
+            if (root == null || splitLevel <= 0)
+            {
+                _phaConFamilyIds.Clear();
+                _phaConStopFamilyIds.Clear();
+                return;
+            }
+
+            _phaDoAnalyzeMaxFamilyLevel = Math.Max(1, subtreeMaxGeneration);
+
+            if (map?.SubTrees != null)
+            {
+                foreach (var block in map.SubTrees)
+                {
+                    int id = block?.FamilyId ?? 0;
+                    if (id <= 0)
+                    {
+                        continue;
+                    }
+
+                    double wCm = Math.Max(0, block.MaxXmm - block.MinXmm) / 10.0;
+                    double hCm = Math.Max(0, block.MaxYmm - block.MinYmm) / 10.0;
+                    _phaConBoundsCmByFamilyId[id] = (wCm, hCm);
+                }
+            }
+
+            PopulatePhaConFlagsAtStopLevel(root, splitLevel, minBranchToSplitDeep, subtreeMaxGeneration);
+        }
+
+        /// <summary>Xóa ngữ cảnh tách phả con — dùng trước khi vẽ Toàn phả.</summary>
+        private void ApplyWholeTreeRenderScopeContext(FamilyViewModel root)
+        {
+            _phaConFamilyIds.Clear();
+            _phaConStopFamilyIds.Clear();
+            _phaConBoundsCmByFamilyId.Clear();
+            _phaDoScopeHighlightStartLevel = 0;
+            _phaDoScopeHighlightRootIndex = 0;
+            _phaDoScopeHighlightLabel = null;
+            _phaDoScopeExpandSmallBranchesAtStopLevel = false;
+            _phaDoScopeMinBranchForStopLevel = 0;
+            _phaDoScopeStopFamilyIdsAtMaxLevel = new HashSet<int>();
+            _phaDoShowScopeSummaryNote = false;
+            _phaDoScopeStartFamilyName = GetFamilyMainPersonName(root);
+        }
+
+        /// <summary>Áp tham số scope lên biến render (gọi trước RunPhaDoRender).</summary>
+        private async Task ApplyRenderScopeContextFromSelectionAsync(PhaDoRenderScopeItem scope, FamilyViewModel root)
+        {
+            if (scope != null && scope.IsWholeTree)
+            {
+                scope.MaxGenerationInclusive = int.MaxValue;
+                scope.ExpandSmallBranchesAtStopLevel = false;
+                scope.StopFamilyIdsAtMaxLevel = null;
+                ApplyWholeTreeRenderScopeContext(root);
+                return;
+            }
+
+            if (scope != null && scope.IsDefaultRoot0WithoutAnalyze)
+            {
+                await ConfigureDefaultRoot0ScopeForRenderAsync(scope, root).ConfigureAwait(true);
+            }
+
+            _phaDoScopeHighlightStartLevel = scope?.HighlightStartLevel ?? 0;
+            _phaDoScopeHighlightRootIndex = scope?.HighlightStartRootIndex ?? 0;
+            _phaDoScopeHighlightLabel = scope?.HighlightStartLabel;
+            _phaDoScopeExpandSmallBranchesAtStopLevel = scope?.ExpandSmallBranchesAtStopLevel == true;
+            _phaDoScopeMinBranchForStopLevel = Math.Max(0, scope?.MinBranchForStopLevel ?? 0);
+            _phaDoScopeStopFamilyIdsAtMaxLevel = new HashSet<int>();
+            _phaDoShowScopeSummaryNote = scope != null && !scope.IsWholeTree;
+            _phaDoScopeStartFamilyName = GetFamilyMainPersonName(scope?.RootFamily ?? root);
+            // Root0→Root1, Root1→Root2…: đánh dấu phacon/phacon-stop tại đúng mốc scope (không dùng cờ Root0 cũ).
+            ApplyPhaConFlagsForRenderScope(scope, root);
+        }
+
+        /// <summary>
+        /// Root0 khi chưa phân tích: splitLevel từ layout cây đầy đủ + mở rộng nhánh nhỏ (cùng luồng sau Phân tích phả).
+        /// </summary>
+        private async Task ConfigureDefaultRoot0ScopeForRenderAsync(PhaDoRenderScopeItem scope, FamilyViewModel root)
+        {
+            if (scope == null || root == null || !scope.IsDefaultRoot0WithoutAnalyze)
+            {
+                return;
+            }
+
+            int rootId = root.familyInfo?.FamilyId ?? 0;
+            GiaPhaRenderResult layoutHint = null;
+            if (_phaDoFullTreeLayoutSnapshot?.Nodes != null
+                && _phaDoFullTreeLayoutSnapshotRootId == rootId
+                && _phaDoFullTreeLayoutSnapshot.Nodes.Count > 0)
+            {
+                layoutHint = _phaDoFullTreeLayoutSnapshot;
+            }
+            else
+            {
+                // Chưa có snapshot (mở file → Vẽ): layout một lần cây đầy đủ để chọn đời tách — không dùng _phaDoRenderedLayout đã scope.
+                layoutHint = await ComputePhaDoLayoutSnapshotAsync(root).ConfigureAwait(true);
+            }
+
+            int familyCount = layoutHint?.Nodes?.Count ?? CountFamiliesInTree(root);
+            int minBranch = ComputeAdaptiveMinBranchToSplitDeep(familyCount);
+
+            int splitLevel = -1;
+            if (layoutHint != null && ShouldSplitPhaiCon(familyCount))
+            {
+                splitLevel = ResolveSuggestedSplitLevel(
+                    root,
+                    layoutHint,
+                    minLevel: 1,
+                    maxLevel: 30,
+                    minCutLevel: 3,
+                    minBranchToSplitDeep: minBranch);
+            }
+            else if (ShouldSplitPhaiCon(CountFamiliesInTree(root)))
+            {
+                int maxLevel = GetMaxFamilyLevelInTree(root);
+                if (maxLevel > PhaDoDefaultRoot0MaxGeneration)
+                {
+                    splitLevel = Math.Min(maxLevel, PhaDoDefaultRoot0MaxGeneration + 1);
+                }
+            }
+
+            if (splitLevel <= 0)
+            {
+                scope.MaxGenerationInclusive = PhaDoDefaultRoot0MaxGeneration;
+                scope.ExpandSmallBranchesAtStopLevel = false;
+                scope.HighlightStartLevel = 0;
+                scope.HighlightStartRootIndex = 0;
+                scope.MinBranchForStopLevel = 0;
+                scope.StopFamilyIdsAtMaxLevel = null;
+                scope.Label = "Phả con (Root0, đời 1–" + PhaDoDefaultRoot0MaxGeneration + ")";
+                _phaConFamilyIds.Clear();
+                _phaConStopFamilyIds.Clear();
+                return;
+            }
+
+            scope.MaxGenerationInclusive = splitLevel;
+            scope.HighlightStartLevel = splitLevel;
+            scope.HighlightStartRootIndex = 1;
+            scope.HighlightStartLabel = "Khởi đầu phả con";
+            scope.ExpandSmallBranchesAtStopLevel = true;
+            scope.MinBranchForStopLevel = minBranch;
+            scope.Label = "Phả con (Root0 -> Root1, chưa phân tích)";
+            scope.StopFamilyIdsAtMaxLevel = BuildStopFamilyIdsAtLevel(root, splitLevel, minBranch, 30);
+        }
+
+        private static int CountFamiliesInTree(FamilyViewModel root)
+        {
+            if (root == null)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            var stack = new Stack<FamilyViewModel>();
+            stack.Push(root);
+            while (stack.Count > 0)
+            {
+                var cur = stack.Pop();
+                if (cur == null)
+                {
+                    continue;
+                }
+
+                count++;
+                if (cur.Children == null)
+                {
+                    continue;
+                }
+
+                foreach (var child in cur.Children)
+                {
+                    stack.Push(child);
+                }
+            }
+
+            return count;
+        }
+
+        private static int GetMaxFamilyLevelInTree(FamilyViewModel root)
+        {
+            if (root == null)
+            {
+                return 0;
+            }
+
+            int max = 0;
+            var stack = new Stack<FamilyViewModel>();
+            stack.Push(root);
+            while (stack.Count > 0)
+            {
+                var cur = stack.Pop();
+                if (cur == null)
+                {
+                    continue;
+                }
+
+                int level = cur.familyInfo?.FamilyLevel ?? 0;
+                if (level > max)
+                {
+                    max = level;
+                }
+
+                if (cur.Children == null)
+                {
+                    continue;
+                }
+
+                foreach (var child in cur.Children)
+                {
+                    stack.Push(child);
+                }
+            }
+
+            return max;
+        }
+
+        /// <summary>ID các nhánh đủ lớn tại một đời tách (dừng tại mốc, nhánh nhỏ vẽ tiếp).</summary>
+        private static HashSet<int> BuildStopFamilyIdsAtLevel(
+            FamilyViewModel scopeRoot,
+            int stopLevel,
+            int minBranch,
+            int effectiveMaxGeneration)
+        {
+            var stopIds = new HashSet<int>();
+            if (scopeRoot == null || stopLevel <= 0 || stopLevel >= int.MaxValue)
+            {
+                return stopIds;
+            }
+
+            var splitMetrics = new PhaConSplitMetrics(
+                effectiveMaxGeneration,
+                minBranch,
+                PhaDoTargetFamilyCountPerSubtree);
+            foreach (var family in CollectRootsAtLevelFromBase(new[] { scopeRoot }, stopLevel))
+            {
+                int familyId = family?.familyInfo?.FamilyId ?? 0;
+                if (familyId > 0 && splitMetrics.SubtreeSize(family) >= minBranch)
+                {
+                    stopIds.Add(familyId);
+                }
+            }
+
+            return stopIds;
+        }
+
+        /// <summary>Đánh dấu phacon / phacon-stop tại mốc tách của scope đang vẽ.</summary>
+        private void PopulatePhaConFlagsAtStopLevel(
+            FamilyViewModel scopeRoot,
+            int stopLevel,
+            int minBranch,
+            int effectiveMaxGeneration)
+        {
+            _phaConFamilyIds.Clear();
+            _phaConStopFamilyIds.Clear();
+
+            if (scopeRoot == null || stopLevel <= 0 || stopLevel >= int.MaxValue)
+            {
+                return;
+            }
+
+            var splitMetrics = new PhaConSplitMetrics(
+                effectiveMaxGeneration,
+                minBranch,
+                PhaDoTargetFamilyCountPerSubtree);
+            foreach (var family in CollectRootsAtLevelFromBase(new[] { scopeRoot }, stopLevel))
+            {
+                int familyId = family?.familyInfo?.FamilyId ?? 0;
+                if (familyId <= 0)
+                {
+                    continue;
+                }
+
+                if (splitMetrics.SubtreeSize(family) >= minBranch)
+                {
+                    _phaConFamilyIds.Add(familyId);
+                }
+                else
+                {
+                    _phaConStopFamilyIds.Add(familyId);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Trước vẽ: đánh dấu phacon/phacon-stop tại đời Root kế (Root2 khi scope bắt đầu từ Root1).
+        /// Phải gọi trước BuildScopedRenderRoot — dùng _phaDoScopeStopFamilyIdsAtMaxLevel.
+        /// </summary>
+        private void ApplyPhaConFlagsForRenderScope(PhaDoRenderScopeItem scope, FamilyViewModel fileRoot)
+        {
+            if (scope == null || scope.IsWholeTree)
+            {
+                return;
+            }
+
+            if (!scope.ExpandSmallBranchesAtStopLevel
+                || scope.MaxGenerationInclusive <= 0
+                || scope.MaxGenerationInclusive == int.MaxValue)
+            {
+                _phaConFamilyIds.Clear();
+                _phaConStopFamilyIds.Clear();
+                _phaDoScopeStopFamilyIdsAtMaxLevel = new HashSet<int>();
+                return;
+            }
+
+            var scopeRoot = scope.RootFamily ?? fileRoot;
+            int minBranch = scope.MinBranchForStopLevel;
+            if (minBranch <= 0 && fileRoot != null)
+            {
+                minBranch = ComputeAdaptiveMinBranchToSplitDeep(CountFamiliesInTree(fileRoot));
+            }
+
+            minBranch = Math.Max(1, minBranch);
+            int effectiveMax = _phaDoAnalyzeMaxFamilyLevel > 0
+                ? _phaDoAnalyzeMaxFamilyLevel
+                : Math.Max(GetMaxFamilyLevelInTree(fileRoot), scope.MaxGenerationInclusive);
+
+            PopulatePhaConFlagsAtStopLevel(
+                scopeRoot,
+                scope.MaxGenerationInclusive,
+                minBranch,
+                effectiveMax);
+            _phaDoScopeStopFamilyIdsAtMaxLevel = new HashSet<int>(_phaConFamilyIds);
+        }
+
+        /// <summary>Chưa phân tích phả: combo chỉ có đúng một mục Toàn phả.</summary>
+        private bool IsPreAnalyzeOnlyScopeList()
+        {
+            if (_phaDoRenderScopesFromAnalyze || _phaDoRenderScopes.Count != 1)
+            {
+                return false;
+            }
+
+            var only = _phaDoRenderScopes[0];
+            return only != null && only.IsWholeTree && !only.IsDefaultRoot0WithoutAnalyze;
+        }
+
+        /// <summary>Khởi tạo / đổi file: chưa phân tích thì combo chỉ có Toàn phả (không thêm Root0).</summary>
         private void ResetPhaDoRenderScopes(FamilyViewModel root)
         {
             _phaDoRenderScopes.Clear();
-            _phaDoRenderScopeSourceRootId = root?.familyInfo?.FamilyId ?? 0;
+            _phaDoRenderScopesFromAnalyze = false;
+            int newRootId = root?.familyInfo?.FamilyId ?? 0;
+            if (_phaDoRenderScopeSourceRootId != newRootId)
+            {
+                _phaDoFullTreeLayoutSnapshot = null;
+                _phaDoFullTreeLayoutSnapshotRootId = 0;
+            }
+            _phaDoRenderScopeSourceRootId = newRootId;
             if (root == null)
             {
                 return;
@@ -6211,37 +11073,80 @@ namespace vietnamgiapha
             if (phaDoSubtreeListBox != null)
             {
                 phaDoSubtreeListBox.SelectedIndex = 0;
+                UpdatePhaDoSubtreeListBoxToolTip();
             }
         }
 
-        /// <summary>Đổ list lựa chọn vẽ theo cấp root: Toàn phả, Root0 và các nhánh Root1.</summary>
+        /// <summary>Đổ list lựa chọn vẽ theo cấp root: Toàn phả, Root0 và các nhánh Root1/Root2...</summary>
         private void UpdatePhaDoRenderScopesFromMap(
             FamilyViewModel root,
             PhaDoSubtreeMap map,
             int splitLevel,
             int subtreeMaxGeneration,
-            int minBranchToSplitDeep)
+            int minBranchToSplitDeep,
+            int rootLevelMax = PhaDoDefaultRoot0MaxGeneration)
         {
-            ResetPhaDoRenderScopes(root);
-            if (root == null || map?.SubTrees == null || map.SubTrees.Count == 0 || splitLevel <= 0)
+            // Sau phân tích: Toàn phả + Root0 (theo splitLevel) + từng nhánh — không dùng Reset mặc định đời 1–4.
+            _phaDoRenderScopes.Clear();
+            _phaDoRenderScopesFromAnalyze = false;
+            _phaDoAnalyzeMaxFamilyLevel = Math.Max(1, subtreeMaxGeneration);
+            _phaDoRenderScopeSourceRootId = root?.familyInfo?.FamilyId ?? 0;
+            if (root == null)
             {
                 return;
             }
 
-            // Root0: vẽ từ gốc đến mốc root1 rồi dừng.
+            int comboIndex = 0;
             _phaDoRenderScopes.Add(new PhaDoRenderScopeItem
             {
-                Label = "Phả con root 0 (đến root 1)",
+                Label = "Toàn phả",
+                FamilyId = _phaDoRenderScopeSourceRootId,
+                RootFamily = root,
+                IsWholeTree = true,
+                MaxGenerationInclusive = int.MaxValue,
+                RenderPlanSummary = "Toàn phả",
+                ComboIndexHint = comboIndex++
+            });
+
+            if (splitLevel <= 0 || !HasMeaningfulPhaiConBranches(map))
+            {
+                // Không tách / chỉ 1 nhánh → coi như không có phả con, chỉ Toàn phả trong combo.
+                _phaDoRenderScopesFromAnalyze = true;
+                if (phaDoSubtreeListBox != null)
+                {
+                    phaDoSubtreeListBox.SelectedIndex = 0;
+                    UpdatePhaDoSubtreeListBoxToolTip();
+                }
+
+                return;
+            }
+
+            // Scope Root0: vẽ từ root gia phả tới toàn bộ Root1.
+            var root0Scope = new PhaDoRenderScopeItem
+            {
+                RenderPlanSummary = "Root0→Root1 (đời 1–" + splitLevel + ")",
+                ComboIndexHint = comboIndex++,
                 FamilyId = root.familyInfo?.FamilyId ?? 0,
                 RootFamily = root,
                 IsWholeTree = false,
-                MaxGenerationInclusive = splitLevel
-            });
+                MaxGenerationInclusive = splitLevel,
+                HighlightStartLevel = splitLevel,
+                HighlightStartRootIndex = 1,
+                HighlightStartLabel = "Khởi đầu phả con Root1",
+                // Root1 nhỏ hơn ngưỡng tách thì vẽ tiếp tới hết nhánh (không cắt ngang tại Root1).
+                ExpandSmallBranchesAtStopLevel = true,
+                MinBranchForStopLevel = minBranchToSplitDeep,
+                StopFamilyIdsAtMaxLevel = new HashSet<int>(_phaConFamilyIds)
+            };
+            root0Scope.LayoutFamilyCountEstimate = EstimateScopeLayoutFamilyCount(root0Scope, root);
+            root0Scope.Label = FormatPhaiConScopeLabel(root0Scope, map.RootBlock);
+            _phaDoRenderScopes.Add(root0Scope);
 
             var splitMetrics = new PhaConSplitMetrics(
                 subtreeMaxGeneration,
                 minBranchToSplitDeep,
                 PhaDoTargetFamilyCountPerSubtree);
+
             var seen = new HashSet<int>();
             foreach (var block in map.SubTrees)
             {
@@ -6258,26 +11163,67 @@ namespace vietnamgiapha
                 }
 
                 int level = family.familyInfo?.FamilyLevel ?? 0;
-                // Chỉ đưa nhánh root1 vào list; khi vẽ root1 sẽ dừng ở mốc root2 của chính nhánh đó.
-                if (level != splitLevel)
+                if (level < splitLevel)
                 {
                     continue;
                 }
 
                 int maxGenerationInclusive = int.MaxValue;
-                if (splitMetrics.TrySelectNextSplitLevel(family, out int nextSplitLevel, out _, out _))
+                int highlightStartLevel = 0;
+                bool hasNextSplit = false;
+                int nextSplitLevel = 0;
+                // Root1→Root2: chỉ nhánh Root1 (đời splitLevel) hoặc nhánh báo cáo “đủ đoạn tách tiếp”.
+                // Nhánh cấp 2 (vd. đời 12, 0 tách tiếp) → vẽ full nhánh, không gọi TrySelect (tránh nhảy đời 13+).
+                if (level == splitLevel || splitMetrics.CanContinueSplit(family))
                 {
-                    maxGenerationInclusive = nextSplitLevel;
+                    hasNextSplit = splitMetrics.TrySelectNextSplitLevel(
+                        family,
+                        out nextSplitLevel,
+                        out _,
+                        out _);
                 }
 
-                _phaDoRenderScopes.Add(new PhaDoRenderScopeItem
+                if (hasNextSplit)
                 {
-                    Label = "Phả con root 1 | ID " + familyId + " | " + GetFamilyMainPersonName(family),
+                    maxGenerationInclusive = nextSplitLevel;
+                    highlightStartLevel = nextSplitLevel;
+                }
+
+                int rootIndex = Math.Max(1, level - splitLevel + 1);
+                HashSet<int> stopIds = hasNextSplit
+                    ? BuildStopFamilyIdsAtLevel(family, nextSplitLevel, minBranchToSplitDeep, subtreeMaxGeneration)
+                    : null;
+                string planSummary = hasNextSplit
+                    ? ("Root" + rootIndex + "→Root" + (rootIndex + 1)
+                        + " (đời ≤" + nextSplitLevel + ", STOP≥" + minBranchToSplitDeep + ")")
+                    : ("Trang lá đời " + level + " (full nhánh)");
+                var branchScope = new PhaDoRenderScopeItem
+                {
+                    RenderPlanSummary = planSummary,
+                    ComboIndexHint = comboIndex++,
                     FamilyId = familyId,
                     RootFamily = family,
                     IsWholeTree = false,
-                    MaxGenerationInclusive = maxGenerationInclusive
-                });
+                    MaxGenerationInclusive = maxGenerationInclusive,
+                    HighlightStartLevel = highlightStartLevel,
+                    HighlightStartRootIndex = rootIndex + 1,
+                    HighlightStartLabel = "Khởi đầu phả con Root" + (rootIndex + 1),
+                    // Cùng luồng Root0→Root1: nhánh nhỏ tại mốc kế vẽ tiếp, nhánh lớn dừng để tách Root kế.
+                    ExpandSmallBranchesAtStopLevel = hasNextSplit,
+                    MinBranchForStopLevel = minBranchToSplitDeep,
+                    StopFamilyIdsAtMaxLevel = stopIds
+                };
+                branchScope.LayoutFamilyCountEstimate = EstimateScopeLayoutFamilyCount(branchScope, root);
+                branchScope.Label = FormatPhaiConScopeLabel(branchScope, block);
+                _phaDoRenderScopes.Add(branchScope);
+            }
+
+            _phaDoRenderScopesFromAnalyze = true;
+            if (phaDoSubtreeListBox != null)
+            {
+                // Sau phân tích: mặc định chọn Root0 (item thứ 2), không phải Toàn phả.
+                phaDoSubtreeListBox.SelectedIndex = _phaDoRenderScopes.Count > 1 ? 1 : 0;
+                UpdatePhaDoSubtreeListBoxToolTip();
             }
         }
 
@@ -6336,6 +11282,65 @@ namespace vietnamgiapha
 
         private void TheCanvas_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
+            // Pan mode: chuột trái kéo canvas, không select/drag box
+            if (_phaDoInteractionMode == PhaDoInteractionMode.Pan)
+            {
+                BeginPhaDoPan(e, MouseButton.Left);
+                e.Handled = true;
+                return;
+            }
+
+            // Click vào nhãn "Đời X" → mở popup chỉnh style
+            if (TryResolveGenLabelHit(e.OriginalSource as DependencyObject, out int genLevel))
+            {
+                ClearTitleSelection();
+                ClearPhaDoBoxSelections();
+                _phaDoSelectedGenLevel = genLevel;
+                DrawGenLabelSelectionOverlay(genLevel);
+                OpenGenLabelStylePopup(genLevel);
+                e.Handled = true;
+                return;
+            }
+
+            // Kiểm tra resize handle của title block trước
+            if (TryResolveTitleResizeHandle(e.OriginalSource as DependencyObject, out PhaDoResizeCorner titleCorner))
+            {
+                BeginTitleResize(e, titleCorner);
+                return;
+            }
+
+            // Title: 2 cấp — (1) chọn khối, (2) khi khối đã chọn mới chọn/kéo text
+            if (TryResolveTitleTextLineHit(
+                    e.OriginalSource as DependencyObject,
+                    out int titleLineIdx,
+                    out FrameworkElement titleLineElement))
+            {
+                if (_phaDoTitleSelected)
+                {
+                    HandleTitleTextMouseDown(e, titleLineIdx, titleLineElement);
+                }
+                else
+                {
+                    // Click chữ lần đầu = chọn khối (cấp 1), không nhảy thẳng sang text
+                    SelectTitleBlockOutline();
+                    e.Handled = true;
+                }
+
+                return;
+            }
+
+            // Khối title đã chọn: kéo nền/khung để di chuyển; lần đầu click = chọn khối
+            if (TryResolveTitleBlockDragHit(e.OriginalSource as DependencyObject))
+            {
+                if (!_phaDoTitleSelected || _phaDoTitleSelectedLine >= 0)
+                {
+                    SelectTitleBlockOutline();
+                }
+
+                BeginTitleBlockDrag(e);
+                return;
+            }
+
             if (TryResolveResizeHandle(e.OriginalSource as DependencyObject, out int resizeFamilyId, out PhaDoResizeCorner corner))
             {
                 BeginPhaDoResize(e, resizeFamilyId, corner);
@@ -6343,44 +11348,57 @@ namespace vietnamgiapha
                 return;
             }
 
+            // Text trong ô — tách hẳn khỏi luồng chọn box
             if (TryResolvePersonElementHit(
                     e.OriginalSource as DependencyObject,
                     out int personFamilyId,
                     out int personSlot,
                     out FrameworkElement personElement))
             {
-                BeginPersonDrag(e, personFamilyId, personSlot, personElement);
-                e.Handled = true;
+                HandleFamilyBoxTextMouseDown(e, personFamilyId, personSlot, personElement);
                 return;
             }
 
-            if (!TryResolveFamilyFromCanvasHit(e.OriginalSource as DependencyObject, out int familyId, out GiaPhaPlacedNode node))
+            if (!TryResolveFamilyBoxBackgroundHit(e.OriginalSource as DependencyObject, out int familyId, out GiaPhaPlacedNode node))
             {
-                _phaDoSelectedFamilyId = 0;
-                _phaDoSelectedPersonSlot = -1;
-                ClearSelectionOverlay();
-                UpdatePhaDoSelectedBoxSizeStatus(0);
-                BeginPhaDoPan(e, MouseButton.Left);
+                ClearTitleSelection();
+                ClearGenLabelSelection();
+                ClearPhaDoBoxSelections();
+                BeginMarqueeSelection(e.GetPosition(theCanvas));
                 e.Handled = true;
                 return;
             }
 
-            _phaDoSelectedPersonSlot = -1;
-            SelectPhaDoBoxOutline(familyId);
+            HandleFamilyBoxBackgroundMouseDown(e, familyId, node);
+        }
 
-            if (!IsHitOnBoxBackground(e.OriginalSource as DependencyObject, familyId))
+        /// <summary>Khởi tạo quét chuột để chọn nhiều box.</summary>
+        private void BeginMarqueeSelection(Point canvasPoint)
+        {
+            _phaDoIsMarqueeSelecting = true;
+            _phaDoMarqueeStartPoint = canvasPoint;
+            if (_phaDoMarqueeRect == null)
             {
-                e.Handled = true;
-                return;
+                _phaDoMarqueeRect = new Rectangle
+                {
+                    Stroke = new SolidColorBrush(Color.FromRgb(30, 136, 229)),
+                    Fill = new SolidColorBrush(Color.FromArgb(40, 30, 136, 229)),
+                    StrokeDashArray = new DoubleCollection { 3, 2 },
+                    StrokeThickness = 1.2,
+                    IsHitTestVisible = false,
+                    Tag = "__PhaDoMarqueeSelect"
+                };
             }
-
-            _phaDoIsDragging = true;
-            _phaDoMouseMovedWhileDrag = false;
-            _phaDoDraggingFamilyId = familyId;
-            _phaDoDragStartPoint = e.GetPosition(theCanvas);
-            _phaDoDragStartNodeXmm = node.Xmm;
+            Canvas.SetLeft(_phaDoMarqueeRect, canvasPoint.X);
+            Canvas.SetTop(_phaDoMarqueeRect, canvasPoint.Y);
+            _phaDoMarqueeRect.Width = 0;
+            _phaDoMarqueeRect.Height = 0;
+            if (!theCanvas.Children.Contains(_phaDoMarqueeRect))
+            {
+                Panel.SetZIndex(_phaDoMarqueeRect, 1200);
+                theCanvas.Children.Add(_phaDoMarqueeRect);
+            }
             theCanvas.CaptureMouse();
-            e.Handled = true;
         }
 
         private void TheCanvas_PreviewMouseDown(object sender, MouseButtonEventArgs e)
@@ -6437,15 +11455,428 @@ namespace vietnamgiapha
 
             _phaDoIsPanning = false;
             theCanvas.ReleaseMouseCapture();
-            theCanvas.Cursor = null;
+            // Giữ cursor SizeAll nếu vẫn ở Pan mode; chỉ reset khi về Select mode
+            theCanvas.Cursor = _phaDoInteractionMode == PhaDoInteractionMode.Pan ? Cursors.SizeAll : null;
             if (_phaDoPanMoved)
             {
                 SaveWorkspaceSession();
             }
         }
 
+        // ── Title block: select + resize ─────────────────────────────────────
+
+        private const string TitleSelectionTag = "__PhaDoTitleSelection";
+
+        /// <summary>Vẽ border chọn + 4 góc resize — căn theo hit rect trên canvas (giống ô gia đình).</summary>
+        private void DrawTitleSelectionOverlay()
+        {
+            ClearTitleSelectionOverlay();
+            if (!TryGetTitleBlockBoundsPx(out double left, out double top, out double boxW, out double boxH))
+            {
+                return;
+            }
+
+            const double pad = 2.5;
+            const double handle = 8;
+            double outlineLeft = left - pad;
+            double outlineTop = top - pad;
+            double outlineW = Math.Max(1, boxW + pad * 2);
+            double outlineH = Math.Max(1, boxH + pad * 2);
+
+            var border = new System.Windows.Shapes.Rectangle
+            {
+                Width = outlineW,
+                Height = outlineH,
+                Stroke = new SolidColorBrush(Color.FromRgb(30, 136, 229)),
+                StrokeThickness = 1.3,
+                StrokeDashArray = new DoubleCollection { 4, 2 },
+                Fill = System.Windows.Media.Brushes.Transparent,
+                IsHitTestVisible = false,
+                Tag = TitleSelectionTag
+            };
+            Canvas.SetLeft(border, outlineLeft);
+            Canvas.SetTop(border, outlineTop);
+            Panel.SetZIndex(border, 1000);
+            theCanvas.Children.Add(border);
+
+            double x0 = outlineLeft - handle / 2;
+            double y0 = outlineTop - handle / 2;
+            double x1 = outlineLeft + outlineW - handle / 2;
+            double y1 = outlineTop + outlineH - handle / 2;
+            AddTitleResizeHandle(x0, y0, handle, PhaDoResizeCorner.TopLeft);
+            AddTitleResizeHandle(x1, y0, handle, PhaDoResizeCorner.TopRight);
+            AddTitleResizeHandle(x0, y1, handle, PhaDoResizeCorner.BottomLeft);
+            AddTitleResizeHandle(x1, y1, handle, PhaDoResizeCorner.BottomRight);
+        }
+
+        private void AddTitleResizeHandle(double x, double y, double size, PhaDoResizeCorner corner)
+        {
+            var r = new System.Windows.Shapes.Rectangle
+            {
+                Width = size,
+                Height = size,
+                Fill = System.Windows.Media.Brushes.White,
+                Stroke = new SolidColorBrush(Color.FromRgb(30, 136, 229)),
+                StrokeThickness = 1.2,
+                IsHitTestVisible = true,
+                Cursor = GetResizeCursor(corner),
+                Tag = new PhaDoTitleResizeHandleTag(corner)
+            };
+            Canvas.SetLeft(r, x);
+            Canvas.SetTop(r, y);
+            Panel.SetZIndex(r, 1002);
+            theCanvas.Children.Add(r);
+        }
+
+        private void ClearTitleSelectionOverlay()
+        {
+            var toRemove = theCanvas?.Children
+                .OfType<UIElement>()
+                .Where(e => {
+                    var t = (e as FrameworkElement)?.Tag;
+                    return t is string s && s == TitleSelectionTag
+                        || t is PhaDoTitleResizeHandleTag;
+                }).ToList();
+            if (toRemove == null) return;
+            foreach (var el in toRemove) theCanvas.Children.Remove(el);
+        }
+
+        private bool TryResolveTitleResizeHandle(DependencyObject source, out PhaDoResizeCorner corner)
+        {
+            corner = PhaDoResizeCorner.BottomRight;
+            for (var d = source; d != null; d = VisualTreeHelper.GetParent(d))
+            {
+                if ((d as FrameworkElement)?.Tag is PhaDoTitleResizeHandleTag tag)
+                {
+                    corner = tag.Corner;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private bool IsTitleHit(DependencyObject source)
+        {
+            for (var d = source; d != null; d = VisualTreeHelper.GetParent(d))
+                if ((d as FrameworkElement)?.Tag is PhaDoTitleHitTag) return true;
+            return false;
+        }
+
+        /// <summary>Vùng có thể kéo cả khối title: nền trong suốt hoặc khung SVG khi đã chọn box.</summary>
+        private bool TryResolveTitleBlockDragHit(DependencyObject source)
+        {
+            if (source == null)
+            {
+                return false;
+            }
+
+            for (var d = source; d != null; d = VisualTreeHelper.GetParent(d))
+            {
+                var tag = (d as FrameworkElement)?.Tag;
+                if (tag is PhaDoTitleHitTag)
+                {
+                    return true;
+                }
+
+                if (_phaDoTitleSelected
+                    && _phaDoTitleSelectedLine < 0
+                    && tag is PhaDoTitleVisualTag)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private void UpdateTitleHitRectCursor()
+        {
+            var hit = theCanvas?.Children
+                .OfType<FrameworkElement>()
+                .FirstOrDefault(fe => fe.Tag is PhaDoTitleHitTag);
+            if (hit == null)
+            {
+                return;
+            }
+
+            hit.Cursor = _phaDoTitleSelected && _phaDoTitleSelectedLine < 0
+                ? Cursors.SizeAll
+                : Cursors.Arrow;
+        }
+
+        private void BeginTitleBlockDrag(MouseButtonEventArgs e)
+        {
+            if (_phaDoCurrentOptions == null || _phaDoRenderedLayout == null)
+            {
+                return;
+            }
+
+            CancelPendingTitleDrag();
+            CancelPendingPersonDrag();
+
+            var layout = PhaDoTitleBlockMetrics.Measure(_phaDoCurrentOptions, GetPhaDoRenderDpi());
+            _phaDoIsDraggingTitleBlock = true;
+            _phaDoTitleBlockMovedWhileDrag = false;
+            _phaDoTitleBlockDragStartPoint = e.GetPosition(theCanvas);
+            _phaDoTitleBlockDragStartLeftMm = layout.LeftMm;
+            _phaDoTitleBlockDragStartTopMm = layout.TopMm;
+
+            if (_phaDoTitleStyle == null)
+            {
+                _phaDoTitleStyle = new PhaDoTitleStyle();
+            }
+
+            if (!_phaDoTitleStyle.ManualPositionSet)
+            {
+                _phaDoTitleStyle.ManualLeftMm = layout.LeftMm;
+                _phaDoTitleStyle.ManualTopMm = layout.TopMm;
+                _phaDoTitleStyle.ManualPositionSet = true;
+            }
+
+            theCanvas.CaptureMouse();
+            theCanvas.Cursor = Cursors.SizeAll;
+            e.Handled = true;
+        }
+
+        private void UpdateTitleBlockDrag(Point canvasPoint)
+        {
+            if (!_phaDoIsDraggingTitleBlock || _phaDoCurrentOptions == null)
+            {
+                return;
+            }
+
+            var delta = GetPhaDoCanvasDeltaMmRender(canvasPoint, _phaDoTitleBlockDragStartPoint);
+            if (Math.Abs(delta.X) > 0.05 || Math.Abs(delta.Y) > 0.05)
+            {
+                _phaDoTitleBlockMovedWhileDrag = true;
+            }
+
+            if (!_phaDoTitleBlockMovedWhileDrag)
+            {
+                return;
+            }
+
+            if (!TryGetTitleBlockBoundsPx(out _, out _, out double boxWPx, out double boxHPx))
+            {
+                return;
+            }
+
+            double maxLeft = Math.Max(0, _phaDoCurrentOptions.PageWidthMm - PxToMmRender(boxWPx));
+            double maxTop = Math.Max(0, _phaDoCurrentOptions.PageHeightMm - PxToMmRender(boxHPx));
+
+            double newLeft = _phaDoTitleBlockDragStartLeftMm + delta.X;
+            double newTop = _phaDoTitleBlockDragStartTopMm + delta.Y;
+            newLeft = Math.Max(0, Math.Min(maxLeft, newLeft));
+            newTop = Math.Max(0, Math.Min(maxTop, newTop));
+            ApplyTitleBlockPositionMm(newLeft, newTop, redraw: true);
+        }
+
+        private void ApplyTitleBlockPositionMm(double leftMm, double topMm, bool redraw)
+        {
+            if (_phaDoTitleStyle == null)
+            {
+                _phaDoTitleStyle = new PhaDoTitleStyle();
+            }
+
+            _phaDoTitleStyle.ManualPositionSet = true;
+            _phaDoTitleStyle.ManualLeftMm = leftMm;
+            _phaDoTitleStyle.ManualTopMm = topMm;
+
+            if (_phaDoCurrentOptions != null)
+            {
+                _phaDoCurrentOptions.ManualTitlePositionSet = true;
+                _phaDoCurrentOptions.ManualTitleLeftMm = leftMm;
+                _phaDoCurrentOptions.ManualTitleTopMm = topMm;
+            }
+
+            if (redraw)
+            {
+                RedrawTitleBlockOnly();
+            }
+        }
+
+        private void EndTitleBlockDrag()
+        {
+            if (!_phaDoIsDraggingTitleBlock)
+            {
+                return;
+            }
+
+            _phaDoIsDraggingTitleBlock = false;
+            theCanvas.ReleaseMouseCapture();
+            theCanvas.Cursor = _phaDoInteractionMode == PhaDoInteractionMode.Pan
+                ? Cursors.SizeAll
+                : null;
+            UpdateTitleHitRectCursor();
+
+            if (_phaDoTitleBlockMovedWhileDrag)
+            {
+                SaveWorkspaceSession();
+            }
+        }
+
+        private void BeginTitleResize(MouseButtonEventArgs e, PhaDoResizeCorner corner)
+        {
+            if (_phaDoCurrentOptions == null || _phaDoRenderedLayout == null) return;
+            var layout = PhaDoTitleBlockMetrics.Measure(_phaDoCurrentOptions, GetPhaDoRenderDpi());
+
+            _phaDoTitleIsResizing = true;
+            _phaDoTitleResizeCorner    = corner;
+            _phaDoTitleResizeStartPoint  = e.GetPosition(theCanvas);
+            _phaDoTitleResizeStartWmm    = layout.WidthMm;
+            _phaDoTitleResizeStartHmm    = layout.HeightMm;
+            _phaDoTitleResizeStartLeftMm = layout.LeftMm;
+            _phaDoTitleResizeStartTopMm  = layout.TopMm;
+            theCanvas.CaptureMouse();
+            e.Handled = true;
+        }
+
+        private void UpdateTitleResize(Point canvasPoint)
+        {
+            if (!_phaDoTitleIsResizing || _phaDoCurrentOptions == null) return;
+
+            double dxPx = canvasPoint.X - _phaDoTitleResizeStartPoint.X;
+            double dyPx = canvasPoint.Y - _phaDoTitleResizeStartPoint.Y;
+            double dxMm = PxToMmRender(dxPx);
+            double dyMm = PxToMmRender(dyPx);
+
+            double newW = _phaDoTitleResizeStartWmm, newH = _phaDoTitleResizeStartHmm;
+            double newLeft = _phaDoTitleResizeStartLeftMm, newTop = _phaDoTitleResizeStartTopMm;
+            const double minMm = 10;
+
+            switch (_phaDoTitleResizeCorner)
+            {
+                case PhaDoResizeCorner.BottomRight:
+                    newW = Math.Max(minMm, _phaDoTitleResizeStartWmm + dxMm);
+                    newH = Math.Max(minMm, _phaDoTitleResizeStartHmm + dyMm);
+                    break;
+                case PhaDoResizeCorner.BottomLeft:
+                    newW = Math.Max(minMm, _phaDoTitleResizeStartWmm - dxMm);
+                    newLeft = _phaDoTitleResizeStartLeftMm + _phaDoTitleResizeStartWmm - newW;
+                    newH = Math.Max(minMm, _phaDoTitleResizeStartHmm + dyMm);
+                    break;
+                case PhaDoResizeCorner.TopRight:
+                    newW = Math.Max(minMm, _phaDoTitleResizeStartWmm + dxMm);
+                    newH = Math.Max(minMm, _phaDoTitleResizeStartHmm - dyMm);
+                    newTop = _phaDoTitleResizeStartTopMm + _phaDoTitleResizeStartHmm - newH;
+                    break;
+                case PhaDoResizeCorner.TopLeft:
+                    newW = Math.Max(minMm, _phaDoTitleResizeStartWmm - dxMm);
+                    newH = Math.Max(minMm, _phaDoTitleResizeStartHmm - dyMm);
+                    newLeft = _phaDoTitleResizeStartLeftMm + _phaDoTitleResizeStartWmm - newW;
+                    newTop  = _phaDoTitleResizeStartTopMm  + _phaDoTitleResizeStartHmm - newH;
+                    break;
+            }
+
+            // Lưu vào style → options → redraw title inline (không vẽ lại toàn bộ)
+            _phaDoTitleStyle.ManualWidthMm  = newW;
+            _phaDoTitleStyle.ManualHeightMm = newH;
+            _phaDoTitleStyle.ManualLeftMm   = newLeft;
+            _phaDoTitleStyle.ManualTopMm    = newTop;
+            _phaDoTitleStyle.ManualPositionSet = true;
+            _phaDoCurrentOptions.ManualTitleWidthMm  = newW;
+            _phaDoCurrentOptions.ManualTitleHeightMm = newH;
+            _phaDoCurrentOptions.ManualTitleLeftMm   = newLeft;
+            _phaDoCurrentOptions.ManualTitleTopMm    = newTop;
+            _phaDoCurrentOptions.ManualTitlePositionSet = true;
+
+            RedrawTitleBlockOnly();
+            DrawTitleSelectionOverlay();
+        }
+
+        private void EndTitleResize()
+        {
+            if (!_phaDoTitleIsResizing) return;
+            _phaDoTitleIsResizing = false;
+            theCanvas.ReleaseMouseCapture();
+            SaveWorkspaceSession();
+        }
+
+        /// <summary>Xóa và vẽ lại chỉ phần title block — không ảnh hưởng card/connector.</summary>
+        private void RedrawTitleBlockOnly()
+        {
+            if (theCanvas == null || _phaDoCurrentOptions == null || _phaDoRenderedLayout == null) return;
+
+            // Xóa toàn bộ visual cũ của title (khung + text line + hit rect) để tránh vẽ chồng gây nhòe chữ.
+            var old = theCanvas.Children.OfType<FrameworkElement>()
+                .Where(e => e.Tag is PhaDoTitleVisualTag
+                         || e.Tag is PhaDoTitleHitTag
+                         || e.Tag is GiaPhaRender.PhaDoTitleTextLineTag)
+                .ToList();
+            foreach (var el in old) theCanvas.Children.Remove(el);
+
+            GiaPhaTitleBlockRenderer.DrawToCanvas(theCanvas, _phaDoCurrentOptions, _phaDoRenderedLayout.Dpi, theCanvas.Width);
+            ApplyTitleLineOffsets();
+
+            if (_phaDoTitleSelectedLine >= 0)
+            {
+                DrawTitleLineHighlight(_phaDoTitleSelectedLine);
+            }
+            else if (_phaDoTitleSelected)
+            {
+                DrawTitleSelectionOverlay();
+            }
+
+            UpdateTitleHitRectCursor();
+        }
+
+        // ── Mode toolbox: Select / Pan ────────────────────────────────────────
+
+        private void PhaDoSelectModeBtn_Click(object sender, RoutedEventArgs e)
+            => SetPhaDoInteractionMode(PhaDoInteractionMode.Select);
+
+        private void PhaDoPanModeBtn_Click(object sender, RoutedEventArgs e)
+            => SetPhaDoInteractionMode(PhaDoInteractionMode.Pan);
+
+        /// <summary>Chuyển mode tương tác và đồng bộ trạng thái 2 toggle button.</summary>
+        private void SetPhaDoInteractionMode(PhaDoInteractionMode mode)
+        {
+            _phaDoInteractionMode = mode;
+
+            if (phaDoSelectModeBtn != null)
+                phaDoSelectModeBtn.IsChecked = mode == PhaDoInteractionMode.Select;
+            if (phaDoPanModeBtn != null)
+                phaDoPanModeBtn.IsChecked = mode == PhaDoInteractionMode.Pan;
+
+            // Cập nhật con trỏ vùng canvas theo mode đang chọn
+            if (theCanvas != null)
+                theCanvas.Cursor = mode == PhaDoInteractionMode.Pan ? Cursors.SizeAll : null;
+        }
+
         private void TheCanvas_PreviewMouseMove(object sender, MouseEventArgs e)
         {
+            if (_phaDoTitleIsResizing)
+            {
+                UpdateTitleResize(e.GetPosition(theCanvas));
+                e.Handled = true;
+                return;
+            }
+
+            if (_phaDoIsDraggingTitleBlock)
+            {
+                UpdateTitleBlockDrag(e.GetPosition(theCanvas));
+                e.Handled = true;
+                return;
+            }
+
+            if (_phaDoIsMarqueeSelecting)
+            {
+                var pos2 = e.GetPosition(theCanvas);
+                double left = Math.Min(_phaDoMarqueeStartPoint.X, pos2.X);
+                double top = Math.Min(_phaDoMarqueeStartPoint.Y, pos2.Y);
+                double width = Math.Abs(pos2.X - _phaDoMarqueeStartPoint.X);
+                double height = Math.Abs(pos2.Y - _phaDoMarqueeStartPoint.Y);
+                if (_phaDoMarqueeRect != null)
+                {
+                    Canvas.SetLeft(_phaDoMarqueeRect, left);
+                    Canvas.SetTop(_phaDoMarqueeRect, top);
+                    _phaDoMarqueeRect.Width = width;
+                    _phaDoMarqueeRect.Height = height;
+                }
+                e.Handled = true;
+                return;
+            }
+
             if (_phaDoIsPanning)
             {
                 UpdatePhaDoPan(e);
@@ -6460,9 +11891,20 @@ namespace vietnamgiapha
                 return;
             }
 
+            var canvasPoint = e.GetPosition(theCanvas);
+            TryStartPendingTitleDrag(canvasPoint);
+            TryStartPendingPersonDrag(canvasPoint);
+
+            if (_phaDoIsDraggingTitleLine)
+            {
+                UpdateTitleLineDrag(canvasPoint);
+                e.Handled = true;
+                return;
+            }
+
             if (_phaDoIsDraggingPerson)
             {
-                UpdatePersonDrag(e.GetPosition(theCanvas));
+                UpdatePersonDrag(canvasPoint);
                 e.Handled = true;
                 return;
             }
@@ -6485,12 +11927,94 @@ namespace vietnamgiapha
             }
 
             double newXmm = _phaDoDragStartNodeXmm + GetPhaDoDragDeltaMm(pos);
-            ApplyDraggedFamilyX(_phaDoDraggingFamilyId, newXmm);
+            if (_phaDoDragStartXmmByFamilyId.Count > 0)
+            {
+                double deltaMm = newXmm - _phaDoDragStartNodeXmm;
+                foreach (var kv in _phaDoDragStartXmmByFamilyId)
+                {
+                    ApplyDraggedFamilyX(kv.Key, kv.Value + deltaMm);
+                }
+            }
+            else
+            {
+                ApplyDraggedFamilyX(_phaDoDraggingFamilyId, newXmm);
+            }
             e.Handled = true;
         }
 
         private void TheCanvas_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
         {
+            if (_phaDoTitleIsResizing)
+            {
+                EndTitleResize();
+                e.Handled = true;
+                return;
+            }
+
+            if (_phaDoIsDraggingTitleBlock)
+            {
+                EndTitleBlockDrag();
+                e.Handled = true;
+                return;
+            }
+
+            if (_phaDoIsMarqueeSelecting)
+            {
+                _phaDoIsMarqueeSelecting = false;
+                if (_phaDoMarqueeRect != null)
+                {
+                    double left = Canvas.GetLeft(_phaDoMarqueeRect);
+                    double top = Canvas.GetTop(_phaDoMarqueeRect);
+                    double width = _phaDoMarqueeRect.Width;
+                    double height = _phaDoMarqueeRect.Height;
+                    var area = new Rect(left, top, Math.Max(0, width), Math.Max(0, height));
+
+                    _phaDoMultiSelectedFamilyIds.Clear();
+                    if (_phaDoRenderedLayout?.Nodes != null && area.Width > 2 && area.Height > 2)
+                    {
+                        foreach (var n in _phaDoRenderedLayout.Nodes)
+                        {
+                            int id = n?.Family?.familyInfo?.FamilyId ?? 0;
+                            if (id <= 0)
+                            {
+                                continue;
+                            }
+                            if (!TryGetFamilyBackgroundBounds(id, out double bx, out double by, out double bw, out double bh))
+                            {
+                                continue;
+                            }
+                            var box = new Rect(bx, by, Math.Max(0, bw), Math.Max(0, bh));
+                            if (area.IntersectsWith(box))
+                            {
+                                _phaDoMultiSelectedFamilyIds.Add(id);
+                            }
+                        }
+                    }
+
+                    if (_phaDoMultiSelectedFamilyIds.Count > 0)
+                    {
+                        _phaDoSelectedFamilyId = _phaDoMultiSelectedFamilyIds.First();
+                        DrawSelectionOverlay(_phaDoSelectedFamilyId);
+                        DrawMultiSelectionOverlays();
+                        DrawDirectChildHighlights(_phaDoSelectedFamilyId);
+                        UpdatePhaDoSelectedBoxSizeStatus(_phaDoSelectedFamilyId);
+                    }
+                    else
+                    {
+                        _phaDoSelectedFamilyId = 0;
+                        _phaDoSelectedPersonSlot = null;
+                        ClearSelectionOverlay();
+                        DrawMultiSelectionOverlays();
+                        UpdatePhaDoSelectedBoxSizeStatus(0);
+                    }
+
+                    theCanvas.Children.Remove(_phaDoMarqueeRect);
+                }
+                theCanvas.ReleaseMouseCapture();
+                e.Handled = true;
+                return;
+            }
+
             if (_phaDoIsPanning && _phaDoPanMouseButton == MouseButton.Left)
             {
                 EndPhaDoPan();
@@ -6505,12 +12029,22 @@ namespace vietnamgiapha
                 return;
             }
 
+            if (_phaDoIsDraggingTitleLine)
+            {
+                EndTitleLineDrag();
+                e.Handled = true;
+                return;
+            }
+
             if (_phaDoIsDraggingPerson)
             {
                 EndPersonDrag();
                 e.Handled = true;
                 return;
             }
+
+            CancelPendingTitleDrag();
+            CancelPendingPersonDrag();
 
             if (!_phaDoIsDragging)
             {
@@ -6522,13 +12056,26 @@ namespace vietnamgiapha
             {
                 var pos = e.GetPosition(theCanvas);
                 double newXmm = _phaDoDragStartNodeXmm + GetPhaDoDragDeltaMm(pos);
-                ApplyDraggedFamilyX(_phaDoDraggingFamilyId, newXmm);
+                if (_phaDoDragStartXmmByFamilyId.Count > 0)
+                {
+                    double deltaMm = newXmm - _phaDoDragStartNodeXmm;
+                    foreach (var kv in _phaDoDragStartXmmByFamilyId)
+                    {
+                        ApplyDraggedFamilyX(kv.Key, kv.Value + deltaMm);
+                    }
+                }
+                else
+                {
+                    ApplyDraggedFamilyX(_phaDoDraggingFamilyId, newXmm);
+                }
             }
 
             _phaDoIsDragging = false;
             _phaDoDraggingFamilyId = 0;
+            _phaDoDragStartXmmByFamilyId.Clear();
             theCanvas.ReleaseMouseCapture();
             DrawSelectionOverlay(_phaDoSelectedFamilyId);
+            DrawMultiSelectionOverlays();
             if (_phaDoMouseMovedWhileDrag)
             {
                 SaveWorkspaceSession();
@@ -6706,14 +12253,32 @@ namespace vietnamgiapha
             {
                 SyncPhaDoBoxStylesFromGiaPhaFile();
                 var options = BuildPhaDoRenderOptions(forPrint: true);
+                options.GetFamilyBoxNotes = BuildFamilyBoxExtraNotes;
 
                 string outPath = saveDialog.FileName;
-                var result = _phaDoRenderedLayout
-                    ?? await GiaPhaRenderService.ComputeLayoutAsync(root, options).ConfigureAwait(true);
+                GiaPhaRenderResult result = _phaDoRenderedLayout;
+                if (result == null)
+                {
+                    var baseResult = await GiaPhaRenderService.ComputeLayoutAsync(root, options).ConfigureAwait(true);
+                    result = GiaPhaManualLayoutService.ApplyManualOffsets(
+                        baseResult,
+                        _phaDoOffsetXmmByFamilyId,
+                        _phaDoOffsetYmmByFamilyId);
+                    ApplyCustomBoxSizesFromStyles(result);
+                }
+                else
+                {
+                    // Đồng bộ options (title 4 dòng, font…) với màn hình đang chỉnh
+                    result.Options = options;
+                }
+
+                PopulateTitleAutoLines(result);
+
                 await Task.Run(() => GiaPhaRenderService.ExportResultToSvg(
                     outPath,
                     result,
-                    GetBoxStyleForFamily)).ConfigureAwait(true);
+                    GetBoxStyleForFamily,
+                    _phaDoTitleStyle)).ConfigureAwait(true);
 
                 viewModel.AddUserAction("Xuất SVG phả đồ: " + outPath + " (" + result.SizeSummary + ")");
                 MessageBox.Show(
@@ -6816,29 +12381,591 @@ namespace vietnamgiapha
             return null;
         }
 
+        /// <summary>Double-click vùng nền toolbox — Border không có PreviewMouseDoubleClick, dùng ClickCount.</summary>
+        private void PhaDoToolboxPanel_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ClickCount != 2)
+            {
+                return;
+            }
+
+            if (!IsPhaDoToolboxChromeDoubleClick(e.OriginalSource as DependencyObject))
+            {
+                return;
+            }
+
+            SetPhaDoToolboxExpanded(!_phaDoToolboxExpanded);
+            e.Handled = true;
+        }
+
+        /// <summary>Chỉ toggle khi double-click nền thanh toolbox, không phải lên nút/combo.</summary>
+        private bool IsPhaDoToolboxChromeDoubleClick(DependencyObject source)
+        {
+            if (source == null || phaDoToolboxPanel == null)
+            {
+                return false;
+            }
+
+            var current = source;
+            while (current != null && !ReferenceEquals(current, phaDoToolboxPanel))
+            {
+                // ButtonBase gồm Button, RadioButton, ToggleButton (Primitives)
+                if (current is ButtonBase || current is ComboBox)
+                {
+                    return false;
+                }
+
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            return ReferenceEquals(current, phaDoToolboxPanel);
+        }
+
+        private void SetPhaDoToolboxExpanded(bool expanded)
+        {
+            _phaDoToolboxExpanded = expanded;
+            if (phaDoToolboxColumn != null)
+            {
+                phaDoToolboxColumn.Width = new GridLength(
+                    expanded ? PhaDoToolboxWidthExpanded : PhaDoToolboxWidthCollapsed);
+            }
+
+            if (phaDoToolboxToolsPanel != null)
+            {
+                phaDoToolboxToolsPanel.HorizontalAlignment = expanded
+                    ? HorizontalAlignment.Stretch
+                    : HorizontalAlignment.Center;
+            }
+
+            if (phaDoToolboxPanel != null)
+            {
+                phaDoToolboxPanel.ToolTip = expanded
+                    ? "Double-click vùng trống để thu gọn (chỉ icon)"
+                    : "Double-click vùng trống để mở rộng (icon + chữ)";
+            }
+
+            ApplyPhaDoToolboxCaptionsVisible(expanded);
+        }
+
+        private void ApplyPhaDoToolboxCaptionsVisible(bool visible)
+        {
+            if (phaDoToolboxToolsPanel == null)
+            {
+                return;
+            }
+
+            ApplyToolboxCaptionsVisibleRecursive(phaDoToolboxToolsPanel, visible);
+        }
+
+        private static void ApplyToolboxCaptionsVisibleRecursive(DependencyObject root, bool visible)
+        {
+            if (root == null)
+            {
+                return;
+            }
+
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(root, i);
+                if (child is TextBlock textBlock
+                    && "ToolboxCaption".Equals(textBlock.Tag as string))
+                {
+                    textBlock.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+                }
+
+                ApplyToolboxCaptionsVisibleRecursive(child, visible);
+            }
+        }
+
         private void PhaDoFullscreenToggle_Click(object sender, RoutedEventArgs e)
         {
             TogglePhaDoImmersive();
         }
 
+        private void TreePaneFullscreenToggle_Click(object sender, RoutedEventArgs e)
+        {
+            ToggleTreePaneImmersive();
+        }
+
+        private void ToggleTreePaneImmersive()
+        {
+            SetTreePaneImmersive(!_treePaneImmersive);
+        }
+
+        /// <summary>Toàn màn hình pane cây — ẩn tab chính, cây chiếm gần hết cửa sổ.</summary>
+        private void SetTreePaneImmersive(bool immersive)
+        {
+            if (_treePaneImmersive == immersive)
+            {
+                return;
+            }
+
+            if (immersive && _phaDoImmersive)
+            {
+                SetPhaDoImmersive(false);
+            }
+
+            _treePaneImmersive = immersive;
+
+            if (immersive)
+            {
+                // Lưu cột SplitView trước khi ép layout fullscreen (tránh lưu nhầm Star/0)
+                CaptureSplitViewColumnWidthsForTreeFullscreen();
+
+                if (SimpleSplitview != null)
+                {
+                    _treePaneImmersiveSavedOpenPaneLength = SimpleSplitview.OpenPaneLength;
+                    _treePaneImmersiveSavedDisplayMode = SimpleSplitview.DisplayMode;
+                    _treePaneImmersiveSavedCompactPaneLength = SimpleSplitview.CompactPaneLength;
+                    _treePaneImmersiveSavedMaximumOpenPaneLength = SimpleSplitview.MaximumOpenPaneLength;
+
+                    SimpleSplitview.IsPaneOpen = true;
+                    SimpleSplitview.CanResizeOpenPane = false;
+                    // Inline: pane = full width, cột content (phải) = 0
+                    SimpleSplitview.DisplayMode = SplitViewDisplayMode.Inline;
+                    SimpleSplitview.CompactPaneLength = 0;
+                    SimpleSplitview.MaximumOpenPaneLength = 20000;
+                }
+
+                if (leftPaneLogRowDef != null)
+                {
+                    _treePaneImmersiveSavedLogRowHeight = leftPaneLogRowDef.Height;
+                    leftPaneLogRowDef.Height = new GridLength(0);
+                }
+
+                if (mainTabContentGrid != null)
+                {
+                    mainTabContentGrid.Visibility = Visibility.Collapsed;
+                    mainTabContentGrid.Width = 0;
+                    mainTabContentGrid.MinWidth = 0;
+                }
+
+                if (mainStatusBar != null)
+                {
+                    mainStatusBar.Visibility = Visibility.Collapsed;
+                }
+
+                ApplyTreePaneFullscreenLayout();
+            }
+            else
+            {
+                if (mainTabContentGrid != null)
+                {
+                    mainTabContentGrid.Visibility = Visibility.Visible;
+                    mainTabContentGrid.ClearValue(FrameworkElement.WidthProperty);
+                    mainTabContentGrid.ClearValue(FrameworkElement.MinWidthProperty);
+                }
+
+                RestoreSplitViewContentHostAfterTreeFullscreen();
+
+                if (SimpleSplitview != null)
+                {
+                    SimpleSplitview.DisplayMode = _treePaneImmersiveSavedDisplayMode;
+                    SimpleSplitview.CompactPaneLength = _treePaneImmersiveSavedCompactPaneLength;
+                    SimpleSplitview.MaximumOpenPaneLength = _treePaneImmersiveSavedMaximumOpenPaneLength;
+                    SimpleSplitview.OpenPaneLength = _treePaneImmersiveSavedOpenPaneLength;
+                    SimpleSplitview.CanResizeOpenPane = true;
+                    SimpleSplitview.IsPaneOpen = true;
+                }
+
+                if (leftPaneLogRowDef != null)
+                {
+                    leftPaneLogRowDef.Height = _treePaneImmersiveSavedLogRowHeight;
+                }
+
+                if (mainStatusBar != null)
+                {
+                    mainStatusBar.Visibility = Visibility.Visible;
+                }
+
+                ApplyTreePaneNormalLayoutAfterExit();
+            }
+
+            UpdateTreePaneFullscreenButton();
+            treeViewGiaPha?.InvalidateMeasure();
+        }
+
+        /// <summary>Lưu độ rộng cột pane/content của template SplitView (một lần mỗi phiên fullscreen).</summary>
+        private void CaptureSplitViewColumnWidthsForTreeFullscreen()
+        {
+            if (_treePaneSplitViewColumnsCaptured)
+            {
+                return;
+            }
+
+            EnsureSplitViewContentHostCached();
+            if (_treePaneSplitViewRootGrid == null)
+            {
+                _treePaneSplitViewRootGrid = FindSplitViewRootGrid();
+            }
+
+            if (_treePaneSplitViewRootGrid == null
+                || _treePaneSplitViewRootGrid.ColumnDefinitions.Count < 2)
+            {
+                return;
+            }
+
+            _treePaneSplitViewSavedPaneColumnWidth = _treePaneSplitViewRootGrid.ColumnDefinitions[0].Width;
+            _treePaneSplitViewSavedContentColumnWidth = _treePaneSplitViewRootGrid.ColumnDefinitions[1].Width;
+            _treePaneSplitViewColumnsCaptured = true;
+        }
+
+        /// <summary>Sau thoát fullscreen — layout lại để tab phải hiện đủ.</summary>
+        private void ApplyTreePaneNormalLayoutAfterExit()
+        {
+            RestoreSplitViewColumnWidthsAfterTreeFullscreen();
+            SimpleSplitview?.InvalidateMeasure();
+            mainTabContentGrid?.InvalidateMeasure();
+            tabControl?.InvalidateMeasure();
+
+            Dispatcher.BeginInvoke(
+                new Action(() =>
+                {
+                    if (_treePaneImmersive)
+                    {
+                        return;
+                    }
+
+                    RestoreSplitViewColumnWidthsAfterTreeFullscreen();
+                    SimpleSplitview?.UpdateLayout();
+                    mainTabContentGrid?.UpdateLayout();
+                }),
+                DispatcherPriority.Loaded);
+        }
+
+        /// <summary>Pane cây = full kích thước vùng SplitView (gọi lại sau layout).</summary>
+        private void ApplyTreePaneFullscreenLayout()
+        {
+            if (!_treePaneImmersive)
+            {
+                return;
+            }
+
+            ForceSplitViewTreeFullscreenLayout();
+            leftPaneRootGrid?.InvalidateMeasure();
+            treeViewGiaPha?.InvalidateMeasure();
+
+            Dispatcher.BeginInvoke(
+                new Action(() =>
+                {
+                    if (!_treePaneImmersive)
+                    {
+                        return;
+                    }
+
+                    ForceSplitViewTreeFullscreenLayout();
+                    leftPaneRootGrid?.InvalidateMeasure();
+                    treeViewGiaPha?.InvalidateMeasure();
+                }),
+                DispatcherPriority.Loaded);
+        }
+
+        /// <summary>Pane trái = full SplitView; ép cột content (phải) về 0.</summary>
+        private void ForceSplitViewTreeFullscreenLayout()
+        {
+            if (!_treePaneImmersive || SimpleSplitview == null)
+            {
+                return;
+            }
+
+            double hostW = SimpleSplitview.ActualWidth;
+            if (hostW < 1)
+            {
+                hostW = ActualWidth;
+            }
+
+            if (hostW > 1)
+            {
+                SimpleSplitview.OpenPaneLength = hostW;
+            }
+
+            EnsureSplitViewContentHostCached();
+            if (_treePaneSplitViewContentHost != null)
+            {
+                _treePaneSplitViewContentHost.Visibility = Visibility.Collapsed;
+                _treePaneSplitViewContentHost.Width = 0;
+                _treePaneSplitViewContentHost.MinWidth = 0;
+                _treePaneSplitViewContentHost.MaxWidth = 0;
+            }
+
+            if (_treePaneSplitViewResizeThumb != null)
+            {
+                _treePaneSplitViewResizeThumb.Visibility = Visibility.Collapsed;
+            }
+
+            CaptureSplitViewColumnWidthsForTreeFullscreen();
+
+            if (_treePaneSplitViewRootGrid != null
+                && _treePaneSplitViewRootGrid.ColumnDefinitions.Count >= 2)
+            {
+                _treePaneSplitViewRootGrid.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
+                _treePaneSplitViewRootGrid.ColumnDefinitions[1].Width = new GridLength(0);
+            }
+        }
+
+        private void EnsureSplitViewContentHostCached()
+        {
+            if (_treePaneSplitViewContentHost != null && _treePaneSplitViewResizeThumb != null)
+            {
+                return;
+            }
+
+            SimpleSplitview.ApplyTemplate();
+            if (_treePaneSplitViewContentHost == null && mainTabContentGrid?.Parent is FrameworkElement host)
+            {
+                _treePaneSplitViewContentHost = host;
+            }
+
+            if (_treePaneSplitViewResizeThumb == null
+                && SimpleSplitview.Template?.FindName("PART_ResizingThumb", SimpleSplitview) is UIElement thumb)
+            {
+                _treePaneSplitViewResizeThumb = thumb;
+                _treePaneSplitViewResizeThumbSavedVisibility = thumb.Visibility;
+            }
+        }
+
+        private Grid FindSplitViewRootGrid()
+        {
+            if (SimpleSplitview == null || mainTabContentGrid == null)
+            {
+                return null;
+            }
+
+            DependencyObject el = mainTabContentGrid.Parent;
+            while (el != null && !ReferenceEquals(el, SimpleSplitview))
+            {
+                if (el is Grid grid && grid.ColumnDefinitions.Count >= 2)
+                {
+                    return grid;
+                }
+
+                el = VisualTreeHelper.GetParent(el);
+            }
+
+            return FindVisualChild<Grid>(SimpleSplitview) as Grid;
+        }
+
+        private void RestoreSplitViewContentHostAfterTreeFullscreen()
+        {
+            if (_treePaneSplitViewContentHost != null)
+            {
+                _treePaneSplitViewContentHost.ClearValue(FrameworkElement.WidthProperty);
+                _treePaneSplitViewContentHost.ClearValue(FrameworkElement.MinWidthProperty);
+                _treePaneSplitViewContentHost.ClearValue(FrameworkElement.MaxWidthProperty);
+                _treePaneSplitViewContentHost.Visibility = Visibility.Visible;
+            }
+
+            if (_treePaneSplitViewResizeThumb != null)
+            {
+                _treePaneSplitViewResizeThumb.Visibility = _treePaneSplitViewResizeThumbSavedVisibility;
+            }
+
+            RestoreSplitViewColumnWidthsAfterTreeFullscreen();
+        }
+
+        /// <summary>Khôi phục cột content SplitView — fallback * nếu đã lưu 0px.</summary>
+        private void RestoreSplitViewColumnWidthsAfterTreeFullscreen()
+        {
+            Grid grid = _treePaneSplitViewRootGrid;
+            if (grid == null)
+            {
+                grid = FindSplitViewRootGrid();
+            }
+
+            if (grid == null || grid.ColumnDefinitions.Count < 2)
+            {
+                _treePaneSplitViewColumnsCaptured = false;
+                return;
+            }
+
+            GridLength paneCol = _treePaneSplitViewColumnsCaptured
+                ? _treePaneSplitViewSavedPaneColumnWidth
+                : GridLength.Auto;
+            GridLength contentCol = _treePaneSplitViewColumnsCaptured
+                ? _treePaneSplitViewSavedContentColumnWidth
+                : new GridLength(1, GridUnitType.Star);
+
+            // Sau fullscreen pane thường bị đặt Star — trả Auto để OpenPaneLength điều khiển
+            if (paneCol.GridUnitType == GridUnitType.Star)
+            {
+                paneCol = GridLength.Auto;
+            }
+
+            if (contentCol.GridUnitType == GridUnitType.Pixel && contentCol.Value <= 0.1)
+            {
+                contentCol = new GridLength(1, GridUnitType.Star);
+            }
+
+            grid.ColumnDefinitions[0].Width = paneCol;
+            grid.ColumnDefinitions[1].Width = contentCol;
+
+            _treePaneSplitViewRootGrid = null;
+            _treePaneSplitViewColumnsCaptured = false;
+        }
+
+        private void UpdateTreePaneFullscreenButton()
+        {
+            if (treePaneFullscreenIcon == null || treePaneFullscreenBtn == null)
+            {
+                return;
+            }
+
+            if (_treePaneImmersive)
+            {
+                treePaneFullscreenIcon.Text = "\uE73F";
+                if (treePaneFullscreenLabel != null)
+                {
+                    treePaneFullscreenLabel.Text = "Thoát";
+                }
+
+                treePaneFullscreenBtn.ToolTip = "Thoát toàn màn hình cây (F11 / Esc)";
+            }
+            else
+            {
+                treePaneFullscreenIcon.Text = "\uE740";
+                if (treePaneFullscreenLabel != null)
+                {
+                    treePaneFullscreenLabel.Text = "Toàn màn hình";
+                }
+
+                treePaneFullscreenBtn.ToolTip = "Toàn màn hình cây (F11)";
+            }
+        }
+
+        /// <summary>Gắn callback hoàn tác sau khi thay FamilyTree.</summary>
+        public void BindGiaPhaUndoCapture(GiaPhaViewModel tree)
+        {
+            if (tree == null)
+            {
+                return;
+            }
+
+            tree.RequestUndoSnapshot = CaptureGiaPhaUndoSnapshot;
+        }
+
+        public bool IsGiaPhaUndoRestoring()
+        {
+            return _giaPhaUndoRestoring;
+        }
+
+        public void ClearGiaPhaUndoStack()
+        {
+            _giaPhaUndo.Clear();
+        }
+
+        private void CaptureGiaPhaUndoSnapshot(string label)
+        {
+            if (_giaPhaUndoRestoring || viewModel?.FamilyTree == null)
+            {
+                return;
+            }
+
+            _giaPhaUndo.Push(viewModel.FamilyTree, label);
+        }
+
+        /// <summary>Ctrl+Z — khôi phục tối đa 2 bước sửa cây gần nhất.</summary>
+        private bool PerformGiaPhaUndo()
+        {
+            if (viewModel?.FamilyTree == null || _giaPhaUndo.Count == 0)
+            {
+                return false;
+            }
+
+            var entry = _giaPhaUndo.TryPop();
+            if (entry?.Snapshot == null)
+            {
+                return false;
+            }
+
+            _giaPhaUndoRestoring = true;
+            try
+            {
+                viewModel.UpdateGiaPhaAsync(entry.Snapshot, saveToJson: false).GetAwaiter().GetResult();
+                viewModel.FamilyTree?.AddUserAction("Hoàn tác: " + entry.Label);
+                return true;
+            }
+            finally
+            {
+                _giaPhaUndoRestoring = false;
+            }
+        }
+
         private void MainWindow_KeyDown(object sender, KeyEventArgs e)
         {
+            if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control
+                && e.Key == Key.Z)
+            {
+                if (PerformGiaPhaUndo())
+                {
+                    e.Handled = true;
+                    return;
+                }
+            }
+
+            if (e.Key == Key.Escape && _treePaneImmersive)
+            {
+                SetTreePaneImmersive(false);
+                e.Handled = true;
+                return;
+            }
+
+            // F11: toàn màn hình cây (tab khác) hoặc phả đồ (tab 4.Phả đồ); F11 lần nữa = thoát
+            if (e.Key == Key.F11)
+            {
+                ToggleFullscreenWithF11();
+                e.Handled = true;
+                return;
+            }
+
             if (tabControl?.SelectedIndex != PhaDoTabIndex)
             {
                 return;
             }
 
-            if (e.Key == Key.F11)
+            if (e.Key == Key.Escape && _phaDoImmersive)
             {
-                TogglePhaDoImmersive();
+                if (_phaDoMultiSelectedFamilyIds.Count > 0 || _phaDoSelectedFamilyId > 0)
+                {
+                    ClearPhaDoBoxSelections();
+                }
+                else
+                {
+                    SetPhaDoImmersive(false);
+                }
                 e.Handled = true;
                 return;
             }
 
-            if (e.Key == Key.Escape && _phaDoImmersive)
+            if (e.Key == Key.Escape && (_phaDoMultiSelectedFamilyIds.Count > 0 || _phaDoSelectedFamilyId > 0))
+            {
+                ClearPhaDoBoxSelections();
+                e.Handled = true;
+            }
+        }
+
+        /// <summary>F11 — bật/tắt fullscreen theo ngữ cảnh (cây hoặc phả đồ).</summary>
+        private void ToggleFullscreenWithF11()
+        {
+            if (_treePaneImmersive)
+            {
+                SetTreePaneImmersive(false);
+                return;
+            }
+
+            if (_phaDoImmersive)
             {
                 SetPhaDoImmersive(false);
-                e.Handled = true;
+                return;
+            }
+
+            if (tabControl?.SelectedIndex == PhaDoTabIndex)
+            {
+                SetPhaDoImmersive(true);
+            }
+            else
+            {
+                SetTreePaneImmersive(true);
             }
         }
 
@@ -6858,6 +12985,11 @@ namespace vietnamgiapha
 
             if (immersive)
             {
+                if (_treePaneImmersive)
+                {
+                    SetTreePaneImmersive(false);
+                }
+
                 _phaDoImmersivePaneWasOpen = SimpleSplitview?.IsPaneOpen ?? true;
                 if (SimpleSplitview != null)
                 {
@@ -6950,7 +13082,7 @@ namespace vietnamgiapha
 
         private void UpdatePhaDoFullscreenButton()
         {
-            if (phaDoFullscreenIcon == null || phaDoFullscreenLabel == null || phaDoFullscreenBtn == null)
+            if (phaDoFullscreenIcon == null || phaDoFullscreenBtn == null)
             {
                 return;
             }
@@ -6958,14 +13090,53 @@ namespace vietnamgiapha
             if (_phaDoImmersive)
             {
                 phaDoFullscreenIcon.Text = "\uE73F";
-                phaDoFullscreenLabel.Text = "Thoát";
-                phaDoFullscreenBtn.ToolTip = "Thoát toàn màn hình (Esc)";
+                phaDoFullscreenBtn.ToolTip = "Thoát toàn màn hình (F11 / Esc)";
             }
             else
             {
                 phaDoFullscreenIcon.Text = "\uE740";
-                phaDoFullscreenLabel.Text = "Toàn màn hình";
                 phaDoFullscreenBtn.ToolTip = "Toàn màn hình (F11)";
+            }
+        }
+
+        private void PhaDoSubtreeListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            UpdatePhaDoSubtreeListBoxToolTip();
+        }
+
+        /// <summary>Cập nhật tooltip ComboBox scope — khi đóng chỉ hiện icon.</summary>
+        private void UpdatePhaDoSubtreeListBoxToolTip()
+        {
+            if (phaDoSubtreeListBox == null)
+            {
+                return;
+            }
+
+            if (phaDoSubtreeListBox.SelectedItem is PhaDoRenderScopeItem item)
+            {
+                var tip = new StringBuilder();
+                if (!string.IsNullOrWhiteSpace(item.RenderPlanSummary))
+                {
+                    tip.AppendLine(item.RenderPlanSummary);
+                }
+
+                if (!string.IsNullOrWhiteSpace(item.Label))
+                {
+                    tip.Append(item.Label);
+                }
+
+                if (tip.Length > 0)
+                {
+                    phaDoSubtreeListBox.ToolTip = tip.ToString().TrimEnd();
+                }
+                else
+                {
+                    phaDoSubtreeListBox.ToolTip = "Chọn Toàn phả hoặc phả con để vẽ";
+                }
+            }
+            else
+            {
+                phaDoSubtreeListBox.ToolTip = "Chọn Toàn phả hoặc phả con để vẽ";
             }
         }
 
@@ -6981,7 +13152,7 @@ namespace vietnamgiapha
 
         private void PhaDoZoomReset_Click(object sender, RoutedEventArgs e)
         {
-            ResetPhaDoZoom();
+            ResetOrFitPhaDoZoom();
         }
 
         private void PhaDoScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
@@ -6999,15 +13170,96 @@ namespace vietnamgiapha
             SetPhaDoZoom(1.0);
         }
 
+        /// <summary>Nút zoom reset: nếu đang 100% thì thu vừa khung; không thì về 100%.</summary>
+        private void ResetOrFitPhaDoZoom()
+        {
+            if (_phaDoRenderedLayout != null
+                && Math.Abs(_phaDoZoom - 1.0) < 0.0001)
+            {
+                FitPhaDoViewToContent(_phaDoRenderedLayout);
+            }
+            else
+            {
+                ResetPhaDoZoom();
+            }
+        }
+
         private void SetPhaDoZoom(double zoom)
         {
-            _phaDoZoom = Math.Max(PhaDoZoomMin, Math.Min(PhaDoZoomMax, zoom));
-            theCanvas.LayoutTransform = new ScaleTransform(_phaDoZoom, _phaDoZoom);
-            if (phaDoZoomLabel != null)
+            double targetZoom = Math.Max(PhaDoZoomMin, Math.Min(PhaDoZoomMax, zoom));
+            ApplyPhaDoZoomValue(targetZoom, phaDoScrollViewer, _phaDoRenderedLayout);
+        }
+
+        /// <summary>Đặt zoom (fit có thể &lt; PhaDoZoomMin) và giữ điểm neo trên viewport khi đang zoom tay.</summary>
+        private void ApplyPhaDoZoomValue(double targetZoom, ScrollViewer scroll, GiaPhaRenderResult layoutForAnchor)
+        {
+            targetZoom = Math.Max(PhaDoZoomFitMin, Math.Min(PhaDoZoomMax, targetZoom));
+            if (Math.Abs(targetZoom - _phaDoZoom) < 0.0001)
             {
-                phaDoZoomLabel.Text = ((int)(_phaDoZoom * 100)) + "%";
+                return;
             }
-            phaDoScrollViewer?.InvalidateMeasure();
+
+            double oldZoom = _phaDoZoom;
+            double anchorCanvasX;
+            double anchorCanvasY;
+            double anchorViewportX;
+            double anchorViewportY;
+
+            if (scroll != null)
+            {
+                var selectedNode = FindNodeByFamilyId(_phaDoSelectedFamilyId);
+                if (selectedNode?.Metrics != null)
+                {
+                    // Khi đã chọn 1 gia đình, giữ đúng vị trí box đó trong khung nhìn khi zoom.
+                    anchorCanvasX = MmToPx(selectedNode.Xmm + selectedNode.Metrics.WidthMm / 2.0);
+                    anchorCanvasY = MmToPx(selectedNode.Ymm + selectedNode.Metrics.HeightMm / 2.0);
+                    anchorViewportX = anchorCanvasX * oldZoom - scroll.HorizontalOffset;
+                    anchorViewportY = anchorCanvasY * oldZoom - scroll.VerticalOffset;
+                }
+                else
+                {
+                    // Chưa chọn box nào thì giữ tâm viewport để zoom không bị "nhảy".
+                    anchorViewportX = scroll.ViewportWidth > 1 ? scroll.ViewportWidth / 2.0 : 0;
+                    anchorViewportY = scroll.ViewportHeight > 1 ? scroll.ViewportHeight / 2.0 : 0;
+                    anchorCanvasX = oldZoom > 0
+                        ? (scroll.HorizontalOffset + anchorViewportX) / oldZoom
+                        : 0;
+                    anchorCanvasY = oldZoom > 0
+                        ? (scroll.VerticalOffset + anchorViewportY) / oldZoom
+                        : 0;
+                }
+            }
+            else
+            {
+                anchorCanvasX = 0;
+                anchorCanvasY = 0;
+                anchorViewportX = 0;
+                anchorViewportY = 0;
+            }
+
+            _phaDoZoom = targetZoom;
+            theCanvas.LayoutTransform = new ScaleTransform(_phaDoZoom, _phaDoZoom);
+            if (phaDoZoomResetBtn != null)
+            {
+                int zoomPct = (int)Math.Round(_phaDoZoom * 100, MidpointRounding.AwayFromZero);
+                phaDoZoomResetBtn.ToolTip = zoomPct == 100
+                    ? "Zoom 100% — nhấn để vừa khung"
+                    : "Zoom " + zoomPct + "% — nhấn về 100%";
+            }
+
+            if (scroll != null && layoutForAnchor != null)
+            {
+                // Dời scroll theo tỉ lệ zoom mới để điểm neo vẫn nằm đúng chỗ trong viewport.
+                double newOffsetX = anchorCanvasX * _phaDoZoom - anchorViewportX;
+                double newOffsetY = anchorCanvasY * _phaDoZoom - anchorViewportY;
+                scroll.ScrollToHorizontalOffset(Math.Max(0, newOffsetX));
+                scroll.ScrollToVerticalOffset(Math.Max(0, newOffsetY));
+                scroll.InvalidateMeasure();
+            }
+            else
+            {
+                phaDoScrollViewer?.InvalidateMeasure();
+            }
         }
         public ICommand DeletePersonFromFamilyClick { get; set; }
         private void DeletePersonFromFamilyClickFunc()
@@ -7100,6 +13352,473 @@ namespace vietnamgiapha
             }
         }
         
+        // ════════════════════════════════════════════════════════════
+        //  Title block — chọn dòng text con (2-level selection)
+        // ════════════════════════════════════════════════════════════
+
+        private bool TryResolveTitleTextLineHit(DependencyObject source, out int lineIndex, out FrameworkElement lineElement)
+        {
+            lineIndex = -1;
+            lineElement = null;
+            var el = source;
+            while (el != null)
+            {
+                if (el is FrameworkElement fe && fe.Tag is GiaPhaRender.PhaDoTitleTextLineTag tag)
+                {
+                    lineIndex = tag.LineIndex;
+                    lineElement = fe;
+                    return true;
+                }
+
+                el = VisualTreeHelper.GetParent(el);
+            }
+
+            return false;
+        }
+
+        /// <summary>Chọn khối title (viền + resize), không chọn dòng chữ.</summary>
+        private void SelectTitleBlockOutline()
+        {
+            ClearPhaDoBoxSelections();
+            ClearGenLabelSelection();
+            CancelPendingTitleDrag();
+            CancelPendingPersonDrag();
+            _phaDoTitleSelected = true;
+            _phaDoTitleSelectedLine = -1;
+            ClearTitleLineHighlight();
+            DrawTitleSelectionOverlay();
+            UpdateTitleHitRectCursor();
+            SyncToolbarFromTitleBlock();
+        }
+
+        /// <summary>Chỉ chọn dòng chữ (highlight + toolbar font), không vẽ viền resize khối.</summary>
+        private void SelectTitleTextLine(int lineIndex)
+        {
+            ClearPhaDoBoxSelections();
+            ClearGenLabelSelection();
+            CancelPendingPersonDrag();
+            CancelPendingTitleDrag();
+            _phaDoTitleSelected = true;
+            _phaDoTitleSelectedLine = lineIndex;
+            ClearTitleSelectionOverlay();
+            DrawTitleLineHighlight(lineIndex);
+            UpdateTitleHitRectCursor();
+            SyncToolbarFromTitleLine(lineIndex);
+        }
+
+        private void DrawTitleLineHighlight(int lineIndex)
+        {
+            ClearTitleLineHighlight();
+            var tb = theCanvas.Children.OfType<FrameworkElement>()
+                .FirstOrDefault(fe => fe.Tag is GiaPhaRender.PhaDoTitleTextLineTag t && t.LineIndex == lineIndex)
+                as System.Windows.Controls.TextBlock;
+            if (tb == null) return;
+
+            double left = Canvas.GetLeft(tb) - 3;
+            double top  = Canvas.GetTop(tb)  - 2;
+            tb.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            double w = tb.DesiredSize.Width + 6;
+            double h = tb.DesiredSize.Height + 4;
+
+            var hl = new System.Windows.Shapes.Rectangle
+            {
+                Width = w, Height = h,
+                Stroke = new SolidColorBrush(Color.FromRgb(30, 120, 220)),
+                StrokeThickness = 1.5,
+                StrokeDashArray = new System.Windows.Media.DoubleCollection { 4, 2 },
+                Fill  = new SolidColorBrush(Color.FromArgb(30, 30, 120, 220)),
+                Tag   = "__TitleLineHighlight",
+                IsHitTestVisible = false
+            };
+            Canvas.SetLeft(hl, left); Canvas.SetTop(hl, top);
+            Panel.SetZIndex(hl, 10);
+            theCanvas.Children.Add(hl);
+
+            const double handle = 7;
+            AddTitleLineSelectionHandle(left, top, handle);
+            AddTitleLineSelectionHandle(left + w, top, handle);
+            AddTitleLineSelectionHandle(left, top + h, handle);
+            AddTitleLineSelectionHandle(left + w, top + h, handle);
+        }
+
+        private void AddTitleLineSelectionHandle(double cornerX, double cornerY, double size)
+        {
+            var h = new System.Windows.Shapes.Rectangle
+            {
+                Width = size,
+                Height = size,
+                Fill = Brushes.White,
+                Stroke = new SolidColorBrush(Color.FromRgb(30, 120, 220)),
+                StrokeThickness = 1.2,
+                RadiusX = 1,
+                RadiusY = 1,
+                IsHitTestVisible = false,
+                Tag = "__TitleLineHighlight"
+            };
+            Canvas.SetLeft(h, cornerX - size / 2.0);
+            Canvas.SetTop(h, cornerY - size / 2.0);
+            Panel.SetZIndex(h, 11);
+            theCanvas.Children.Add(h);
+        }
+
+        private void ClearTitleLineHighlight()
+        {
+            var old = theCanvas.Children.OfType<FrameworkElement>()
+                .Where(fe => Equals(fe.Tag, "__TitleLineHighlight"))
+                .Cast<UIElement>().ToList();
+            foreach (var el in old) theCanvas.Children.Remove(el);
+        }
+
+        private void SyncToolbarFromTitleLine(int lineIndex)
+        {
+            ShowContextToolbar(PhaDoCtxSelType.TitleText);
+            if (_phaDoCurrentOptions == null) return;
+
+            double defaultSmallPt = Math.Max(7,
+                (_phaDoCurrentOptions.TitleLine2FontPt > 0 ? _phaDoCurrentOptions.TitleLine2FontPt : 12) * 0.78);
+
+            double pt;
+            string hex;
+            string family;
+            if (lineIndex == 0)
+            {
+                pt  = _phaDoCurrentOptions.TitleFontPt;
+                hex = _phaDoCurrentOptions.TitleLine1ForegroundHex ?? "#000000";
+                family = _phaDoCurrentOptions.TitleLine1FontFamily;
+            }
+            else if (lineIndex == 1)
+            {
+                pt  = _phaDoCurrentOptions.TitleLine2FontPt;
+                hex = _phaDoCurrentOptions.TitleLine2ForegroundHex ?? "#333333";
+                family = _phaDoCurrentOptions.TitleLine2FontFamily;
+            }
+            else if (lineIndex == 2)
+            {
+                pt  = _phaDoCurrentOptions.TitleLine3FontPt > 0
+                      ? _phaDoCurrentOptions.TitleLine3FontPt : defaultSmallPt;
+                hex = _phaDoCurrentOptions.TitleLine3ForegroundHex ?? "#888888";
+                family = _phaDoCurrentOptions.TitleLine3FontFamily;
+            }
+            else
+            {
+                pt  = _phaDoCurrentOptions.TitleLine4FontPt > 0
+                      ? _phaDoCurrentOptions.TitleLine4FontPt : defaultSmallPt;
+                hex = _phaDoCurrentOptions.TitleLine4ForegroundHex ?? "#888888";
+                family = _phaDoCurrentOptions.TitleLine4FontFamily;
+            }
+
+            if (phaDoCtxFontSizeBox != null) phaDoCtxFontSizeBox.Text = pt.ToString("0.#");
+            if (phaDoCtxColorBox    != null) phaDoCtxColorBox.Text    = hex;
+            PhaDoCtxColorBox_RefreshPreview();
+            if (phaDoCtxFontFamilyCombo != null)
+            {
+                phaDoCtxFontFamilyCombo.SelectedItem = !string.IsNullOrWhiteSpace(family) ? family : "(mặc định)";
+                if (phaDoCtxFontFamilyCombo.SelectedItem == null && phaDoCtxFontFamilyCombo.Items.Count > 0)
+                {
+                    phaDoCtxFontFamilyCombo.SelectedIndex = 0;
+                }
+            }
+            // Dòng 1 (Tên) mặc định Bold
+            if (phaDoCtxBoldBtn     != null) phaDoCtxBoldBtn.IsChecked = lineIndex == 0;
+        }
+
+        private void ApplyToolbarToTitleLine(int lineIndex)
+        {
+            if (_phaDoCurrentOptions == null) return;
+
+            double.TryParse(phaDoCtxFontSizeBox?.Text,
+                System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out double pt);
+            string hex = phaDoCtxColorBox?.Text?.Trim();
+            try { ColorConverter.ConvertFromString(hex); } catch { hex = null; }
+            string family = (phaDoCtxFontFamilyCombo?.SelectedItem as string) == "(mặc định)"
+                ? null
+                : (phaDoCtxFontFamilyCombo?.SelectedItem as string);
+
+            switch (lineIndex)
+            {
+                case 0:
+                    if (pt > 0) _phaDoCurrentOptions.TitleFontPt = pt;
+                    _phaDoCurrentOptions.TitleLine1ForegroundHex = hex;
+                    _phaDoCurrentOptions.TitleLine1FontFamily = family;
+                    break;
+                case 1:
+                    if (pt > 0) _phaDoCurrentOptions.TitleLine2FontPt = pt;
+                    _phaDoCurrentOptions.TitleLine2ForegroundHex = hex;
+                    _phaDoCurrentOptions.TitleLine2FontFamily = family;
+                    break;
+                case 2:
+                    if (pt > 0) _phaDoCurrentOptions.TitleLine3FontPt = pt;
+                    _phaDoCurrentOptions.TitleLine3ForegroundHex = hex;
+                    _phaDoCurrentOptions.TitleLine3FontFamily = family;
+                    break;
+                default:
+                    if (pt > 0) _phaDoCurrentOptions.TitleLine4FontPt = pt;
+                    _phaDoCurrentOptions.TitleLine4ForegroundHex = hex;
+                    _phaDoCurrentOptions.TitleLine4FontFamily = family;
+                    break;
+            }
+
+            RedrawTitleBlockOnly();
+            DrawTitleLineHighlight(lineIndex);   // vẽ lại highlight sau khi title đã redraw
+        }
+
+        // ═══════════════════════════════════════════════════════════════
+        //  Nhãn "Đời X" — select + popup chỉnh style
+        // ═══════════════════════════════════════════════════════════════
+
+        /// <summary>Kiểm tra click có trúng TextBlock nhãn "Đời X" không, trả về level tương ứng.</summary>
+        private bool TryResolveGenLabelHit(DependencyObject source, out int level)
+        {
+            level = -1;
+            var el = source;
+            while (el != null)
+            {
+                if (el is FrameworkElement fe && fe.Tag is GiaPhaRender.PhaDoGenLabelTag tag)
+                {
+                    level = tag.Level;
+                    return true;
+                }
+                el = VisualTreeHelper.GetParent(el);
+            }
+            return false;
+        }
+
+        /// <summary>Click nhãn "Đời X" → chỉ cập nhật toolbar trên, không mở popup.</summary>
+        private void OpenGenLabelStylePopup(int level)
+        {
+            SyncToolbarFromGenLabel();
+        }
+
+        private FrameworkElement FindGenLabelVisual(int level)
+        {
+            FrameworkElement best = null;
+            int bestZ = int.MinValue;
+            foreach (var child in theCanvas.Children.OfType<FrameworkElement>())
+            {
+                if (child.Tag is GiaPhaRender.PhaDoGenLabelTag tag && tag.Level == level)
+                {
+                    int z = Panel.GetZIndex(child);
+                    if (best == null || z >= bestZ)
+                    {
+                        best = child;
+                        bestZ = z;
+                    }
+                }
+            }
+            return best;
+        }
+
+        private void ClearGenLabelSelectionOverlay()
+        {
+            var old = theCanvas.Children.OfType<FrameworkElement>()
+                .Where(fe => Equals(fe.Tag, GenLabelSelectionTag))
+                .Cast<UIElement>()
+                .ToList();
+            foreach (var el in old)
+            {
+                theCanvas.Children.Remove(el);
+            }
+        }
+
+        /// <summary>Vẽ khung chọn (kèm 4 góc) quanh TextBlock nhãn "Đời X".</summary>
+        private void DrawGenLabelSelectionOverlay(int level)
+        {
+            ClearGenLabelSelectionOverlay();
+            if (theCanvas == null)
+            {
+                return;
+            }
+
+            var el = FindGenLabelVisual(level);
+            if (el == null)
+            {
+                return;
+            }
+
+            el.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            double left = Canvas.GetLeft(el);
+            double top = Canvas.GetTop(el);
+            if (double.IsNaN(left)) left = 0;
+            if (double.IsNaN(top)) top = 0;
+            double w = el.DesiredSize.Width;
+            double h = el.DesiredSize.Height;
+
+            const double pad = 3;
+            var outline = new Rectangle
+            {
+                Width = Math.Max(4, w + pad * 2),
+                Height = Math.Max(4, h + pad * 2),
+                Stroke = new SolidColorBrush(Color.FromRgb(30, 120, 220)),
+                StrokeThickness = 1.5,
+                StrokeDashArray = new DoubleCollection { 4, 2 },
+                Fill = new SolidColorBrush(Color.FromArgb(25, 30, 120, 220)),
+                IsHitTestVisible = false,
+                Tag = GenLabelSelectionTag
+            };
+            Canvas.SetLeft(outline, left - pad);
+            Canvas.SetTop(outline, top - pad);
+            Panel.SetZIndex(outline, 1003);
+            theCanvas.Children.Add(outline);
+
+            // 4 góc vuông
+            const double handle = 7;
+            void AddCorner(double x, double y)
+            {
+                var c = new Rectangle
+                {
+                    Width = handle,
+                    Height = handle,
+                    Fill = Brushes.White,
+                    Stroke = new SolidColorBrush(Color.FromRgb(30, 120, 220)),
+                    StrokeThickness = 1.2,
+                    RadiusX = 1,
+                    RadiusY = 1,
+                    IsHitTestVisible = false,
+                    Tag = GenLabelSelectionTag
+                };
+                Canvas.SetLeft(c, x - handle / 2.0);
+                Canvas.SetTop(c, y - handle / 2.0);
+                Panel.SetZIndex(c, 1004);
+                theCanvas.Children.Add(c);
+            }
+
+            double x0 = left - pad;
+            double y0 = top - pad;
+            double x1 = x0 + outline.Width;
+            double y1 = y0 + outline.Height;
+            AddCorner(x0, y0);
+            AddCorner(x1, y0);
+            AddCorner(x0, y1);
+            AddCorner(x1, y1);
+        }
+
+        private void UpdateGenLabelColorPreview()
+        {
+            // genLabelColorPreview chưa khởi tạo khi TextChanged bắn lần đầu trong InitializeComponent
+            if (genLabelColorPreview == null) return;
+            try
+            {
+                var c = (Color)ColorConverter.ConvertFromString(genLabelColorBox.Text.Trim());
+                genLabelColorPreview.Background = new SolidColorBrush(c);
+            }
+            catch { genLabelColorPreview.Background = Brushes.Transparent; }
+        }
+
+        private void GenLabelFontPtBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+        { }
+
+        private void GenLabelColorBox_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+            => UpdateGenLabelColorPreview();
+
+        /// <summary>Áp dụng style từ popup cho tất cả nhãn "Đời" — vẽ lại dải mà không render lại toàn bộ.</summary>
+        private void GenLabelApplyAll_Click(object sender, RoutedEventArgs e)
+        {
+            if (_phaDoCurrentOptions == null) return;
+
+            if (!double.TryParse(genLabelFontPtBox.Text, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out double pt) || pt <= 0)
+                pt = 0;
+
+            string colorHex = genLabelColorBox.Text.Trim();
+            // Validate hex — nếu không parse được thì bỏ qua
+            try { ColorConverter.ConvertFromString(colorHex); }
+            catch { colorHex = null; }
+
+            string family = genLabelFontFamilyBox.Text?.Trim();
+            if (string.IsNullOrWhiteSpace(family)) family = null;
+
+            _phaDoCurrentOptions.GenLabelStyle = new GiaPhaRender.PhaDoGenLabelStyle
+            {
+                FontPt = pt,
+                ForegroundHex = colorHex,
+                FontFamily = family,
+                Bold = genLabelBoldCheck.IsChecked == true,
+                Italic = genLabelItalicCheck.IsChecked == true
+            };
+
+            // Vẽ lại chỉ dải nhãn Đời — không cần full-render lại toàn bộ phả đồ
+            RedrawGenerationBandsOnly();
+            genLabelStylePopup.IsOpen = false;
+        }
+
+        /// <summary>Đặt lại style nhãn Đời về mặc định.</summary>
+        private void GenLabelReset_Click(object sender, RoutedEventArgs e)
+        {
+            if (_phaDoCurrentOptions == null) return;
+            _phaDoCurrentOptions.GenLabelStyle = null;
+            RedrawGenerationBandsOnly();
+            genLabelStylePopup.IsOpen = false;
+        }
+
+        /// <summary>Vẽ lại các TextBlock nhãn "Đời X" mà không xóa toàn canvas.</summary>
+        private void RedrawGenerationBandsOnly()
+        {
+            if (_phaDoCurrentOptions == null || _phaDoRenderedLayout == null) return;
+
+            // Xóa label cũ — tìm theo tag PhaDoGenLabelTag
+            var toRemove = theCanvas.Children.OfType<FrameworkElement>()
+                .Where(fe => fe.Tag is GiaPhaRender.PhaDoGenLabelTag)
+                .ToList();
+            foreach (var fe in toRemove)
+                theCanvas.Children.Remove(fe);
+
+            // Vẽ lại nhãn mới theo style hiện tại
+            bool vertical = GiaPhaRenderOptions.IsVerticalCardLayout(_phaDoCurrentOptions.CardLayoutMode);
+            var custom = _phaDoCurrentOptions.GenLabelStyle;
+
+            double dpi = _phaDoCurrentOptions.PrintDpi > 0 ? _phaDoCurrentOptions.PrintDpi : 96;
+
+            foreach (var band in _phaDoRenderedLayout.GenerationBands)
+            {
+                double defaultPt = vertical
+                    ? _phaDoCurrentOptions.VerticalGenerationLabelFontPt
+                    : _phaDoCurrentOptions.HeaderFontPt;
+
+                double pt = custom?.FontPt > 0 ? custom.FontPt : defaultPt;
+                string fontFamily = !string.IsNullOrWhiteSpace(custom?.FontFamily)
+                    ? custom.FontFamily
+                    : _phaDoCurrentOptions.FontFamilyName;
+
+                FontWeight fw = custom != null
+                    ? (custom.Bold ? FontWeights.Bold : FontWeights.Normal)
+                    : (vertical ? FontWeights.SemiBold : FontWeights.Normal);
+
+                FontStyle fs = custom?.Italic == true ? FontStyles.Italic : FontStyles.Normal;
+
+                Brush fg;
+                if (!string.IsNullOrWhiteSpace(custom?.ForegroundHex))
+                {
+                    try { fg = new SolidColorBrush((Color)ColorConverter.ConvertFromString(custom.ForegroundHex)); }
+                    catch { fg = new SolidColorBrush(Color.FromRgb(90, 90, 90)); }
+                }
+                else
+                {
+                    fg = vertical
+                        ? new SolidColorBrush(Color.FromRgb(25, 55, 120))
+                        : new SolidColorBrush(Color.FromRgb(90, 90, 90));
+                }
+
+                double mmPx = dpi / 25.4;
+                var labelDoi = new System.Windows.Controls.TextBlock
+                {
+                    Text = "Đời " + band.Level,
+                    FontFamily = new FontFamily(fontFamily),
+                    FontSize = pt * dpi / 72.0,
+                    FontWeight = fw,
+                    FontStyle = fs,
+                    Foreground = fg,
+                    IsHitTestVisible = true,
+                    Cursor = Cursors.Hand,
+                    Tag = new GiaPhaRender.PhaDoGenLabelTag(band.Level)
+                };
+                Canvas.SetLeft(labelDoi, _phaDoCurrentOptions.MarginMm * mmPx);
+                Canvas.SetTop(labelDoi, band.Ymm * mmPx + 2);
+                Panel.SetZIndex(labelDoi, 1);
+                theCanvas.Children.Add(labelDoi);
+            }
+        }
+
         //
     }
 }
