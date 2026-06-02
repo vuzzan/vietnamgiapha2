@@ -341,6 +341,15 @@ namespace vietnamgiapha.GiaPhaRender
 
         private void DrawCard(Canvas canvas, GiaPhaPlacedNode placed)
         {
+            int familyId = placed.Family?.familyInfo?.FamilyId ?? 0;
+
+            // Gia đình ảo (FamilyId < 0): vẽ box đặc biệt thay vì layout thường.
+            if (familyId < 0)
+            {
+                DrawVirtualRootCard(canvas, placed);
+                return;
+            }
+
             if (GiaPhaRenderOptions.IsVerticalCardLayout(_options.CardLayoutMode))
             {
                 DrawCardVertical(canvas, placed);
@@ -348,6 +357,93 @@ namespace vietnamgiapha.GiaPhaRender
             }
 
             DrawCardHorizontal(canvas, placed);
+        }
+
+        /// <summary>
+        /// Vẽ box gia đình ảo (FamilyId &lt; 0): viền đứt nét, nền xám nhạt,
+        /// hiển thị tên scope, kích thước canvas và tổng GD con.
+        /// </summary>
+        private void DrawVirtualRootCard(Canvas canvas, GiaPhaPlacedNode placed)
+        {
+            double x = Mm(placed.Xmm);
+            double y = Mm(placed.Ymm);
+            double w = Mm(placed.Metrics.WidthMm);
+            double h = Mm(placed.Metrics.HeightMm);
+            double pad = Mm(_options.CardPaddingMm);
+
+            // Nền xám rất nhạt, viền đứt nét để phân biệt với box thật.
+            var rect = new System.Windows.Shapes.Rectangle
+            {
+                Width = w,
+                Height = h,
+                RadiusX = Mm(2.0),
+                RadiusY = Mm(2.0),
+                Fill = new SolidColorBrush(Color.FromArgb(30, 100, 100, 100)),
+                Stroke = new SolidColorBrush(Color.FromRgb(150, 150, 150)),
+                StrokeThickness = Math.Max(1.0, Mm(0.3)),
+                StrokeDashArray = new DoubleCollection { 4, 3 },
+                IsHitTestVisible = false
+            };
+            Canvas.SetLeft(rect, x);
+            Canvas.SetTop(rect, y);
+            Panel.SetZIndex(rect, 10);
+            canvas.Children.Add(rect);
+
+            // Dòng 1: nhãn scope (RenderPlanSummary).
+            double lineY = y + pad;
+            string scopeLabel = _options?.MultiRootScopeLabel ?? "Phả con đa gốc";
+            lineY = AddLine(canvas, scopeLabel, x + pad, lineY, w - 2 * pad,
+                _options.HeaderFontPt > 0 ? _options.HeaderFontPt : 7.0,
+                FontWeights.Bold,
+                new SolidColorBrush(Color.FromRgb(80, 80, 120)),
+                null);
+
+            // Dòng 2: tổng GD con + kích thước canvas.
+            int totalGd = CountFamiliesInPlacedNode(placed) - 1; // trừ chính box ảo
+            double wCm = _result.ContentWidthMm / 10.0;
+            double hCm = _result.ContentHeightMm / 10.0;
+            string infoLine = totalGd + " GD | "
+                + wCm.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "×"
+                + hCm.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " cm";
+            AddLine(canvas, infoLine, x + pad, lineY, w - 2 * pad,
+                _options.NoteFontPt > 0 ? _options.NoteFontPt : 6.5,
+                FontWeights.Normal,
+                new SolidColorBrush(Color.FromRgb(100, 100, 100)),
+                null);
+        }
+
+        /// <summary>Đếm số node trong cây con từ FamilyViewModel của một placed node (BFS).</summary>
+        private static int CountFamiliesInPlacedNode(GiaPhaPlacedNode root)
+        {
+            if (root?.Family == null)
+            {
+                return 0;
+            }
+
+            int count = 0;
+            var stack = new Stack<FamilyViewModel>();
+            stack.Push(root.Family);
+            while (stack.Count > 0)
+            {
+                var cur = stack.Pop();
+                if (cur == null)
+                {
+                    continue;
+                }
+
+                count++;
+                if (cur.Children == null)
+                {
+                    continue;
+                }
+
+                foreach (var child in cur.Children)
+                {
+                    stack.Push(child);
+                }
+            }
+
+            return count;
         }
 
         private void DrawCardHorizontal(Canvas canvas, GiaPhaPlacedNode placed)
@@ -403,6 +499,18 @@ namespace vietnamgiapha.GiaPhaRender
                 lineY = AddLine(canvas, overflow, x + pad, lineY, w - 2 * pad,
                     _options.SpouseFontPt, FontWeights.Normal, overflowTag);
                 personSlot++;
+            }
+
+            // Branch-head (FamilyUp == -1): ghi "Nhánh phả con: X GD" trước extra notes.
+            if (placed.Family?.familyInfo?.FamilyUp == -1)
+            {
+                int branchGd = CountFamiliesInPlacedNode(placed);
+                string branchNote = "Nhánh phả con: " + branchGd + " GD";
+                double notePt = _options.NoteFontPt > 0 ? _options.NoteFontPt : 6.5;
+                lineY = AddLine(canvas, branchNote, x + pad, lineY + Mm(0.5), w - 2 * pad,
+                    notePt, FontWeights.Bold,
+                    new SolidColorBrush(Color.FromRgb(0, 96, 100)),
+                    null);
             }
 
             DrawCardExtraNotes(canvas, placed, x, y, w, h, pad, ref lineY, personSlot);
@@ -523,6 +631,17 @@ namespace vietnamgiapha.GiaPhaRender
                 colX += colW + Mm(GiaPhaVerticalCardLayout.ColumnGapMm);
             }
 
+            // Branch-head (FamilyUp == -1): ghi "Nhánh phả con: X GD" ở đáy thẻ dọc.
+            if (placed.Family?.familyInfo?.FamilyUp == -1)
+            {
+                int branchGd = CountFamiliesInPlacedNode(placed);
+                string branchNote = "Nhánh phả con: " + branchGd + " GD";
+                double noteY = y + h - Mm(4.5);
+                double notePt = _options.NoteFontPt > 0 ? _options.NoteFontPt : 6.5;
+                AddHorizontalText(canvas, branchNote, x + pad, noteY, notePt,
+                    FontWeights.Bold, new SolidColorBrush(Color.FromRgb(0, 96, 100)), null);
+            }
+
             DrawCardExtraNotesVertical(canvas, placed, x, y, w, h, pad);
         }
 
@@ -639,9 +758,31 @@ namespace vietnamgiapha.GiaPhaRender
             double w,
             double h)
         {
-            int branchHue = (placed.Family?.familyInfo?.FamilyId ?? 0) % 6;
-            var fill = BranchFill(branchHue);
-            var border = new SolidColorBrush(Color.FromRgb(80, 80, 80));
+            int familyId = placed.Family?.familyInfo?.FamilyId ?? 0;
+            int familyUp = placed.Family?.familyInfo?.FamilyUp ?? 0;
+            // FamilyId < 0 → gia đình ảo (đã vẽ riêng, không vào đây).
+            bool isVirtual = familyId < 0;
+            // FamilyUp == -1 → gốc nhánh non-STOP trực tiếp dưới gia đình ảo.
+            bool isBranchHead = !isVirtual && familyUp == -1;
+            int branchHue = Math.Abs(familyId) % 6;
+            Brush fill;
+            Brush border;
+            if (isVirtual)
+            {
+                fill = Brushes.Transparent;
+                border = Brushes.Transparent;
+            }
+            else if (isBranchHead)
+            {
+                // Màu xanh lá đậm để nổi bật là gốc nhánh phả con.
+                fill = new SolidColorBrush(Color.FromRgb(178, 235, 242));
+                border = new SolidColorBrush(Color.FromRgb(0, 131, 143));
+            }
+            else
+            {
+                fill = BranchFill(branchHue);
+                border = new SolidColorBrush(Color.FromRgb(80, 80, 80));
+            }
 
             var rect = new System.Windows.Shapes.Rectangle
             {

@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Printing;
 using System.Threading.Tasks;
 using System.Windows;
@@ -39,6 +41,90 @@ namespace vietnamgiapha.GiaPhaRender
             options = options ?? GiaPhaRenderOptions.ForFitContent();
             var engine = new FamilyTreeLayoutEngine(options, options.PrintDpi);
             return engine.Layout(root);
+        }
+
+        /// <summary>
+        /// Layout nhiều cây độc lập rồi xếp dọc (multi-root vertical stack):
+        /// Mỗi nhánh layout riêng → offset Ymm xuống dưới nhánh trước (cách <paramref name="gapMm"/> mm).
+        /// </summary>
+        public static GiaPhaRenderResult ComputeLayoutMultiRootVertical(
+            IList<FamilyViewModel> roots,
+            GiaPhaRenderOptions options = null,
+            double gapMm = 15.0)
+        {
+            options = options ?? GiaPhaRenderOptions.ForFitContent();
+            var engine = new FamilyTreeLayoutEngine(options, options.PrintDpi);
+
+            // Dùng kết quả đầu làm base (copy metadata).
+            GiaPhaRenderResult merged = null;
+            double currentOffsetYmm = 0;
+
+            foreach (var root in roots)
+            {
+                if (root == null)
+                {
+                    continue;
+                }
+
+                GiaPhaRenderResult part = engine.Layout(root);
+                if (part == null || part.Nodes.Count == 0)
+                {
+                    continue;
+                }
+
+                if (merged == null)
+                {
+                    merged = part;
+                    // Tính chiều cao thực sự để offset nhánh tiếp theo.
+                    double maxY = part.Nodes.Count > 0
+                        ? part.Nodes.Max(n => n.Ymm + (n.Metrics?.HeightMm ?? 0))
+                        : 0;
+                    currentOffsetYmm = maxY + gapMm;
+                    continue;
+                }
+
+                // Shift toàn bộ node/connector/band của part xuống currentOffsetYmm.
+                foreach (var node in part.Nodes)
+                {
+                    node.Ymm += currentOffsetYmm;
+                }
+
+                foreach (var connector in part.Connectors)
+                {
+                    connector.Y1mm += currentOffsetYmm;
+                    connector.Y2mm += currentOffsetYmm;
+                }
+
+                foreach (var band in part.GenerationBands)
+                {
+                    band.Ymm += currentOffsetYmm;
+                }
+
+                // Hợp nhất vào merged.
+                merged.Nodes.AddRange(part.Nodes);
+                merged.Connectors.AddRange(part.Connectors);
+                foreach (var band in part.GenerationBands)
+                {
+                    merged.GenerationBands.Add(band);
+                }
+
+                double partMaxY = part.Nodes.Count > 0
+                    ? part.Nodes.Max(n => n.Ymm + (n.Metrics?.HeightMm ?? 0))
+                    : currentOffsetYmm;
+                currentOffsetYmm = partMaxY + gapMm;
+            }
+
+            return merged;
+        }
+
+        /// <summary>Layout multi-root vertical trên thread pool.</summary>
+        public static Task<GiaPhaRenderResult> ComputeLayoutMultiRootVerticalAsync(
+            IList<FamilyViewModel> roots,
+            GiaPhaRenderOptions options = null,
+            double gapMm = 15.0)
+        {
+            options = options ?? GiaPhaRenderOptions.ForFitContent();
+            return Task.Run(() => ComputeLayoutMultiRootVertical(roots, options, gapMm));
         }
 
         /// <summary>Layout trên thread pool — không block UI / STA.</summary>

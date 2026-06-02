@@ -300,6 +300,7 @@ namespace vietnamgiapha
         private void AfterFamilyTreeReplaced(bool clearUndoStack)
         {
             _mainWindow.BindGiaPhaUndoCapture(FamilyTree);
+            _mainWindow.BindFamilyTreeSearchScroll();
             if (clearUndoStack && !_mainWindow.IsGiaPhaUndoRestoring())
             {
                 _mainWindow.ClearGiaPhaUndoStack();

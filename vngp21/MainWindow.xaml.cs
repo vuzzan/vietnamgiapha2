@@ -25,8 +25,6 @@ using System.Collections.Generic;
 using System.Windows.Markup;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
-using MessagePack;
-using MessagePack.Resolvers;
 using System.Windows.Threading;
 using vngp21.Draw;
 using vietnamgiapha.GiaPhaRender;
@@ -79,6 +77,8 @@ namespace vietnamgiapha
         /// <summary>Mục tiêu mềm: mỗi phả con quanh mức này (cho phép dao động).</summary>
         private const int PhaDoTargetFamilyCountPerSubtree = 200;
         private GiaPhaRenderResult _phaDoRenderedLayout;
+        /// <summary>Dialog "Phân tích phả con" đang mở (modeless) — đóng khi phân tích lại.</summary>
+        private PhaDoSubtreeMapDialog _phaDoAnalysisDialog;
         /// <summary>Layout cây đầy đủ — chỉ dùng ước lượng đời tách Root0 khi chưa phân tích (không dùng layout đã scope).</summary>
         private GiaPhaRenderResult _phaDoFullTreeLayoutSnapshot;
         private int _phaDoFullTreeLayoutSnapshotRootId;
@@ -209,14 +209,21 @@ namespace vietnamgiapha
         private bool _personGridShowAllInFamily = true;
         private bool _personGridViewSortConfigured;
         private string _personSearchLastQuery;
+
+        /// <summary>Cho phép BringIntoView khi cuộn tìm kiếm / focus programmatic — click chuột vẫn giữ scroll.</summary>
+        private bool _allowTreeViewBringIntoView;
+
+        /// <summary>Gia đình đang chờ cuộn tới (tìm kiếm) — cho phép BringIntoView mặc định của WPF.</summary>
+        private FamilyViewModel _pendingTreeScrollTarget;
+
+        private ScrollViewer _treeViewScrollViewer;
+        private ScrollContentPresenter _treeScrollContentPresenter;
         private int _personSearchLastIndex = -1;
         private int _personGridSelectedFamilyId;
         private FamilyViewModel _personGridSelectedFamilyRoot;
         private bool _personGridIsSelectingFamily;
         private static readonly SolidColorBrush PersonFamilyHighlightBrush = new SolidColorBrush(Color.FromRgb(0xE8, 0xF2, 0xFF));
         private static readonly SolidColorBrush PersonFamilyBorderBrush = new SolidColorBrush(Color.FromRgb(0x9C, 0xBE, 0xE8));
-        private static readonly MessagePackSerializerOptions MsgPackOptions =
-            MessagePackSerializerOptions.Standard.WithResolver(ContractlessStandardResolverAllowPrivate.Instance);
         public ICollectionView PersonGridView { get; private set; }
         private readonly ObservableCollection<PhaDoRenderScopeItem> _phaDoRenderScopes = new ObservableCollection<PhaDoRenderScopeItem>();
         private readonly ObservableCollection<PhaDoCardLayoutItem> _phaDoCardLayoutItems = new ObservableCollection<PhaDoCardLayoutItem>();
@@ -237,6 +244,8 @@ namespace vietnamgiapha
         private string _phaDoScopeStartFamilyName;
         private readonly HashSet<int> _phaConFamilyIds = new HashSet<int>();
         private readonly HashSet<int> _phaConStopFamilyIds = new HashSet<int>();
+        /// <summary>IDs non-STOP đã được gom vào combo đa gốc — dừng ở split level trong scope cha (có trang riêng).</summary>
+        private readonly HashSet<int> _phaConNonStopComboFamilyIds = new HashSet<int>();
         private readonly Dictionary<int, (double WidthCm, double HeightCm)> _phaConBoundsCmByFamilyId =
             new Dictionary<int, (double WidthCm, double HeightCm)>();
 
@@ -266,6 +275,39 @@ namespace vietnamgiapha
 
             /// <summary>Số GD ước lượng sau clone scope (khớp ComputeLayoutAsync).</summary>
             public int LayoutFamilyCountEstimate { get; set; }
+
+            /// <summary>
+            /// Danh sách FamilyId gốc của các nhánh non-STOP gom thành 1 combo multi-root.
+            /// Khi có danh sách này, FamilyId/RootFamily là nhánh đầu tiên (để hiển thị tên).
+            /// </summary>
+            public List<int> MultiRootFamilyIds { get; set; }
+
+            /// <summary>True khi combo là tập hợp nhiều nhánh non-STOP xếp dọc độc lập.</summary>
+            public bool IsMultiRootVerticalStack => MultiRootFamilyIds != null && MultiRootFamilyIds.Count > 1;
+
+            /// <summary>True khi đây là combo "Bản đồ phả con" (root0→root1→root2 multi-level).</summary>
+            public bool IsPhaConMap { get; set; }
+
+            /// <summary>Đời tách lần 1 (root1) — dùng khi render bản đồ.</summary>
+            public int PhaConMapRoot1SplitLevel { get; set; }
+
+            /// <summary>STOP IDs tại đời root1 (nhánh lớn, sẽ tiếp tục xuống root2 trong bản đồ).</summary>
+            public HashSet<int> PhaConMapRoot1StopIds { get; set; }
+
+            /// <summary>STOP IDs tại các đời sâu hơn root1 (root2, root3…) — dừng hẳn tại đây.</summary>
+            public HashSet<int> PhaConMapDeepStopIds { get; set; }
+
+            /// <summary>Chỉ số nhóm trong chuỗi multi-root (1-based), để đặt tên "Nhóm non-STOP 1/28".</summary>
+            public int MultiRootGroupIndex { get; set; }
+
+            /// <summary>Tổng số nhóm multi-root được tạo (để hiển thị "1/28").</summary>
+            public int MultiRootGroupTotal { get; set; }
+
+            /// <summary>
+            /// Nhãn tóm tắt từng nhánh trong combo multi-root: "ID X | Tên người | N GD".
+            /// Dùng khi in report phân tích để hiển thị đủ thông tin mỗi nhánh.
+            /// </summary>
+            public List<string> MultiRootBranchLabels { get; set; }
 
             public override string ToString()
             {
@@ -1824,20 +1866,24 @@ namespace vietnamgiapha
             PhaDoSvgCatalog.ResolveShapeIntoStyle(style, gp?.SvgShapesById);
             EnsureFamilyBoxFrameMarkupResolved(style);
 
-            // Đánh dấu trực quan phả con (màu tươi, không dùng đỏ):
-            // - phacon: xanh dương — nhánh đủ lớn, sẽ tách scope sau
-            // - phacon-stop: xanh ngọc — nhánh nhỏ, vẽ tiếp trong phả cha
-            if (_phaConStopFamilyIds.Contains(familyId))
+            // Đánh dấu trực quan phả con:
+            // - scope stop (bắt đầu phả con mới): cam đậm #F57C00
+            // - non-STOP (nhánh nhỏ, vẽ tiếp luôn): xanh ngọc #4DD0E1
+            if (_phaDoScopeStopFamilyIdsAtMaxLevel != null
+                && _phaDoScopeStopFamilyIdsAtMaxLevel.Count > 0
+                && _phaDoScopeStopFamilyIdsAtMaxLevel.Contains(familyId))
             {
+                // Cam đậm rõ → người dùng nhận ra ngay "đây là bắt đầu phả con".
+                style.FillColorHex = "#F57C00";
+                style.Main.ForegroundHex = "#FFFFFF";
+                style.Spouse.ForegroundHex = "#FFF3E0";
+            }
+            else if (_phaConStopFamilyIds.Contains(familyId))
+            {
+                // Xanh ngọc → nhánh nhỏ, vẽ tiếp trong phả cha (không tách scope).
                 style.FillColorHex = "#4DD0E1";
                 style.Main.ForegroundHex = "#004D40";
                 style.Spouse.ForegroundHex = "#00695C";
-            }
-            else if (_phaConFamilyIds.Contains(familyId))
-            {
-                style.FillColorHex = "#42A5F5";
-                style.Main.ForegroundHex = "#FFFFFF";
-                style.Spouse.ForegroundHex = "#E1F5FE";
             }
 
             return style;
@@ -3096,11 +3142,19 @@ namespace vietnamgiapha
             _phaDoFamilyZoneComboItems = BuildZoneComboItems(loaded.FamilyEntries);
 
             log.Info(string.Format(
-                "Zone SVG: thư mục={0}, tồn tại={1}, title={2}, family={3}",
+                "Zone SVG: thư mục={0}, tồn tại={1}, title={2}, family={3}, bỏ qua={4}",
                 folder,
                 Directory.Exists(folder),
                 loaded.TitleEntries.Count,
-                loaded.FamilyEntries.Count));
+                loaded.FamilyEntries.Count,
+                loaded.SkippedFiles.Count));
+            if (loaded.SkippedFiles.Count > 0)
+            {
+                foreach (string skip in loaded.SkippedFiles)
+                {
+                    log.Warn("Zone SVG bỏ qua: " + skip);
+                }
+            }
         }
 
         /// <summary>Gắn danh sách zone lên combobox (gọi lúc khởi động và khi chọn ô).</summary>
@@ -4503,6 +4557,27 @@ namespace vietnamgiapha
             family.ExpandAll();
         }
 
+        /// <summary>Gắn callback cuộn cây — gọi lại mỗi khi mở/load file (FamilyTreeViewModel mới).</summary>
+        public void BindFamilyTreeSearchScroll()
+        {
+            var familyTree = viewModel?.FamilyTree?.Family;
+            if (familyTree == null)
+            {
+                return;
+            }
+
+            familyTree.RequestScrollToFamilyInTree = family =>
+            {
+                if (family == null)
+                {
+                    return;
+                }
+
+                _pendingTreeScrollTarget = family;
+                ScrollTreeViewToFamily(family, 0);
+            };
+        }
+
         private void SelectFamilyInTreeView(FamilyViewModel family)
         {
             if (family == null || viewModel?.FamilyTree?.Family == null)
@@ -4510,61 +4585,419 @@ namespace vietnamgiapha
                 return;
             }
 
-            viewModel.FamilyTree.Family.SelectFamily(family);
-
-            Dispatcher.BeginInvoke(
-                new Action(() => ScrollTreeViewToFamily(family)),
-                DispatcherPriority.Loaded);
-        }
-
-        private void ScrollTreeViewToFamily(FamilyViewModel family)
-        {
-            if (treeViewGiaPha == null || family == null)
+            family = ResolveTreeFamilyForScroll(family);
+            if (family == null)
             {
                 return;
             }
 
-            var item = FindTreeViewItem(treeViewGiaPha, family);
-            item?.BringIntoView();
+            viewModel.FamilyTree.Family.SelectFamily(family);
+            family.IsSelected = true;
+
+            _pendingTreeScrollTarget = family;
+            ScrollTreeViewToFamily(family, 0);
         }
 
-        private static TreeViewItem FindTreeViewItem(ItemsControl itemsControl, FamilyViewModel family)
+        /// <summary>Ánh xạ VM từ Phả đồ (có thể là clone) sang node đúng trên cây gốc file.</summary>
+        private FamilyViewModel ResolveTreeFamilyForScroll(FamilyViewModel family)
         {
-            if (itemsControl == null || family == null)
+            if (family == null)
             {
                 return null;
             }
 
-            for (int i = 0; i < itemsControl.Items.Count; i++)
+            int familyId = family.familyInfo?.FamilyId ?? 0;
+            if (familyId <= 0)
             {
-                if (!(itemsControl.Items[i] is FamilyViewModel candidate))
+                return family;
+            }
+
+            var root = viewModel?.FamilyTree?.Family?.RootPerson;
+            FamilyViewModel onTree = FindFamilyById(root, familyId);
+            return onTree ?? family;
+        }
+
+        /// <summary>Cuộn TreeView tới gia đình — mở nhánh, tìm container theo đường dẫn, scroll ScrollViewer.</summary>
+        private void ScrollTreeViewToFamily(FamilyViewModel family, int attempt)
+        {
+            if (treeViewGiaPha == null || family == null)
+            {
+                ClearPendingTreeScrollTarget();
+                return;
+            }
+
+            family = ResolveTreeFamilyForScroll(family);
+            if (family == null)
+            {
+                ClearPendingTreeScrollTarget();
+                return;
+            }
+
+            EnsureTreeAncestorsExpanded(family);
+            treeViewGiaPha.UpdateLayout();
+
+            TreeViewItem item = FindTreeViewItemOnPath(treeViewGiaPha, family);
+            if (item != null)
+            {
+                ScrollTreeViewItemIntoView(item);
+                ClearPendingTreeScrollTarget();
+                return;
+            }
+
+            const int maxAttempts = 12;
+            if (attempt < maxAttempts)
+            {
+                DispatcherPriority priority = attempt < 4
+                    ? DispatcherPriority.Loaded
+                    : DispatcherPriority.ApplicationIdle;
+                Dispatcher.BeginInvoke(
+                    new Action(() => ScrollTreeViewToFamily(family, attempt + 1)),
+                    priority);
+                return;
+            }
+
+            log.Warn("TreeView: không cuộn được tới \"" + (family.Name ?? "") + "\" sau " + maxAttempts + " lần thử.");
+            ClearPendingTreeScrollTarget();
+        }
+
+        private void ClearPendingTreeScrollTarget()
+        {
+            if (_pendingTreeScrollTarget != null)
+            {
+                _pendingTreeScrollTarget = null;
+            }
+        }
+
+        private static void EnsureTreeAncestorsExpanded(FamilyViewModel family)
+        {
+            for (FamilyViewModel parent = family?.Parent; parent != null; parent = parent.Parent)
+            {
+                parent.IsExpanded = true;
+            }
+        }
+
+        /// <summary>Đi từ gốc theo chuỗi cha → con, dùng ContainerFromItem (ổn định hơn DFS + FromIndex).</summary>
+        private static TreeViewItem FindTreeViewItemOnPath(ItemsControl root, FamilyViewModel target)
+        {
+            if (root == null || target == null)
+            {
+                return null;
+            }
+
+            var path = new List<FamilyViewModel>();
+            for (FamilyViewModel node = target; node != null; node = node.Parent)
+            {
+                path.Insert(0, node);
+            }
+
+            ItemsControl parentControl = root;
+            TreeViewItem found = null;
+            foreach (FamilyViewModel node in path)
+            {
+                parentControl.UpdateLayout();
+                if (parentControl.ItemContainerGenerator.Status != GeneratorStatus.ContainersGenerated)
+                {
+                    parentControl.ApplyTemplate();
+                    parentControl.UpdateLayout();
+                }
+
+                found = parentControl.ItemContainerGenerator.ContainerFromItem(node) as TreeViewItem;
+                if (found == null)
+                {
+                    found = FindTreeViewItemByReference(parentControl, node);
+                }
+
+                if (found == null)
+                {
+                    return null;
+                }
+
+                if (!ReferenceEquals(node, target))
+                {
+                    node.IsExpanded = true;
+                    found.IsExpanded = true;
+                    found.UpdateLayout();
+                }
+
+                parentControl = found;
+            }
+
+            return found;
+        }
+
+        private static TreeViewItem FindTreeViewItemByReference(ItemsControl parent, FamilyViewModel node)
+        {
+            if (parent == null || node == null)
+            {
+                return null;
+            }
+
+            int targetId = node.familyInfo?.FamilyId ?? 0;
+            for (int i = 0; i < parent.Items.Count; i++)
+            {
+                var candidate = parent.Items[i] as FamilyViewModel;
+                if (candidate == null)
                 {
                     continue;
                 }
 
-                var container = itemsControl.ItemContainerGenerator.ContainerFromIndex(i) as TreeViewItem;
-                if (candidate == family)
+                bool sameRef = ReferenceEquals(candidate, node);
+                bool sameId = targetId > 0 && (candidate.familyInfo?.FamilyId ?? 0) == targetId;
+                if (!sameRef && !sameId)
+                {
+                    continue;
+                }
+
+                parent.UpdateLayout();
+                var container = parent.ItemContainerGenerator.ContainerFromIndex(i) as TreeViewItem;
+                if (container != null)
                 {
                     return container;
                 }
 
-                if (container != null)
+                if (parent is TreeViewItem parentItem)
                 {
-                    if (!container.IsExpanded)
+                    parentItem.ApplyTemplate();
+                    parentItem.UpdateLayout();
+                    container = parent.ItemContainerGenerator.ContainerFromIndex(i) as TreeViewItem;
+                    if (container != null)
                     {
-                        container.IsExpanded = true;
-                    }
-
-                    container.UpdateLayout();
-                    var nested = FindTreeViewItem(container, family);
-                    if (nested != null)
-                    {
-                        return nested;
+                        return container;
                     }
                 }
             }
 
             return null;
+        }
+
+        private static TreeViewItem FindTreeViewItem(ItemsControl itemsControl, FamilyViewModel family)
+        {
+            return FindTreeViewItemOnPath(itemsControl, family);
+        }
+
+        private ScrollViewer GetTreeViewScrollViewer()
+        {
+            if (treeViewGiaPha == null)
+            {
+                return null;
+            }
+
+            if (_treeViewScrollViewer == null)
+            {
+                if (treeViewGiaPha.Template == null)
+                {
+                    treeViewGiaPha.ApplyTemplate();
+                }
+
+                treeViewGiaPha.UpdateLayout();
+                _treeViewScrollViewer = FindTreeViewScrollViewerInChrome(treeViewGiaPha);
+            }
+
+            return _treeViewScrollViewer;
+        }
+
+        private ScrollContentPresenter GetTreeScrollContentPresenter()
+        {
+            if (treeViewGiaPha == null)
+            {
+                return null;
+            }
+
+            if (_treeScrollContentPresenter == null)
+            {
+                GetTreeViewScrollViewer();
+                _treeScrollContentPresenter = FindTreeScrollContentPresenterInChrome(treeViewGiaPha);
+            }
+
+            return _treeScrollContentPresenter;
+        }
+
+        private void InvalidateTreeViewScrollCache()
+        {
+            _treeViewScrollViewer = null;
+            _treeScrollContentPresenter = null;
+        }
+
+        /// <summary>ScrollViewer của TreeView (không đi vào TreeViewItem con).</summary>
+        private static ScrollViewer FindTreeViewScrollViewerInChrome(DependencyObject root)
+        {
+            if (root == null)
+            {
+                return null;
+            }
+
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, i);
+                if (child is ScrollViewer scrollViewer)
+                {
+                    return scrollViewer;
+                }
+
+                if (child is TreeViewItem)
+                {
+                    continue;
+                }
+
+                ScrollViewer nested = FindTreeViewScrollViewerInChrome(child);
+                if (nested != null)
+                {
+                    return nested;
+                }
+            }
+
+            return null;
+        }
+
+        private static ScrollContentPresenter FindTreeScrollContentPresenterInChrome(DependencyObject root)
+        {
+            if (root == null)
+            {
+                return null;
+            }
+
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, i);
+                if (child is ScrollContentPresenter presenter)
+                {
+                    return presenter;
+                }
+
+                if (child is TreeViewItem)
+                {
+                    continue;
+                }
+
+                ScrollContentPresenter nested = FindTreeScrollContentPresenterInChrome(child);
+                if (nested != null)
+                {
+                    return nested;
+                }
+            }
+
+            return null;
+        }
+
+        private void ScrollTreeViewItemIntoView(TreeViewItem item, bool focusItem = true)
+        {
+            if (item == null)
+            {
+                return;
+            }
+
+            try
+            {
+                _allowTreeViewBringIntoView = true;
+                item.IsSelected = true;
+                if (focusItem)
+                {
+                    item.Focus();
+                }
+
+                item.UpdateLayout();
+                treeViewGiaPha?.UpdateLayout();
+
+                if (!ApplyTreeViewScrollToItem(item))
+                {
+                    InvalidateTreeViewScrollCache();
+                    if (!ApplyTreeViewScrollToItem(item))
+                    {
+                        item.BringIntoView();
+                    }
+                }
+            }
+            finally
+            {
+                _allowTreeViewBringIntoView = false;
+            }
+        }
+
+        /// <summary>Cuộn khi dòng ngoài viewport hoặc sát đáy panel; lề dưới ~2 dòng cho dễ nhìn.</summary>
+        private bool ApplyTreeViewScrollToItem(TreeViewItem item)
+        {
+            ScrollViewer scroll = GetTreeViewScrollViewer();
+            if (item == null || scroll == null || scroll.ViewportHeight <= 0)
+            {
+                return false;
+            }
+
+            const double marginTop = 12;
+
+            try
+            {
+                double itemHeight = item.ActualHeight > 0 ? item.ActualHeight : item.DesiredSize.Height;
+                if (itemHeight <= 0)
+                {
+                    itemHeight = 24;
+                }
+
+                // MinHeight 22 + font 16 trên TreeView — thêm ~2 dòng trống phía dưới dòng chọn
+                double treeLineHeight = Math.Max(itemHeight, 22);
+                double marginBottom = marginTop + treeLineHeight * 2;
+
+                ScrollContentPresenter content = GetTreeScrollContentPresenter();
+                if (content != null)
+                {
+                    GeneralTransform toContent = item.TransformToAncestor(content);
+                    if (toContent != null)
+                    {
+                        double itemTopContent = toContent.Transform(new Point(0, 0)).Y;
+                        double itemBottomContent = itemTopContent + itemHeight;
+                        double viewTop = scroll.VerticalOffset;
+                        double viewBottom = viewTop + scroll.ViewportHeight;
+
+                        if (itemTopContent >= viewTop + marginTop
+                            && itemBottomContent <= viewBottom - marginBottom)
+                        {
+                            return true;
+                        }
+
+                        if (itemTopContent < viewTop + marginTop)
+                        {
+                            scroll.ScrollToVerticalOffset(Math.Max(0, itemTopContent - marginTop));
+                        }
+                        else
+                        {
+                            scroll.ScrollToVerticalOffset(
+                                Math.Max(0, itemBottomContent - scroll.ViewportHeight + marginBottom));
+                        }
+
+                        return true;
+                    }
+                }
+
+                GeneralTransform toScroll = item.TransformToAncestor(scroll);
+                if (toScroll == null)
+                {
+                    return false;
+                }
+
+                double yInViewport = toScroll.Transform(new Point(0, 0)).Y;
+                double viewport = scroll.ViewportHeight;
+                if (yInViewport >= marginTop && yInViewport + itemHeight <= viewport - marginBottom)
+                {
+                    return true;
+                }
+
+                if (yInViewport < marginTop)
+                {
+                    scroll.ScrollToVerticalOffset(Math.Max(0, scroll.VerticalOffset + yInViewport - marginTop));
+                }
+                else
+                {
+                    scroll.ScrollToVerticalOffset(
+                        scroll.VerticalOffset + yInViewport + itemHeight - viewport + marginBottom);
+                }
+
+                return true;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
         }
 
         private void ClearSelectionOverlay()
@@ -5050,6 +5483,7 @@ namespace vietnamgiapha
             this.Title = this.Title + " - " + ver;
             this.viewModel = new MainWindowViewModel(DialogCoordinator.Instance, this);
             this.DataContext = this.viewModel;
+            BindFamilyTreeSearchScroll();
             ResetPhaDoRenderScopes(viewModel?.FamilyTree?.Family?.RootPerson);
             PersonGridView = CollectionViewSource.GetDefaultView(_personGridRows);
             PersonGridView.Filter = FilterPersonGridRow;
@@ -6143,6 +6577,118 @@ namespace vietnamgiapha
             UpdatePhaDoSelectedBoxSizeStatus(0);
         }
 
+        private PhaDoRenderScopeItem GetSelectedPhaDoScope()
+        {
+            return phaDoSubtreeListBox?.SelectedItem as PhaDoRenderScopeItem;
+        }
+
+        /// <summary>
+        /// Render phả con đa gốc: tạo 1 FamilyInfo ảo làm cha,
+        /// clone toàn bộ cây từng nhánh non-STOP rồi gắn làm con của gia đình ảo đó,
+        /// sau đó layout bình thường từ gốc ảo.
+        /// </summary>
+        private async Task<GiaPhaRenderResult> BuildMultiRootVerticalLayout(
+            PhaDoRenderScopeItem scope,
+            GiaPhaRenderOptions options)
+        {
+            var fileRoot = viewModel?.FamilyTree?.Family?.RootPerson;
+            if (scope?.MultiRootFamilyIds == null || scope.MultiRootFamilyIds.Count == 0 || fileRoot == null)
+            {
+                return null;
+            }
+
+            // Resolve từng FamilyId sang FamilyViewModel trên cây file.
+            var branches = new List<FamilyViewModel>();
+            foreach (int id in scope.MultiRootFamilyIds)
+            {
+                var vm = FindFamilyById(fileRoot, id);
+                if (vm != null)
+                {
+                    branches.Add(vm);
+                }
+            }
+
+            if (branches.Count == 0)
+            {
+                return null;
+            }
+
+            // Tạo FamilyInfo ảo làm cha; FamilyLevel = level nhánh - 1 để cây layout đúng đời.
+            int childLevel = branches[0].familyInfo?.FamilyLevel ?? 1;
+            var virtualInfo = new FamilyInfo
+            {
+                FamilyId = -1,
+                FamilyLevel = Math.Max(1, childLevel - 1)
+                // Không có person → box hiển thị trống (nhỏ gọn trong renderer)
+            };
+
+            // Clone toàn bộ FamilyInfo của từng nhánh; đánh dấu FamilyUp = -1 để renderer nhận ra branch-head.
+            foreach (var branch in branches)
+            {
+                var cloned = CloneFamilyInfoSubtree(branch, markAsBranchHead: true);
+                if (cloned != null)
+                {
+                    virtualInfo.FamilyChildren.Add(cloned);
+                }
+            }
+
+            // Truyền nhãn scope vào options để box ảo hiển thị đúng thông tin.
+            options.MultiRootScopeLabel = scope.RenderPlanSummary ?? scope.Label ?? "Phả con đa gốc";
+
+            // FamilyViewModel tự dựng toàn bộ cây con từ FamilyInfo.FamilyChildren.
+            var virtualRoot = new FamilyViewModel(virtualInfo, null, viewModel.FamilyTree);
+
+            return await GiaPhaRenderService
+                .ComputeLayoutAsync(virtualRoot, options)
+                .ConfigureAwait(true);
+        }
+
+        /// <summary>Clone toàn bộ FamilyInfo và cây con — không cắt đời, không chia sẻ reference với cây gốc.</summary>
+        /// <param name="markAsBranchHead">True khi đây là gốc trực tiếp của gia đình ảo — đặt FamilyUp=-1 làm marker renderer.</param>
+        private static FamilyInfo CloneFamilyInfoSubtree(FamilyViewModel src, bool markAsBranchHead = false)
+        {
+            if (src?.familyInfo == null)
+            {
+                return null;
+            }
+
+            var srcInfo = src.familyInfo;
+            var clone = new FamilyInfo
+            {
+                FamilyId = srcInfo.FamilyId,
+                // FamilyUp = -1 là sentinel: renderer nhận ra đây là gốc nhánh non-STOP trực tiếp.
+                FamilyUp = markAsBranchHead ? -1 : srcInfo.FamilyUp,
+                FamilyOrder = srcInfo.FamilyOrder,
+                FamilyLevel = srcInfo.FamilyLevel,
+                FamilyNew = srcInfo.FamilyNew,
+                X = srcInfo.X,
+                Y = srcInfo.Y,
+                Width = srcInfo.Width,
+                Height = srcInfo.Height,
+                PhaDoShapeSvgId = srcInfo.PhaDoShapeSvgId
+            };
+
+            if (srcInfo.ListPerson != null)
+            {
+                clone.ListPerson = new ObservableCollection<PersonInfo>(srcInfo.ListPerson);
+            }
+
+            // Đệ quy clone con cháu từ Children của ViewModel (đã dựng sẵn, không dùng FamilyInfo.FamilyChildren trực tiếp).
+            if (src.Children != null)
+            {
+                foreach (var child in src.Children)
+                {
+                    var childClone = CloneFamilyInfoSubtree(child);
+                    if (childClone != null)
+                    {
+                        clone.FamilyChildren.Add(childClone);
+                    }
+                }
+            }
+
+            return clone;
+        }
+
         private void CapturePhaDoBaseLayout(GiaPhaRenderResult autoLayout)
         {
             _phaDoBaseXmmByFamilyId.Clear();
@@ -6454,391 +7000,6 @@ namespace vietnamgiapha
             }
         }
 
-        public async Task<GiaphaInfo> LoadGiaPhaFromMessagePackWithProgressAsync(
-            string filePath,
-            string title = "Đang mở file MessagePack...",
-            string message = "Đang đọc dữ liệu MessagePack...\n\nĐã chờ: 0 giây",
-            Func<GiaphaInfo, Task> afterLoadAsync = null)
-        {
-            if (string.IsNullOrWhiteSpace(filePath))
-            {
-                return null;
-            }
-
-            var progress = await this.ShowProgressAsync(title, message).ConfigureAwait(true);
-            progress.SetIndeterminate();
-
-            var sw = Stopwatch.StartNew();
-            DispatcherTimer timer = null;
-            string phaseText = "Đang đọc dữ liệu MessagePack...";
-            try
-            {
-                timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-                timer.Tick += (_, __) =>
-                {
-                    progress.SetMessage(phaseText + "\n\nĐã chờ: "
-                        + (int)sw.Elapsed.TotalSeconds + " giây");
-                };
-                timer.Start();
-
-                // File .msgpack đang đóng gói chuỗi JSON hiện tại để giảm thời gian parse text trực tiếp từ disk.
-                var gp = await Task.Run(() =>
-                {
-                    byte[] bytes = File.ReadAllBytes(filePath);
-                    // Ưu tiên đọc object MessagePack thật; vẫn fallback file cũ đang lưu dạng string JSON.
-                    try
-                    {
-                        var payload = MessagePackSerializer.Deserialize<MsgPackGiaPhaPayload>(bytes, MsgPackOptions);
-                        if (payload?.FamilyRoot != null)
-                        {
-                            return ConvertFromMsgPackPayload(payload);
-                        }
-                    }
-                    catch
-                    {
-                        // Fallback file msgpack thế hệ đầu (lưu chuỗi json).
-                    }
-
-                    string json = MessagePackSerializer.Deserialize<string>(bytes, MsgPackOptions);
-                    string jsonString = "{\"code\":0,\"msg\":\" \", \"data\":" + json + "}";
-                    JsonObject jsonObject = (JsonObject)JsonObject.Parse(jsonString);
-                    return Database.ParseJsonGiaPha(jsonObject);
-                }).ConfigureAwait(true);
-
-                if (gp != null && afterLoadAsync != null)
-                {
-                    phaseText = "Đang dựng dữ liệu gia phả...";
-                    progress.SetMessage(phaseText + "\n\nĐã chờ: " + (int)sw.Elapsed.TotalSeconds + " giây");
-                    await afterLoadAsync(gp).ConfigureAwait(true);
-                }
-
-                return gp;
-            }
-            finally
-            {
-                timer?.Stop();
-                sw.Stop();
-                try
-                {
-                    await progress.CloseAsync().ConfigureAwait(true);
-                }
-                catch
-                {
-                    // dialog có thể đã đóng
-                }
-            }
-        }
-
-        public sealed class MsgPackGiaPhaPayload
-        {
-            public int GiaphaId { get; set; }
-            public string Username { get; set; }
-            public string Password { get; set; }
-            public string GiaphaName { get; set; }
-            public string GiaphaNameRoot { get; set; }
-            public string PhaKy { get; set; }
-            public string Tocuoc { get; set; }
-            public string ThuyTo { get; set; }
-            public string HuongHoa { get; set; }
-            public string RF_OTAI { get; set; }
-            public string RF_DAYS { get; set; }
-            public string RF_CHANNGON { get; set; }
-            public MsgPackFamilyPayload FamilyRoot { get; set; }
-            public Dictionary<string, PhaDoSvgShape> SvgShapesById { get; set; }
-        }
-
-        public sealed class MsgPackFamilyPayload
-        {
-            public int FamilyId { get; set; }
-            public int FamilyUp { get; set; }
-            public int FamilyOrder { get; set; }
-            public int FamilyLevel { get; set; }
-            public int FamilyNew { get; set; }
-            public int X { get; set; }
-            public int Y { get; set; }
-            public int Width { get; set; }
-            public int Height { get; set; }
-            public string PhaDoShapeSvgId { get; set; }
-            public List<MsgPackPersonPayload> Persons { get; set; }
-            public List<MsgPackFamilyPayload> Children { get; set; }
-        }
-
-        public sealed class MsgPackPersonPayload
-        {
-            public int IsMainPerson { get; set; }
-            public string MANS_NAME_HUY { get; set; }
-            public string MANS_NAME_TU { get; set; }
-            public string MANS_NAME_THUONG { get; set; }
-            public string MANS_NAME_THUY { get; set; }
-            public string MANS_ID { get; set; }
-            public string fid { get; set; }
-            public string MANS_GENDER { get; set; }
-            public string MANS_DOB { get; set; }
-            public string MANS_DOD { get; set; }
-            public string MANS_WOD { get; set; }
-            public string MANS_DETAIL { get; set; }
-            public string MANS_CONTHUMAY { get; set; }
-        }
-
-        /// <summary>
-        /// Chuẩn hóa object runtime sang payload thuần dữ liệu để MessagePack không dính vòng tham chiếu UI.
-        /// </summary>
-        private static MsgPackGiaPhaPayload ConvertToMsgPackPayload(GiaphaInfo source)
-        {
-            if (source == null)
-            {
-                return null;
-            }
-
-            MsgPackFamilyPayload MapFamily(FamilyInfo family)
-            {
-                if (family == null)
-                {
-                    return null;
-                }
-
-                return new MsgPackFamilyPayload
-                {
-                    FamilyId = family.FamilyId,
-                    FamilyUp = family.FamilyUp,
-                    FamilyOrder = family.FamilyOrder,
-                    FamilyLevel = family.FamilyLevel,
-                    FamilyNew = family.FamilyNew,
-                    X = family.X,
-                    Y = family.Y,
-                    Width = family.Width,
-                    Height = family.Height,
-                    PhaDoShapeSvgId = family.PhaDoShapeSvgId,
-                    Persons = family.ListPerson?
-                        .Select(p => new MsgPackPersonPayload
-                        {
-                            IsMainPerson = p?.IsMainPerson ?? 0,
-                            MANS_NAME_HUY = p?.MANS_NAME_HUY ?? "",
-                            MANS_NAME_TU = p?.MANS_NAME_TU ?? "",
-                            MANS_NAME_THUONG = p?.MANS_NAME_THUONG ?? "",
-                            MANS_NAME_THUY = p?.MANS_NAME_THUY ?? "",
-                            MANS_ID = p?.MANS_ID ?? "",
-                            fid = p?.fid ?? "",
-                            MANS_GENDER = p?.MANS_GENDER ?? "Nam",
-                            MANS_DOB = p?.MANS_DOB ?? "",
-                            MANS_DOD = p?.MANS_DOD ?? "",
-                            MANS_WOD = p?.MANS_WOD ?? "",
-                            MANS_DETAIL = p?.MANS_DETAIL ?? "",
-                            MANS_CONTHUMAY = p?.MANS_CONTHUMAY ?? ""
-                        })
-                        .ToList() ?? new List<MsgPackPersonPayload>(),
-                    Children = family.FamilyChildren?
-                        .Select(MapFamily)
-                        .Where(c => c != null)
-                        .ToList() ?? new List<MsgPackFamilyPayload>()
-                };
-            }
-
-            return new MsgPackGiaPhaPayload
-            {
-                GiaphaId = source.GiaphaId,
-                Username = source.Username ?? "",
-                Password = source.Password ?? "",
-                GiaphaName = source.GiaphaName ?? "",
-                GiaphaNameRoot = source.GiaphaNameRoot ?? "",
-                PhaKy = source.PhaKy ?? "",
-                Tocuoc = source.Tocuoc ?? "",
-                ThuyTo = source.ThuyTo ?? "",
-                HuongHoa = source.HuongHoa ?? "",
-                RF_OTAI = source.RF_OTAI ?? "",
-                RF_DAYS = source.RF_DAYS ?? "",
-                RF_CHANNGON = source.RF_CHANNGON ?? "",
-                FamilyRoot = MapFamily(source.familyRoot),
-                SvgShapesById = source.SvgShapesById != null
-                    ? new Dictionary<string, PhaDoSvgShape>(source.SvgShapesById, StringComparer.Ordinal)
-                    : new Dictionary<string, PhaDoSvgShape>(StringComparer.Ordinal)
-            };
-        }
-
-        /// <summary>
-        /// Dựng lại GiaphaInfo từ payload MessagePack và nối lại _familyInfo cho từng người.
-        /// </summary>
-        private static GiaphaInfo ConvertFromMsgPackPayload(MsgPackGiaPhaPayload payload)
-        {
-            if (payload == null)
-            {
-                return null;
-            }
-
-            FamilyInfo MapFamily(MsgPackFamilyPayload family)
-            {
-                if (family == null)
-                {
-                    return null;
-                }
-
-                var result = new FamilyInfo
-                {
-                    FamilyId = family.FamilyId,
-                    FamilyUp = family.FamilyUp,
-                    FamilyOrder = family.FamilyOrder,
-                    FamilyLevel = family.FamilyLevel,
-                    FamilyNew = family.FamilyNew,
-                    X = family.X,
-                    Y = family.Y,
-                    Width = family.Width,
-                    Height = family.Height,
-                    PhaDoShapeSvgId = family.PhaDoShapeSvgId
-                };
-
-                var stagedMain = new List<(PersonInfo person, int isMain)>();
-                foreach (var person in family.Persons ?? Enumerable.Empty<MsgPackPersonPayload>())
-                {
-                    var created = new PersonInfo(person?.MANS_NAME_HUY ?? "", result)
-                    {
-                        MANS_NAME_HUY = person?.MANS_NAME_HUY ?? "",
-                        MANS_NAME_TU = person?.MANS_NAME_TU ?? "",
-                        MANS_NAME_THUONG = person?.MANS_NAME_THUONG ?? "",
-                        MANS_NAME_THUY = person?.MANS_NAME_THUY ?? "",
-                        MANS_ID = person?.MANS_ID ?? "",
-                        fid = person?.fid ?? "",
-                        MANS_GENDER = string.IsNullOrWhiteSpace(person?.MANS_GENDER) ? "Nam" : person.MANS_GENDER,
-                        MANS_DOB = person?.MANS_DOB ?? "",
-                        MANS_DOD = person?.MANS_DOD ?? "",
-                        MANS_WOD = person?.MANS_WOD ?? "",
-                        MANS_DETAIL = person?.MANS_DETAIL ?? "",
-                        MANS_CONTHUMAY = person?.MANS_CONTHUMAY ?? ""
-                    };
-                    result.ListPerson.Add(created);
-                    stagedMain.Add((created, person?.IsMainPerson ?? 0));
-                }
-
-                // Chốt người chính sau khi đã add đủ danh sách để logic "chỉ 1 main" chạy ổn định.
-                foreach (var item in stagedMain)
-                {
-                    item.person.IsMainPerson = item.isMain == 1 ? 1 : 0;
-                }
-
-                foreach (var child in family.Children ?? Enumerable.Empty<MsgPackFamilyPayload>())
-                {
-                    var childMapped = MapFamily(child);
-                    if (childMapped != null)
-                    {
-                        result.FamilyChildren.Add(childMapped);
-                    }
-                }
-
-                return result;
-            }
-
-            var gp = new GiaphaInfo
-            {
-                GiaphaId = payload.GiaphaId,
-                Username = payload.Username ?? "",
-                Password = payload.Password ?? "",
-                GiaphaName = payload.GiaphaName ?? "",
-                GiaphaNameRoot = payload.GiaphaNameRoot ?? "",
-                PhaKy = payload.PhaKy ?? "",
-                Tocuoc = payload.Tocuoc ?? "",
-                ThuyTo = payload.ThuyTo ?? "",
-                HuongHoa = payload.HuongHoa ?? "",
-                RF_OTAI = payload.RF_OTAI ?? "",
-                RF_DAYS = payload.RF_DAYS ?? "",
-                RF_CHANNGON = payload.RF_CHANNGON ?? "",
-                familyRoot = MapFamily(payload.FamilyRoot) ?? new FamilyInfo(),
-                SvgShapesById = payload.SvgShapesById != null
-                    ? new Dictionary<string, PhaDoSvgShape>(payload.SvgShapesById, StringComparer.Ordinal)
-                    : new Dictionary<string, PhaDoSvgShape>(StringComparer.Ordinal)
-            };
-
-            return gp;
-        }
-
-        private void SaveAsMessagePack_Click(object sender, RoutedEventArgs e)
-        {
-            if (viewModel?.FamilyTree == null)
-            {
-                MessageBox.Show("Chưa có dữ liệu gia phả để lưu.", "MessagePack");
-                return;
-            }
-
-            try
-            {
-                var dialog = new SaveFileDialog
-                {
-                    DefaultExt = ".msgpack",
-                    Filter = "MessagePack files (*.msgpack)|*.msgpack|All files (*.*)|*.*"
-                };
-                if (dialog.ShowDialog() != true)
-                {
-                    return;
-                }
-
-                // Lưu object thật (không bọc JSON string) để giảm parse text lúc mở lại.
-                var payloadObj = ConvertToMsgPackPayload(viewModel.FamilyTree.GP);
-                byte[] payload = MessagePackSerializer.Serialize(payloadObj, MsgPackOptions);
-                File.WriteAllBytes(dialog.FileName, payload);
-
-                viewModel.AddUserAction("Đã lưu MessagePack: " + dialog.FileName);
-                MessageBox.Show(
-                    "Đã lưu MessagePack.\n\nFile: " + dialog.FileName
-                    + "\nKích thước: " + payload.Length.ToString("#,##0") + " bytes",
-                    "MessagePack");
-            }
-            catch (Exception ex)
-            {
-                log.Error("Lỗi lưu MessagePack.", ex);
-                string detail = ex.InnerException != null ? ("\nChi tiết: " + ex.InnerException.Message) : "";
-                MessageBox.Show("Lỗi lưu MessagePack: " + ex.Message + detail, "Có Lỗi");
-            }
-        }
-
-        private async void OpenMessagePack_Click(object sender, RoutedEventArgs e)
-        {
-            var dialog = new OpenFileDialog
-            {
-                DefaultExt = ".msgpack",
-                Filter = "MessagePack files (*.msgpack)|*.msgpack|All files (*.*)|*.*"
-            };
-            if (dialog.ShowDialog() != true)
-            {
-                return;
-            }
-
-            try
-            {
-                GiaphaInfo loadedGiaPha = null;
-                GiaphaInfo gp = await LoadGiaPhaFromMessagePackWithProgressAsync(
-                    dialog.FileName,
-                    "Đang mở file MessagePack...",
-                    "Đang đọc dữ liệu MessagePack...\n\nĐã chờ: 0 giây",
-                    async loaded =>
-                    {
-                        // Không giữ đuôi .msgpack làm file save mặc định vì luồng Save hiện tại ghi JSON.
-                        loaded.FileName = Path.ChangeExtension(dialog.FileName, ".json");
-                        loadedGiaPha = loaded;
-                        await viewModel.UpdateGiaPhaAsync(loaded, saveToJson: false).ConfigureAwait(true);
-                    }).ConfigureAwait(true);
-
-                if (gp != null)
-                {
-                    if (loadedGiaPha == null)
-                    {
-                        gp.FileName = Path.ChangeExtension(dialog.FileName, ".json");
-                        await viewModel.UpdateGiaPhaAsync(gp, saveToJson: false).ConfigureAwait(true);
-                    }
-
-                    log.Info("OpenMessagePack_Click: Mở file xong: " + dialog.FileName);
-                    viewModel.AddUserAction("Đã mở MessagePack: " + dialog.FileName);
-                }
-                else
-                {
-                    MessageBox.Show("Lỗi mở file MessagePack: " + dialog.FileName, "Có Lỗi");
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Lỗi mở file MessagePack: " + ex.Message, "Có Lỗi");
-                log.Error("OpenMessagePack_Click: Lỗi file: " + dialog.FileName);
-                log.Error(ex);
-            }
-        }
-
         private static void UpdatePhaDoRenderProgressMessage(
             ProgressDialogController progress,
             Stopwatch sw,
@@ -6877,6 +7038,20 @@ namespace vietnamgiapha
             {
                 await this.ShowMessageAsync("Phả con", "Chưa có dữ liệu gia phả để phân tích.").ConfigureAwait(true);
                 return;
+            }
+
+            // Đã phân tích lần trước → hỏi trước khi chạy lại (tốn thời gian).
+            if (_phaDoRenderScopesFromAnalyze && _phaDoRenderScopes.Count > 1)
+            {
+                var answer = MessageBox.Show(
+                    "Phả con đã được phân tích trước đó.\n\nChạy lại phân tích sẽ tính toán lại toàn bộ.\nBạn có muốn tiếp tục không?",
+                    "Xác nhận phân tích lại",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question);
+                if (answer != MessageBoxResult.Yes)
+                {
+                    return;
+                }
             }
 
             var progress = await this.ShowProgressAsync(
@@ -6965,7 +7140,11 @@ namespace vietnamgiapha
                 sw.Stop();
                 try { await progress.CloseAsync().ConfigureAwait(true); } catch { }
 
-                dlg.ShowDialog();
+                // Đóng dialog phân tích cũ nếu còn mở (phân tích lại).
+                try { _phaDoAnalysisDialog?.Close(); } catch { }
+                _phaDoAnalysisDialog = dlg;
+                // Modeless: user có thể đối chiếu với phả đồ chính trong khi dialog vẫn mở.
+                dlg.Show();
             }
             catch (Exception ex)
             {
@@ -7615,6 +7794,21 @@ namespace vietnamgiapha
                 idx++;
             }
 
+            // Tóm tắt nhóm non-STOP → phả con đa gốc (multi-root).
+            if (extendRoots.Count > 0)
+            {
+                var groups = GroupNonStopBranchesByThreshold(extendRoots, minBranchToSplitDeep);
+                sb.AppendLine("    → Nhánh nối dài gom thành " + groups.Count + " nhóm phả con đa gốc (~"
+                    + minBranchToSplitDeep + " GD/nhóm):");
+                for (int g = 0; g < groups.Count; g++)
+                {
+                    var grp = groups[g];
+                    int grpGd = grp.Sum(CountSubtreeFamilies);
+                    sb.AppendLine("       Nhóm " + (g + 1) + "/" + groups.Count + ": "
+                        + grp.Count + " nhánh, ≈" + grpGd + " GD");
+                }
+            }
+
             int totalLayout = CountLayoutFamiliesWithPhaConStopRules(
                 scope.RootFamily,
                 stopLevel,
@@ -7666,6 +7860,47 @@ namespace vietnamgiapha
                 MaxXmm = maxXmm,
                 MaxYmm = maxYmm
             };
+        }
+
+        /// <summary>
+        /// Gom các nhánh non-STOP tại stopLevel thành nhóm, mỗi nhóm tổng GD ≤ threshold (≥ threshold khi thêm nhánh tiếp).
+        /// Duyệt theo thứ tự cây (tree order) để các nhóm liên tục địa lý.
+        /// </summary>
+        private static List<List<FamilyViewModel>> GroupNonStopBranchesByThreshold(
+            IEnumerable<FamilyViewModel> nonStopBranches,
+            int threshold)
+        {
+            var groups = new List<List<FamilyViewModel>>();
+            var current = new List<FamilyViewModel>();
+            int currentSum = 0;
+
+            foreach (var branch in nonStopBranches)
+            {
+                if (branch == null)
+                {
+                    continue;
+                }
+
+                int gdCount = CountSubtreeFamilies(branch);
+
+                // Nếu thêm vào sẽ vượt ngưỡng VÀ nhóm hiện tại không rỗng → kết nhóm, bắt đầu nhóm mới
+                if (currentSum + gdCount > threshold && current.Count > 0)
+                {
+                    groups.Add(current);
+                    current = new List<FamilyViewModel>();
+                    currentSum = 0;
+                }
+
+                current.Add(branch);
+                currentSum += gdCount;
+            }
+
+            if (current.Count > 0)
+            {
+                groups.Add(current);
+            }
+
+            return groups;
         }
 
         private static List<FamilyViewModel> CollectRootsAtLevelFromBase(
@@ -7984,20 +8219,83 @@ namespace vietnamgiapha
                     return true;
                 }
 
-                // Cấp 1: chỉ tách box riêng cho nhánh đủ lớn; nhánh nhỏ coi như gộp vào phả cha.
+                // Helper: tạo ô tổng hợp non-STOP và thêm vào map.SubTrees.
+                void AddNonStopSummary(
+                    IEnumerable<FamilyViewModel> nonStopList,
+                    int level,
+                    int parentFamilyId,
+                    int summaryIdSeed)
+                {
+                    var ns = new List<FamilyViewModel>(nonStopList ?? Enumerable.Empty<FamilyViewModel>());
+                    if (ns.Count == 0) { return; }
+
+                    double nsMinX = double.MaxValue, nsMinY = double.MaxValue;
+                    double nsMaxX = double.MinValue, nsMaxY = double.MinValue;
+                    int nsTotal = 0;
+                    string firstName = null;
+
+                    foreach (var r in ns)
+                    {
+                        if (TryGetSubtreeBoundsMm(
+                            result, r, subtreeMaxGeneration,
+                            out double minX, out double minY, out double maxX, out double maxY, out int cnt))
+                        {
+                            if (minX < nsMinX) { nsMinX = minX; }
+                            if (minY < nsMinY) { nsMinY = minY; }
+                            if (maxX > nsMaxX) { nsMaxX = maxX; }
+                            if (maxY > nsMaxY) { nsMaxY = maxY; }
+                            nsTotal += cnt;
+                        }
+
+                        if (firstName == null)
+                        {
+                            firstName = GetFamilyMainPersonName(r);
+                        }
+                    }
+
+                    if (nsTotal <= 0) { return; }
+
+                    map.SubTrees.Add(new PhaDoSubtreeBranchBlock
+                    {
+                        // ID âm → phân biệt với STOP block thật; unique theo seed.
+                        FamilyId = -(Math.Abs(summaryIdSeed) + 1),
+                        FamilyName = ns.Count + " nhánh non-STOP",
+                        MainPersonName = (firstName ?? "?") + (ns.Count > 1 ? " …" : ""),
+                        Generation = level,
+                        NodeCount = nsTotal,
+                        IsStop = false,
+                        NonStopGroupCount = ns.Count,
+                        SummaryParentId = parentFamilyId,
+                        MinXmm = nsMinX < double.MaxValue ? nsMinX : 0,
+                        MinYmm = nsMinY < double.MaxValue ? nsMinY : 0,
+                        MaxXmm = nsMaxX > double.MinValue ? nsMaxX : 10,
+                        MaxYmm = nsMaxY > double.MinValue ? nsMaxY : 10
+                    });
+                }
+
+                // Cấp 1: nhánh STOP tách riêng, nhánh non-STOP gộp 1 ô summary.
                 var currentLevelRoots = new List<FamilyViewModel>();
+                var nonStopRoot1 = new List<FamilyViewModel>();
                 foreach (var r in splitRoots)
                 {
                     if (splitMetrics.SubtreeSize(r) < minBranchToSplitDeep)
                     {
+                        nonStopRoot1.Add(r);
                         continue;
                     }
 
                     if (TryAddBranch(r, out int _))
                     {
+                        // Đánh dấu STOP cho block vừa thêm.
+                        var added = map.SubTrees.LastOrDefault(b => b.FamilyId == (r.familyInfo?.FamilyId ?? 0));
+                        if (added != null) { added.IsStop = true; }
                         currentLevelRoots.Add(r);
                     }
                 }
+
+                // Thêm ô tổng hợp non-STOP tại root1.
+                int rootParentId = map.RootBlock?.FamilyId ?? 0;
+                AddNonStopSummary(nonStopRoot1, splitLevel, rootParentId, splitLevel);
 
                 // Chỉ nhánh có đoạn đủ dài mới mở rộng cấp sau (cùng logic report).
                 var baseRootsForNext = currentLevelRoots
@@ -8006,22 +8304,40 @@ namespace vietnamgiapha
 
                 while (baseRootsForNext.Count > 0)
                 {
-                    var eligibleRootsAtLevel = splitMetrics.CollectNextSplitRoots(baseRootsForNext);
-
-                    if (eligibleRootsAtLevel.Count == 0)
-                    {
-                        // Không còn nhánh tách ra nữa -> dừng, không vẽ thêm phả con.
-                        break;
-                    }
-
+                    // Root2+: với mỗi baseRoot, lấy STOP + non-STOP tại level kế.
+                    var anyAdded = false;
                     var nextBase = new List<FamilyViewModel>();
-                    foreach (var r in eligibleRootsAtLevel)
+
+                    foreach (var baseRoot in baseRootsForNext)
                     {
-                        if (TryAddBranch(r, out int _))
+                        if (!splitMetrics.TrySelectNextSplitLevel(
+                            baseRoot, out int nextLevel, out var eligibleAtLevel, out _))
                         {
-                            nextBase.Add(r);
+                            continue;
                         }
+
+                        // STOP branches tại nextLevel.
+                        foreach (var r in eligibleAtLevel)
+                        {
+                            if (TryAddBranch(r, out int _))
+                            {
+                                var added = map.SubTrees.LastOrDefault(b => b.FamilyId == (r.familyInfo?.FamilyId ?? 0));
+                                if (added != null) { added.IsStop = true; }
+                                nextBase.Add(r);
+                                anyAdded = true;
+                            }
+                        }
+
+                        // Non-STOP branches tại nextLevel dưới baseRoot này.
+                        var allAtNext = CollectRootsAtLevelFromBase(new[] { baseRoot }, nextLevel);
+                        var nonStopAtNext = allAtNext
+                            .Where(r => splitMetrics.SubtreeSize(r) < minBranchToSplitDeep)
+                            .ToList();
+                        int nsIdSeed = (baseRoot.familyInfo?.FamilyId ?? 0) * 100 + nextLevel;
+                        AddNonStopSummary(nonStopAtNext, nextLevel, baseRoot.familyInfo?.FamilyId ?? 0, nsIdSeed);
                     }
+
+                    if (!anyAdded) { break; }
 
                     baseRootsForNext = nextBase
                         .Where(splitMetrics.CanContinueSplit)
@@ -8029,16 +8345,12 @@ namespace vietnamgiapha
                 }
             }
 
+            // Sắp xếp theo đời tăng dần rồi MinXmm để giữ thứ tự không gian.
             map.SubTrees.Sort((a, b) =>
             {
-                int w = b.WidthCm.CompareTo(a.WidthCm);
-                if (w != 0)
-                {
-                    return w;
-                }
-
-                int c = b.NodeCount.CompareTo(a.NodeCount);
-                return c != 0 ? c : a.FamilyId.CompareTo(b.FamilyId);
+                int g = a.Generation.CompareTo(b.Generation);
+                if (g != 0) { return g; }
+                return a.MinXmm.CompareTo(b.MinXmm);
             });
 
             return map;
@@ -8873,6 +9185,28 @@ namespace vietnamgiapha
                                 : " (" + scope.HighlightStartLabel + ")"));
                     }
 
+                    // Nếu là combo multi-root: in danh sách nhánh kèm tên gia đình.
+                    if (scope.IsMultiRootVerticalStack && scope.MultiRootFamilyIds != null)
+                    {
+                        sb.AppendLine("    → Phả con đa gốc: " + scope.MultiRootFamilyIds.Count
+                            + " nhánh xếp dọc độc lập (nhóm "
+                            + scope.MultiRootGroupIndex + "/" + scope.MultiRootGroupTotal + "):");
+                        if (scope.MultiRootBranchLabels != null && scope.MultiRootBranchLabels.Count > 0)
+                        {
+                            foreach (string lbl in scope.MultiRootBranchLabels)
+                            {
+                                sb.AppendLine("       · " + lbl);
+                            }
+                        }
+                        else
+                        {
+                            foreach (int rid in scope.MultiRootFamilyIds)
+                            {
+                                sb.AppendLine("       · ID " + rid);
+                            }
+                        }
+                    }
+
                     AppendScopeStopLevelBreakdown(sb, scope, minBranchToSplitDeep);
                 }
 
@@ -8920,40 +9254,64 @@ namespace vietnamgiapha
                 return null;
             }
 
-            // Toàn phả: layout cả file. Phả con: luôn gốc = RootFamily đã chọn (Root0 hoặc nhánh Root1…).
-            FamilyViewModel scopedRoot;
-            bool renderWholeFileTree = maxGenerationInclusive == int.MaxValue
-                && (rootOverride == null
-                    || fileRoot == null
-                    || ReferenceEquals(rootOverride, fileRoot));
-            if (renderWholeFileTree)
-            {
-                scopedRoot = fileRoot ?? root;
-            }
-            else if (maxGenerationInclusive == int.MaxValue)
-            {
-                // Nhánh lá (không tách Root kế): layout full subtree đã chọn, không clone.
-                scopedRoot = root;
-            }
-            else
-            {
-                // Root0→Root1 / Root1→Root2: clone từ RootFamily (gốc scope), tại đời Root kế STOP hoặc nối dài — rồi ComputeLayoutAsync.
-                scopedRoot = BuildScopedRenderRoot(root, maxGenerationInclusive) ?? root;
-            }
-
             var options = BuildPhaDoRenderOptions();
             options.GetFamilyBoxNotes = BuildFamilyBoxExtraNotes;
             _phaDoCurrentOptions = options;
 
-            var baseResult = await GiaPhaRenderService.ComputeLayoutAsync(scopedRoot, options).ConfigureAwait(true);
-            CapturePhaDoBaseLayout(baseResult);
+            // Toàn phả: layout cả file. Phả con: luôn gốc = RootFamily đã chọn (Root0 hoặc nhánh Root1…).
+            GiaPhaRenderResult baseResult;
+            FamilyViewModel scopedRoot;
+
+            var selectedScope = GetSelectedPhaDoScope();
+            if (selectedScope?.IsMultiRootVerticalStack == true)
+            {
+                // Multi-root vertical stack: layout từng nhánh độc lập rồi xếp dọc.
+                baseResult = await BuildMultiRootVerticalLayout(selectedScope, options).ConfigureAwait(true);
+                CapturePhaDoBaseLayout(baseResult);
+            }
+            else if (selectedScope?.IsPhaConMap == true)
+            {
+                // Bản đồ phả con: root0→root1 (non-STOP mở rộng tới lá; STOP tiếp tục xuống root2)→root2 STOP dừng.
+                var mapRoot = BuildMapScopedRenderRoot(
+                    root,
+                    selectedScope.PhaConMapRoot1SplitLevel,
+                    selectedScope.PhaConMapRoot1StopIds ?? new HashSet<int>(),
+                    selectedScope.MaxGenerationInclusive,
+                    selectedScope.PhaConMapDeepStopIds ?? new HashSet<int>());
+                baseResult = await GiaPhaRenderService.ComputeLayoutAsync(mapRoot ?? root, options).ConfigureAwait(true);
+                CapturePhaDoBaseLayout(baseResult);
+            }
+            else
+            {
+                bool renderWholeFileTree = maxGenerationInclusive == int.MaxValue
+                    && (rootOverride == null
+                        || fileRoot == null
+                        || ReferenceEquals(rootOverride, fileRoot));
+                if (renderWholeFileTree)
+                {
+                    scopedRoot = fileRoot ?? root;
+                }
+                else if (maxGenerationInclusive == int.MaxValue)
+                {
+                    // Nhánh lá (không tách Root kế): layout full subtree đã chọn, không clone.
+                    scopedRoot = root;
+                }
+                else
+                {
+                    // Root0→Root1 / Root1→Root2: clone từ RootFamily (gốc scope), tại đời Root kế STOP hoặc nối dài.
+                    scopedRoot = BuildScopedRenderRoot(root, maxGenerationInclusive) ?? root;
+                }
+
+                baseResult = await GiaPhaRenderService.ComputeLayoutAsync(scopedRoot, options).ConfigureAwait(true);
+                CapturePhaDoBaseLayout(baseResult);
+            }
 
             GiaPhaRenderResult result = GiaPhaManualLayoutService.ApplyManualOffsets(
                 baseResult,
                 _phaDoOffsetXmmByFamilyId,
                 _phaDoOffsetYmmByFamilyId);
             ApplyCustomBoxSizesFromStyles(result);
-            // Nhánh nhỏ nối dài tới lá — không trim theo max đời; STOP đã cắt lúc clone.
+            // Clone đã cắt tại splitLevel (cả STOP lẫn non-STOP) → trim chỉ cần khi không qua BuildScopedRenderRoot.
             if (!(_phaDoScopeExpandSmallBranchesAtStopLevel && maxGenerationInclusive < int.MaxValue)
                 && maxGenerationInclusive > 0
                 && maxGenerationInclusive != int.MaxValue)
@@ -9123,12 +9481,6 @@ namespace vietnamgiapha
             double t = Math.Max(0, Math.Min(1.0, (panelWidth - 140) / 160.0));
             searchTextBox.FontSize = Math.Round(10 + 6 * t, 1);
         }
-        private void TreeViewItem_RequestBringIntoView(object sender, RequestBringIntoViewEventArgs e)
-        {
-            // Không tự cuộn cây khi click/chọn — giữ vị trí scroll người dùng đang xem
-            e.Handled = true;
-        }
-
         private void TreeViewItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             if (e.ChangedButton != MouseButton.Left)
@@ -9422,7 +9774,7 @@ namespace vietnamgiapha
             Dispatcher.BeginInvoke(
                 new Action(() =>
                 {
-                    ScrollTreeViewToFamily(family);
+                    ScrollTreeViewToFamily(family, 0);
                     family.BeginTreeLabelEdit();
                     FocusTreeFamilyEditTextBox(family);
                 }),
@@ -9620,14 +9972,24 @@ namespace vietnamgiapha
 
         private void OnSelected(object sender, RoutedEventArgs e)
         {
-            TreeViewItem tvi = ((TreeViewItem)sender);
-            FamilyViewModel personModel = (FamilyViewModel)tvi.DataContext;
+            var tvi = sender as TreeViewItem;
+            var personModel = tvi?.DataContext as FamilyViewModel;
+            if (personModel == null || viewModel?.FamilyTree?.Family == null)
+            {
+                return;
+            }
+
             viewModel.FamilyTree.Family.SelectedFamily = personModel;
             log.Info("Chọn trên cây: " + viewModel.FamilyTree.Family.SelectedFamily.Name);
             if (tabControl.SelectedIndex != 1)
             {
                 tabControl.SelectedIndex = 1;
             }
+
+            // Click trên cây: không auto-cuộn — tránh nhảy scroll mất focus dòng vừa bấm.
+            // Cuộn chỉ khi chọn từ Phả đồ / tìm kiếm (SelectFamilyInTreeView, RequestScrollToFamilyInTree).
+            tvi?.Focus();
+
             e.Handled = true;
         }
 
@@ -10172,6 +10534,7 @@ namespace vietnamgiapha
                 return;
             }
 
+            // Nếu đã vẽ ít nhất 1 lần → xác nhận trước khi vẽ lại.
             try
             {
                 // Đổi file hoặc list scope lệch (còn Root0 cũ trước phân tích) → reset chỉ còn Toàn phả.
@@ -10400,21 +10763,28 @@ namespace vietnamgiapha
                 }
             }
 
+            // Node bắt đầu phả con mới (scope stop) → ghi rõ nhãn + GD count.
+            bool isScopeStop = _phaDoScopeStopFamilyIdsAtMaxLevel != null
+                && _phaDoScopeStopFamilyIdsAtMaxLevel.Count > 0
+                && _phaDoScopeStopFamilyIdsAtMaxLevel.Contains(familyId);
+            if (isScopeStop)
+            {
+                var fullFamily2 = FindFamilyById(fullRoot, familyId);
+                int gdCount = fullFamily2 != null ? CountSubtreeFamilies(fullFamily2) : 0;
+                string gdPart = gdCount > 0 ? " — " + gdCount + " GD" : "";
+                notes.Add("★ Bắt đầu phả con" + gdPart);
+            }
+
             if (_phaConFamilyIds.Contains(familyId)
                 && _phaConBoundsCmByFamilyId.TryGetValue(familyId, out var subSize))
             {
-                notes.Add("phả con có kích thước: W=" + subSize.WidthCm.ToString("0.#")
-                    + " H=" + subSize.HeightCm.ToString("0.#") + " cm");
+                notes.Add("kích thước phả con: W=" + subSize.WidthCm.ToString("0.#")
+                    + "cm H=" + subSize.HeightCm.ToString("0.#") + " cm");
             }
 
             if (_phaConStopFamilyIds.Contains(familyId))
             {
-                notes.Add("(Nhánh nhỏ nên vẽ luôn trong phả con)");
-            }
-            else if (_phaConFamilyIds.Contains(familyId)
-                && !_phaConBoundsCmByFamilyId.ContainsKey(familyId))
-            {
-                notes.Add("Phả con tiếp theo");
+                notes.Add("(Nhánh nhỏ, vẽ tiếp trong phả con)");
             }
 
             return notes;
@@ -10554,6 +10924,209 @@ namespace vietnamgiapha
         /// Tại đời Root2 (splitGenerationLevel): đủ GD → STOP (2.1); không đủ → nối dài (2.2).
         /// Chỉ áp dụng khi family đang đứng đúng đời mốc tách.
         /// </summary>
+        /// <summary>
+        /// Clone cây cho "Bản đồ phả con" với logic 2 tầng:
+        /// <list type="bullet">
+        ///   <item>Trên / tại đời root1: clone bình thường đến root1.</item>
+        ///   <item>Tại đời root1 — nhánh non-STOP (&lt; ngưỡng): mở rộng tới hết lá.</item>
+        ///   <item>Tại đời root1 — nhánh STOP (≥ ngưỡng): tiếp tục xuống root2 (đến <paramref name="deepMaxLevel"/>).</item>
+        ///   <item>Trong nhánh STOP root1, gặp deepStopId hoặc vượt deepMaxLevel: dừng.</item>
+        ///   <item>Non-STOP tại root2: mở rộng tới hết lá.</item>
+        /// </list>
+        /// </summary>
+        private FamilyViewModel BuildMapScopedRenderRoot(
+            FamilyViewModel sourceRoot,
+            int root1SplitLevel,
+            HashSet<int> root1StopIds,
+            int deepMaxLevel,
+            HashSet<int> deepStopIds)
+        {
+            if (sourceRoot == null)
+            {
+                return sourceRoot;
+            }
+
+            // --- Helper: clone đầy đủ tới hết lá (không cắt) ---
+            FamilyInfo CloneFullSubtree(FamilyViewModel src)
+            {
+                if (src?.familyInfo == null)
+                {
+                    return null;
+                }
+
+                var srcInfo = src.familyInfo;
+                var clone = new FamilyInfo
+                {
+                    FamilyId = srcInfo.FamilyId,
+                    FamilyUp = srcInfo.FamilyUp,
+                    FamilyOrder = srcInfo.FamilyOrder,
+                    FamilyLevel = srcInfo.FamilyLevel,
+                    FamilyNew = srcInfo.FamilyNew,
+                    X = srcInfo.X, Y = srcInfo.Y,
+                    Width = srcInfo.Width, Height = srcInfo.Height,
+                    PhaDoShapeSvgId = srcInfo.PhaDoShapeSvgId
+                };
+
+                if (srcInfo.ListPerson != null)
+                {
+                    clone.ListPerson = new ObservableCollection<PersonInfo>(srcInfo.ListPerson);
+                }
+
+                if (src.Children != null)
+                {
+                    foreach (var child in src.Children)
+                    {
+                        var cc = CloneFullSubtree(child);
+                        if (cc != null)
+                        {
+                            clone.FamilyChildren.Add(cc);
+                        }
+                    }
+                }
+
+                return clone;
+            }
+
+            // --- Helper: clone trong nhánh STOP root1 xuống root2 rồi dừng ---
+            FamilyInfo CloneInsideStopBranch(FamilyViewModel src)
+            {
+                if (src?.familyInfo == null)
+                {
+                    return null;
+                }
+
+                var srcInfo = src.familyInfo;
+                var clone = new FamilyInfo
+                {
+                    FamilyId = srcInfo.FamilyId,
+                    FamilyUp = srcInfo.FamilyUp,
+                    FamilyOrder = srcInfo.FamilyOrder,
+                    FamilyLevel = srcInfo.FamilyLevel,
+                    FamilyNew = srcInfo.FamilyNew,
+                    X = srcInfo.X, Y = srcInfo.Y,
+                    Width = srcInfo.Width, Height = srcInfo.Height,
+                    PhaDoShapeSvgId = srcInfo.PhaDoShapeSvgId
+                };
+
+                if (srcInfo.ListPerson != null)
+                {
+                    clone.ListPerson = new ObservableCollection<PersonInfo>(srcInfo.ListPerson);
+                }
+
+                int level = srcInfo.FamilyLevel;
+                int id = srcInfo.FamilyId;
+
+                // Dừng tại root2 STOP ID hoặc vượt deepMaxLevel.
+                if ((id > 0 && deepStopIds.Count > 0 && deepStopIds.Contains(id))
+                    || level >= deepMaxLevel)
+                {
+                    return clone;
+                }
+
+                if (src.Children == null)
+                {
+                    return clone;
+                }
+
+                foreach (var child in src.Children)
+                {
+                    var cc = CloneInsideStopBranch(child);
+                    if (cc != null)
+                    {
+                        clone.FamilyChildren.Add(cc);
+                    }
+                }
+
+                return clone;
+            }
+
+            // --- Helper chính: clone từ root0 xuống đến root1 ---
+            FamilyInfo CloneBranch(FamilyViewModel src)
+            {
+                if (src?.familyInfo == null)
+                {
+                    return null;
+                }
+
+                var srcInfo = src.familyInfo;
+                var clone = new FamilyInfo
+                {
+                    FamilyId = srcInfo.FamilyId,
+                    FamilyUp = srcInfo.FamilyUp,
+                    FamilyOrder = srcInfo.FamilyOrder,
+                    FamilyLevel = srcInfo.FamilyLevel,
+                    FamilyNew = srcInfo.FamilyNew,
+                    X = srcInfo.X, Y = srcInfo.Y,
+                    Width = srcInfo.Width, Height = srcInfo.Height,
+                    PhaDoShapeSvgId = srcInfo.PhaDoShapeSvgId
+                };
+
+                if (srcInfo.ListPerson != null)
+                {
+                    clone.ListPerson = new ObservableCollection<PersonInfo>(srcInfo.ListPerson);
+                }
+
+                int level = srcInfo.FamilyLevel;
+                int id = srcInfo.FamilyId;
+
+                if (src.Children == null || src.Children.Count == 0)
+                {
+                    return clone;
+                }
+
+                if (level < root1SplitLevel)
+                {
+                    // Chưa đến root1: clone bình thường.
+                    foreach (var child in src.Children)
+                    {
+                        var cc = CloneBranch(child);
+                        if (cc != null)
+                        {
+                            clone.FamilyChildren.Add(cc);
+                        }
+                    }
+                    return clone;
+                }
+
+                // === Tại đời root1 ===
+                bool isStop = id > 0 && root1StopIds.Count > 0 && root1StopIds.Contains(id);
+                if (!isStop)
+                {
+                    // Non-STOP root1: mở rộng tới hết lá (nhỏ < ngưỡng, an toàn).
+                    foreach (var child in src.Children)
+                    {
+                        var cc = CloneFullSubtree(child);
+                        if (cc != null)
+                        {
+                            clone.FamilyChildren.Add(cc);
+                        }
+                    }
+                }
+                else
+                {
+                    // STOP root1: tiếp tục xuống root2, dừng tại root2 STOP.
+                    foreach (var child in src.Children)
+                    {
+                        var cc = CloneInsideStopBranch(child);
+                        if (cc != null)
+                        {
+                            clone.FamilyChildren.Add(cc);
+                        }
+                    }
+                }
+
+                return clone;
+            }
+
+            var rootInfo = CloneBranch(sourceRoot);
+            if (rootInfo == null)
+            {
+                return sourceRoot;
+            }
+
+            return new FamilyViewModel(rootInfo, null, viewModel.FamilyTree);
+        }
+
         private bool ShouldStopAtPhaConSplitBoundary(FamilyViewModel family, int splitGenerationLevel)
         {
             if (family?.familyInfo == null
@@ -10562,18 +11135,26 @@ namespace vietnamgiapha
                 return false;
             }
 
-            if (!_phaDoScopeExpandSmallBranchesAtStopLevel || _phaDoScopeMinBranchForStopLevel <= 0)
+            int id = family.familyInfo.FamilyId;
+            if (id <= 0)
+            {
+                return false;
+            }
+
+            // Nhánh STOP lớn (cam, có scope riêng): dừng → 1 box, xem chi tiết qua scope.
+            if (_phaConFamilyIds.Contains(id))
             {
                 return true;
             }
 
-            int familyId = family.familyInfo.FamilyId;
-            if (_phaDoScopeStopFamilyIdsAtMaxLevel != null && _phaDoScopeStopFamilyIdsAtMaxLevel.Count > 0)
+            // Non-STOP đã được gom vào combo đa gốc: cũng dừng → có trang riêng.
+            if (_phaConNonStopComboFamilyIds.Contains(id))
             {
-                return _phaDoScopeStopFamilyIdsAtMaxLevel.Contains(familyId);
+                return true;
             }
 
-            return CountSubtreeFamilies(family) >= _phaDoScopeMinBranchForStopLevel;
+            // Non-STOP nhỏ không có combo (stoppedAtCap): vẽ tiếp toàn bộ con cháu trong scope cha.
+            return false;
         }
 
         /// <summary>
@@ -11003,12 +11584,41 @@ namespace vietnamgiapha
                 return;
             }
 
+            // Bản đồ phả con: cần tô màu đặc biệt cho cả root1 stops + root2+ stops.
+            if (scope.IsPhaConMap)
+            {
+                _phaConFamilyIds.Clear();
+                _phaConStopFamilyIds.Clear();
+                _phaConNonStopComboFamilyIds.Clear();
+                if (scope.PhaConMapRoot1StopIds != null)
+                {
+                    foreach (int id in scope.PhaConMapRoot1StopIds)
+                    {
+                        _phaConFamilyIds.Add(id);
+                    }
+                }
+
+                // Tổ hợp root1 + deep stops → dùng làm cờ màu "bắt đầu phả con" trong scope stop.
+                var combined = new HashSet<int>(_phaConFamilyIds);
+                if (scope.PhaConMapDeepStopIds != null)
+                {
+                    foreach (int id in scope.PhaConMapDeepStopIds)
+                    {
+                        combined.Add(id);
+                    }
+                }
+
+                _phaDoScopeStopFamilyIdsAtMaxLevel = combined;
+                return;
+            }
+
             if (!scope.ExpandSmallBranchesAtStopLevel
                 || scope.MaxGenerationInclusive <= 0
                 || scope.MaxGenerationInclusive == int.MaxValue)
             {
                 _phaConFamilyIds.Clear();
                 _phaConStopFamilyIds.Clear();
+                _phaConNonStopComboFamilyIds.Clear();
                 _phaDoScopeStopFamilyIdsAtMaxLevel = new HashSet<int>();
                 return;
             }
@@ -11031,6 +11641,24 @@ namespace vietnamgiapha
                 minBranch,
                 effectiveMax);
             _phaDoScopeStopFamilyIdsAtMaxLevel = new HashSet<int>(_phaConFamilyIds);
+
+            // Thu thập non-STOP IDs đã được gom vào combo đa gốc — cần dừng vẽ ở split level trong scope cha.
+            _phaConNonStopComboFamilyIds.Clear();
+            if (_phaDoRenderScopes != null)
+            {
+                foreach (var s in _phaDoRenderScopes)
+                {
+                    if (s?.MultiRootFamilyIds == null)
+                    {
+                        continue;
+                    }
+
+                    foreach (int cid in s.MultiRootFamilyIds)
+                    {
+                        _phaConNonStopComboFamilyIds.Add(cid);
+                    }
+                }
+            }
         }
 
         /// <summary>Chưa phân tích phả: combo chỉ có đúng một mục Toàn phả.</summary>
@@ -11196,7 +11824,7 @@ namespace vietnamgiapha
                 string planSummary = hasNextSplit
                     ? ("Root" + rootIndex + "→Root" + (rootIndex + 1)
                         + " (đời ≤" + nextSplitLevel + ", STOP≥" + minBranchToSplitDeep + ")")
-                    : ("Trang lá đời " + level + " (full nhánh)");
+                    : ("Phả con: " + level + " (đủ nhánh)");
                 var branchScope = new PhaDoRenderScopeItem
                 {
                     RenderPlanSummary = planSummary,
@@ -11216,15 +11844,240 @@ namespace vietnamgiapha
                 branchScope.LayoutFamilyCountEstimate = EstimateScopeLayoutFamilyCount(branchScope, root);
                 branchScope.Label = FormatPhaiConScopeLabel(branchScope, block);
                 _phaDoRenderScopes.Add(branchScope);
+
+                // Gom nhánh non-STOP của branchScope thành các combo multi-root xếp dọc.
+                // Gọi kể cả khi không có STOP nào — toàn bộ nhánh đều non-STOP vẫn phải tạo ít nhất 1 combo.
+                if (branchScope.ExpandSmallBranchesAtStopLevel
+                    && branchScope.StopFamilyIdsAtMaxLevel != null)
+                {
+                    AppendMultiRootNonStopCombos(
+                        ref comboIndex,
+                        branchScope,
+                        root,
+                        minBranchToSplitDeep);
+                }
+            }
+
+            // Xây dữ liệu bản đồ: tách biệt root1 stops và root2+ stops.
+            // root1StopIds = STOP tại splitLevel → nhánh lớn, bản đồ sẽ tiếp tục xuống root2 cho chúng.
+            var mapRoot1StopIds = new HashSet<int>(root0Scope.StopFamilyIdsAtMaxLevel ?? new HashSet<int>());
+            // deepStopIds = STOP tại root2+ (từ mỗi branchScope) → dừng hẳn trong bản đồ.
+            var mapDeepStopIds = new HashSet<int>();
+            int mapMaxLevel = splitLevel; // ít nhất là root1 level
+            foreach (var s in _phaDoRenderScopes)
+            {
+                if (s == null || s.IsWholeTree || s.IsPhaConMap || s.IsMultiRootVerticalStack)
+                {
+                    continue;
+                }
+
+                // Chỉ lấy stop IDs từ scopes ở CẤP SAU root1 (branchScope có FamilyId khác root).
+                if (s.FamilyId != (_phaDoRenderScopeSourceRootId)
+                    && s.StopFamilyIdsAtMaxLevel != null)
+                {
+                    foreach (int id in s.StopFamilyIdsAtMaxLevel)
+                    {
+                        mapDeepStopIds.Add(id);
+                    }
+                }
+
+                if (s.MaxGenerationInclusive > 0 && s.MaxGenerationInclusive != int.MaxValue
+                    && s.MaxGenerationInclusive > mapMaxLevel)
+                {
+                    mapMaxLevel = s.MaxGenerationInclusive;
+                }
+            }
+
+            if (mapMaxLevel > 0)
+            {
+                // Estimate: tổng GD map ≥ GD Root0 scope (thêm cả cây con root2 cho STOP root1).
+                int mapGdEst = root0Scope.LayoutFamilyCountEstimate > 0
+                    ? root0Scope.LayoutFamilyCountEstimate
+                    : EstimateScopeLayoutFamilyCount(root0Scope, root);
+                var mapScope = new PhaDoRenderScopeItem
+                {
+                    RenderPlanSummary = "Bản đồ phả con (Root0→Root1→Root2)",
+                    Label = "Bản đồ phả con | Đời 1–" + mapMaxLevel
+                            + " | ~" + mapGdEst + " GD",
+                    FamilyId = root.familyInfo?.FamilyId ?? 0,
+                    RootFamily = root,
+                    IsWholeTree = false,
+                    MaxGenerationInclusive = mapMaxLevel,
+                    IsPhaConMap = true,
+                    PhaConMapRoot1SplitLevel = splitLevel,
+                    PhaConMapRoot1StopIds = mapRoot1StopIds,
+                    PhaConMapDeepStopIds = mapDeepStopIds,
+                    LayoutFamilyCountEstimate = mapGdEst,
+                    ComboIndexHint = -1
+                };
+
+                // Chèn ngay sau "Toàn phả" (index 0).
+                _phaDoRenderScopes.Insert(1, mapScope);
+
+                // Cập nhật lại ComboIndexHint cho tất cả scopes sau khi chèn.
+                for (int i = 0; i < _phaDoRenderScopes.Count; i++)
+                {
+                    if (_phaDoRenderScopes[i] != null)
+                    {
+                        _phaDoRenderScopes[i].ComboIndexHint = i;
+                    }
+                }
             }
 
             _phaDoRenderScopesFromAnalyze = true;
             if (phaDoSubtreeListBox != null)
             {
-                // Sau phân tích: mặc định chọn Root0 (item thứ 2), không phải Toàn phả.
+                // Sau phân tích: mặc định chọn Bản đồ (index 1) hoặc Root0 (index 2).
                 phaDoSubtreeListBox.SelectedIndex = _phaDoRenderScopes.Count > 1 ? 1 : 0;
                 UpdatePhaDoSubtreeListBoxToolTip();
             }
+        }
+
+        /// <summary>
+        /// Tạo các combo multi-root từ nhánh non-STOP của một branchScope có ExpandSmallBranchesAtStopLevel.
+        /// Mỗi combo chứa nhiều nhánh gộp cho tới khi tổng GD ≥ threshold.
+        /// </summary>
+        private void AppendMultiRootNonStopCombos(
+            ref int comboIndex,
+            PhaDoRenderScopeItem parentScope,
+            FamilyViewModel fileRoot,
+            int threshold)
+        {
+            if (parentScope?.RootFamily == null || parentScope.StopFamilyIdsAtMaxLevel == null)
+            {
+                return;
+            }
+
+            int stopLevel = parentScope.MaxGenerationInclusive;
+            if (stopLevel <= 0 || stopLevel == int.MaxValue)
+            {
+                return;
+            }
+
+            var stopIds = parentScope.StopFamilyIdsAtMaxLevel;
+            var rootsAtStop = CollectRootsAtLevelFromBase(
+                new[] { parentScope.RootFamily },
+                stopLevel);
+
+            // Chỉ lấy nhánh non-STOP, giữ thứ tự cây (tree-order từ CollectRootsAtLevelFromBase).
+            var nonStopBranches = rootsAtStop
+                .Where(r => r != null && (r.familyInfo?.FamilyId ?? 0) > 0
+                            && !stopIds.Contains(r.familyInfo.FamilyId))
+                .ToList();
+
+            nonStopBranches.Reverse(); // Đảo ngược để ưu tiên nhóm nhánh cuối (thường có nhiều GD hơn) khi gộp theo threshold.
+
+            if (nonStopBranches.Count == 0)
+            {
+                return;
+            }
+
+            var groups = GroupNonStopBranchesByThreshold(nonStopBranches, threshold);
+            if (groups.Count == 0)
+            {
+                return;
+            }
+
+            int totalGroups = groups.Count;
+            for (int g = 0; g < groups.Count; g++)
+            {
+                var groupBranches = groups[g];
+                if (groupBranches.Count == 0)
+                {
+                    continue;
+                }
+
+                var firstBranch = groupBranches[0];
+                int firstId = firstBranch?.familyInfo?.FamilyId ?? 0;
+                var rootIds = groupBranches
+                    .Select(b => b?.familyInfo?.FamilyId ?? 0)
+                    .Where(id => id > 0)
+                    .ToList();
+
+                int gdSum = groupBranches.Sum(CountSubtreeFamilies);
+                int groupNum = g + 1;
+
+                // Tóm tắt tên nhánh để RenderPlanSummary hiển thị ngắn gọn trong report.
+                var summaryNames = groupBranches
+                    .Take(3)
+                    .Select(GetFamilyMainPersonName)
+                    .Where(n => !string.IsNullOrWhiteSpace(n))
+                    .ToList();
+                string namesSuffix = summaryNames.Count > 0
+                    ? " | " + string.Join(", ", summaryNames) + (groupBranches.Count > 3 ? "…" : "")
+                    : "";
+                string planSummary = "Non-STOP [" + groupNum + "/" + totalGroups + "]"
+                    + namesSuffix;
+
+                // Tạo nhãn chi tiết từng nhánh: "ID X | Tên người | N GD" để dùng trong report.
+                var branchLabels = groupBranches
+                    .Select(b =>
+                    {
+                        int bid = b?.familyInfo?.FamilyId ?? 0;
+                        string bname = GetFamilyMainPersonName(b);
+                        if (string.IsNullOrWhiteSpace(bname))
+                        {
+                            bname = b?.familyInfo?.Name0 ?? b?.familyInfo?.Name ?? ("GĐ " + bid);
+                        }
+
+                        int bgd = CountSubtreeFamilies(b);
+                        return "ID " + bid + " | " + bname + " | " + bgd + " GD";
+                    })
+                    .ToList();
+
+                var multiScope = new PhaDoRenderScopeItem
+                {
+                    RenderPlanSummary = planSummary,
+                    ComboIndexHint = comboIndex++,
+                    FamilyId = firstId,
+                    RootFamily = firstBranch,
+                    IsWholeTree = false,
+                    MaxGenerationInclusive = int.MaxValue,
+                    ExpandSmallBranchesAtStopLevel = false,
+                    MultiRootFamilyIds = rootIds,
+                    MultiRootGroupIndex = groupNum,
+                    MultiRootGroupTotal = totalGroups,
+                    LayoutFamilyCountEstimate = gdSum,
+                    MultiRootBranchLabels = branchLabels
+                };
+                multiScope.Label = FormatMultiRootNonStopLabel(multiScope, stopLevel, groupBranches);
+                _phaDoRenderScopes.Add(multiScope);
+            }
+        }
+
+        private static string FormatMultiRootNonStopLabel(
+            PhaDoRenderScopeItem scope,
+            int stopLevel,
+            List<FamilyViewModel> branches = null)
+        {
+            int branchCount = scope.MultiRootFamilyIds?.Count ?? 1;
+
+            // Gộp tên người chính từng nhánh; hiển thị tối đa 4 cái, thêm "…" nếu còn dư.
+            string namespart = "";
+            if (branches != null && branches.Count > 0)
+            {
+                const int maxShow = 4;
+                var names = branches
+                    .Take(maxShow)
+                    .Select(GetFamilyMainPersonName)
+                    .Where(n => !string.IsNullOrWhiteSpace(n))
+                    .ToList();
+                if (names.Count > 0)
+                {
+                    string joined = string.Join(" · ", names);
+                    namespart = " | " + joined + (branches.Count > maxShow ? " …" : "");
+                }
+            }
+
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                "Phả con [{0}/{1}] | Đời {2}{3} | ~{4} GD (gộp {5} nhánh)",
+                scope.MultiRootGroupIndex,
+                scope.MultiRootGroupTotal,
+                stopLevel,
+                namespart,
+                scope.LayoutFamilyCountEstimate,
+                branchCount);
         }
 
         private void ApplySelectedBoxEdit_Click(object sender, RoutedEventArgs e)
@@ -12280,10 +13133,15 @@ namespace vietnamgiapha
                     GetBoxStyleForFamily,
                     _phaDoTitleStyle)).ConfigureAwait(true);
 
+                int exportedNodes = result.Nodes?.Count ?? 0;
+                string simplifyNote = exportedNodes >= GiaPhaSvgExportService.SimpleBoxExportNodeThreshold
+                    ? "\n\n(Lưu ý: phả lớn — khung ô xuất dạng rect đơn giản để tránh hết bộ nhớ; chữ và layout giữ nguyên.)"
+                    : "";
                 viewModel.AddUserAction("Xuất SVG phả đồ: " + outPath + " (" + result.SizeSummary + ")");
                 MessageBox.Show(
                     "Đã xuất phả đồ ra SVG:\n" + outPath
-                    + "\n\nMở bằng trình duyệt, Inkscape hoặc Illustrator để xem/in.",
+                    + "\n\nMở bằng trình duyệt, Inkscape hoặc Illustrator để xem/in."
+                    + simplifyNote,
                     "Xong");
             }
             catch (Exception ex)

@@ -19,6 +19,8 @@ namespace vietnamgiapha.GiaPhaRender
         public string FolderPath { get; set; }
         public List<PhaDoZoneSvgFileEntry> TitleEntries { get; } = new List<PhaDoZoneSvgFileEntry>();
         public List<PhaDoZoneSvgFileEntry> FamilyEntries { get; } = new List<PhaDoZoneSvgFileEntry>();
+        /// <summary>File không load được (tên + lý do) — ghi log khi debug.</summary>
+        public List<string> SkippedFiles { get; } = new List<string>();
         public Dictionary<string, PhaDoSvgShape> ShapesById { get; }
             = new Dictionary<string, PhaDoSvgShape>(StringComparer.OrdinalIgnoreCase);
     }
@@ -26,16 +28,14 @@ namespace vietnamgiapha.GiaPhaRender
     /// <summary>Đọc SVG từ thư mục — title_*.svg (combo trái), family_*.svg (combo phải).</summary>
     public static class PhaDoZoneSvgFolderLoader
     {
-        public const string DefaultFolderName = "svgZone";
+        public const string DefaultFolderName = "ZoneSvg";
         public const string TitlePrefix = "title_";
         public const string FamilyPrefix = "family_";
 
         private static readonly string[] FolderNameCandidates =
         {
-            "svgZone",
             "ZoneSvg",
-            "SvgZone",
-            "zone_svg"
+            "svgZone"
         };
 
         /// <summary>Tìm thư mục SVG: app.config → cạnh .exe → lên cấp (project khi F5).</summary>
@@ -159,16 +159,27 @@ namespace vietnamgiapha.GiaPhaRender
                     continue;
                 }
 
-                if (!TryLoadShapeFromFile(file, id, out PhaDoSvgShape shape))
+                if (!TryLoadShapeFromFile(file, id, out PhaDoSvgShape shape, out string skipReason))
                 {
+                    result.SkippedFiles.Add(name + ": " + (skipReason ?? "không đọc được"));
                     continue;
                 }
 
                 result.ShapesById[id] = shape;
+                string displaySuffix = id;
+                if (isTitle && id.Length > TitlePrefix.Length)
+                {
+                    displaySuffix = id.Substring(TitlePrefix.Length);
+                }
+                else if (isFamily && id.Length > FamilyPrefix.Length)
+                {
+                    displaySuffix = id.Substring(FamilyPrefix.Length);
+                }
+
                 var entry = new PhaDoZoneSvgFileEntry
                 {
                     Id = id,
-                    Display = id,
+                    Display = displaySuffix,
                     FilePath = file
                 };
 
@@ -223,15 +234,23 @@ namespace vietnamgiapha.GiaPhaRender
             return path;
         }
 
-        private static bool TryLoadShapeFromFile(string filePath, string svgId, out PhaDoSvgShape shape)
+        private static bool TryLoadShapeFromFile(
+            string filePath,
+            string svgId,
+            out PhaDoSvgShape shape,
+            out string skipReason)
         {
             shape = null;
+            skipReason = null;
             try
             {
                 string raw = File.ReadAllText(filePath);
                 var sanitized = PhaDoBoxSvgSanitizer.Sanitize(raw);
                 if (!sanitized.Success || string.IsNullOrWhiteSpace(sanitized.SanitizedSvgMarkup))
                 {
+                    skipReason = string.IsNullOrWhiteSpace(sanitized.Message)
+                        ? "SVG không hợp lệ"
+                        : sanitized.Message;
                     return false;
                 }
 
@@ -242,8 +261,9 @@ namespace vietnamgiapha.GiaPhaRender
                     sanitized.ViewBoxHeight);
                 return true;
             }
-            catch
+            catch (Exception ex)
             {
+                skipReason = ex.Message;
                 return false;
             }
         }

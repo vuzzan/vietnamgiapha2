@@ -27,6 +27,10 @@ namespace vietnamgiapha
         PersonInfo _selectedPerson;
 
         public GiaPhaViewModel _objFamilyTree;
+
+        /// <summary>MainWindow gán khi load/mở file — cuộn TreeView tới gia đình (tìm kiếm, v.v.).</summary>
+        public Action<FamilyViewModel> RequestScrollToFamilyInTree { get; set; }
+
         #endregion // Data
 
         #region Constructor
@@ -296,15 +300,12 @@ namespace vietnamgiapha
             var person = _matchingPeopleEnumerator.Current;
 
             if (person == null)
-                return;
-
-            // Ensure that this person is in view.
-            if (person.Parent != null)
             {
-                person.Parent.IsExpanded = true;
+                return;
             }
 
-            person.IsSelected = true;
+            SelectFamily(person);
+            RequestScrollToFamilyInTree?.Invoke(person);
         }
 
         void VerifyMatchingPeopleEnumerator()

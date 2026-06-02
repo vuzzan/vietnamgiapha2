@@ -85,7 +85,7 @@ namespace vietnamgiapha
             {
                 splitNote = "Tách đời " + splitLevel + " → " + subTrees.Count + " phả con";
             }
-            summaryText.Text = "Root0 (đời 1–" + rootLevelMax + ")  →  " + splitNote;
+            summaryText.Text = "(đời 1–" + rootLevelMax + ")  →  " + splitNote;
 
             RenderSubtreeHierarchyMap(rootBlock, subTrees);
         }
@@ -101,10 +101,10 @@ namespace vietnamgiapha
             PhaDoSubtreeBranchBlock rootBlock,
             IReadOnlyList<PhaDoSubtreeBranchBlock> subTrees)
         {
-            const double padPx = 24;
-            const double rowGapPx = 56;
-            const double hGapPx = 16;
-            const double connectorStubPx = 18;
+            const double padPx = 40;
+            const double rowGapPx = 140;  // khoảng cách dọc giữa các đời
+            const double hGapPx = 20;
+            const double connectorStubPx = 24;
 
             var allBlocks = new List<PhaDoSubtreeBranchBlock> { rootBlock };
             allBlocks.AddRange(subTrees.Where(s => s != null));
@@ -158,7 +158,7 @@ namespace vietnamgiapha
                 }
             }
 
-            // Vẽ connector trước để box đè lên nhìn sạch hơn.
+            // Vẽ connector cong trước để box đè lên nhìn sạch hơn.
             foreach (var row in levelRows)
             {
                 foreach (var node in row.Nodes)
@@ -167,6 +167,7 @@ namespace vietnamgiapha
                     {
                         continue;
                     }
+
                     if (!boxMap.TryGetValue(node.Block.FamilyId, out var childRect))
                     {
                         continue;
@@ -176,10 +177,10 @@ namespace vietnamgiapha
                     double pBottom = parentRect.Y + parentRect.H;
                     double cCx = childRect.X + childRect.W / 2.0;
                     double cTop = childRect.Y;
-                    double midY = Math.Min(cTop - 4, pBottom + connectorStubPx);
-                    DrawConnector(pCx, pBottom, pCx, midY);
-                    DrawConnector(pCx, midY, cCx, midY);
-                    DrawConnector(cCx, midY, cCx, cTop);
+                    bool childIsNonStop = node.Block != null && !node.Block.IsStop;
+
+                    // Đường cong Bezier từ đáy cha → đỉnh con.
+                    DrawCurvedConnector(pCx, pBottom, cCx, cTop, childIsNonStop);
                 }
             }
 
@@ -234,7 +235,8 @@ namespace vietnamgiapha
             rows[rootGeneration] = rootRow;
 
             var candidates = (subTrees ?? Array.Empty<PhaDoSubtreeBranchBlock>())
-                .Where(s => s != null && s.FamilyId > 0)
+                // Giữ cả STOP block (FamilyId > 0) lẫn non-STOP summary block (FamilyId <= 0 nhưng IsNonStopSummary).
+                .Where(s => s != null && (s.FamilyId > 0 || s.IsNonStopSummary))
                 .OrderBy(s => s.Generation <= 0 ? int.MaxValue : s.Generation)
                 .ThenBy(s => (s.MinXmm + s.MaxXmm) / 2.0)
                 .ToList();
@@ -248,7 +250,11 @@ namespace vietnamgiapha
                     rows[level] = row;
                 }
 
-                int parentId = ResolveParentByNearestCenterX(block, rows, level - 1, rootId);
+                // Ô tổng hợp non-STOP có SummaryParentId rõ ràng → dùng luôn, không cần tìm gần nhất.
+                int parentId = block.SummaryParentId > 0
+                    ? block.SummaryParentId
+                    : ResolveParentByNearestCenterX(block, rows, level - 1, rootId);
+
                 row.Nodes.Add(new SubtreeHierarchyNode
                 {
                     Block = block,
@@ -278,13 +284,28 @@ namespace vietnamgiapha
             int expectedParentLevel,
             int fallbackRootId)
         {
-            if (!rows.TryGetValue(expectedParentLevel, out var parentRow) || parentRow.Nodes.Count == 0)
+            // Tìm row cha: ưu tiên đúng expectedParentLevel, nếu không có thì
+            // lùi dần về row tổ tiên gần nhất thực sự tồn tại (< expectedParentLevel).
+            // Tránh trường hợp root2 (đời 15) fallback thẳng về root0 vì đời 14 trống.
+            SubtreeHierarchyRow parentRow = null;
+            for (int lvl = expectedParentLevel; lvl >= 1; lvl--)
+            {
+                if (rows.TryGetValue(lvl, out var candidate) && candidate.Nodes.Count > 0)
+                {
+                    parentRow = candidate;
+                    break;
+                }
+            }
+
+            if (parentRow == null)
             {
                 return fallbackRootId;
             }
 
             double cx = (block.MinXmm + block.MaxXmm) / 2.0;
+            // Chỉ dùng STOP block thật (FamilyId > 0) làm cha — bỏ qua ô summary âm.
             var best = parentRow.Nodes
+                .Where(n => (n.Block?.FamilyId ?? 0) > 0)
                 .OrderBy(n => Math.Abs(((n.Block.MinXmm + n.Block.MaxXmm) / 2.0) - cx))
                 .FirstOrDefault();
             return best?.Block?.FamilyId ?? fallbackRootId;
@@ -298,16 +319,44 @@ namespace vietnamgiapha
             PhaDoSubtreeBranchBlock block,
             bool isRoot)
         {
-            int generation = block?.Generation ?? 1;
-            Color fillColor = BuildGenerationFillColor(generation, isCurrent: isRoot);
-            Color borderColor = BuildGenerationBorderColor(generation, isCurrent: isRoot);
+            bool isNonStop = block != null && !block.IsStop;
+
+            // Màu: Root0 = xanh nhạt; STOP = cam đậm; non-STOP summary = xanh ngọc.
+            Color fillColor;
+            Color borderColor;
+            Brush textFore;
+            Brush subFore;
+
+            if (isRoot)
+            {
+                fillColor = Color.FromArgb(60, 33, 150, 243);   // xanh blue nhạt
+                borderColor = Color.FromRgb(25, 118, 210);
+                textFore = Brushes.Black;
+                subFore = Brushes.DimGray;
+            }
+            else if (isNonStop)
+            {
+                // Non-STOP summary: teal — nhánh nhỏ vẽ tiếp trong phả con cha.
+                fillColor = Color.FromArgb(55, 0, 188, 212);    // cyan teal
+                borderColor = Color.FromRgb(0, 151, 167);
+                textFore = new SolidColorBrush(Color.FromRgb(0, 60, 70));
+                subFore = new SolidColorBrush(Color.FromRgb(0, 96, 100));
+            }
+            else
+            {
+                // STOP: cam đậm — bắt đầu phả con riêng.
+                fillColor = Color.FromArgb(230, 245, 124, 0);   // #F57C00 đặc
+                borderColor = Color.FromRgb(230, 81, 0);
+                textFore = Brushes.White;
+                subFore = new SolidColorBrush(Color.FromRgb(255, 243, 224));
+            }
 
             var rect = new Rectangle
             {
                 Width = wPx,
                 Height = hPx,
                 Stroke = new SolidColorBrush(borderColor),
-                StrokeThickness = isRoot ? 2.8 : 2.0,
+                StrokeThickness = isRoot ? 2.8 : (isNonStop ? 1.6 : 2.2),
                 RadiusX = 6,
                 RadiusY = 6,
                 Fill = new SolidColorBrush(fillColor)
@@ -317,106 +366,103 @@ namespace vietnamgiapha
             Panel.SetZIndex(rect, 1);
             mapCanvas.Children.Add(rect);
 
-            string familyName = !string.IsNullOrWhiteSpace(block?.FamilyName)
-                ? block.FamilyName
-                : (block?.MainPersonName ?? "Gia đình");
-            string line1 = "Phả con: " + familyName;
-            string line2 = "Bắt đầu đời thứ: " + (block?.Generation > 0 ? block.Generation.ToString() : "?");
-            string line3 = "Tổng số gia đình: " + (block?.NodeCount ?? 0);
-            string line4 = "Kích thước: " + (block?.WidthCm ?? 0).ToString("0.#")
-                + " cm x " + (block?.HeightCm ?? 0).ToString("0.#") + " cm";
-            var nameTb = new TextBlock
-            {
-                Text = line1,
-                FontSize = isRoot ? 14.2 : 13,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = Brushes.Black,
-                TextWrapping = TextWrapping.Wrap,
-                Width = Math.Max(80, wPx - 14)
-            };
-            Canvas.SetLeft(nameTb, x + 7);
-            Canvas.SetTop(nameTb, y + 7);
-            Panel.SetZIndex(nameTb, 2);
-            mapCanvas.Children.Add(nameTb);
+            double innerW = Math.Max(80, wPx - 14);
+            double curY = y + 7;
+            double lineSpacing = 0;
 
-            var genTb = new TextBlock
+            void AddLine(string text, double fs, FontWeight fw, Brush fore)
             {
-                Text = line2,
-                FontSize = 12.2,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = Brushes.DimGray,
-                TextWrapping = TextWrapping.Wrap,
-                Width = Math.Max(80, wPx - 14)
-            };
-            Canvas.SetLeft(genTb, x + 7);
-            Canvas.SetTop(genTb, y + 31);
-            Panel.SetZIndex(genTb, 2);
-            mapCanvas.Children.Add(genTb);
+                if (string.IsNullOrWhiteSpace(text)) { return; }
+                var tb = new TextBlock
+                {
+                    Text = text,
+                    FontSize = fs,
+                    FontWeight = fw,
+                    Foreground = fore,
+                    TextWrapping = TextWrapping.Wrap,
+                    Width = innerW
+                };
+                Canvas.SetLeft(tb, x + 7);
+                Canvas.SetTop(tb, curY + lineSpacing);
+                Panel.SetZIndex(tb, 2);
+                mapCanvas.Children.Add(tb);
+                lineSpacing += fs * 1.42;
+            }
 
-            var countTb = new TextBlock
+            if (isRoot)
             {
-                Text = line3,
-                FontSize = 11.5,
-                FontWeight = FontWeights.Medium,
-                Foreground = Brushes.SlateGray,
-                TextWrapping = TextWrapping.Wrap,
-                Width = Math.Max(80, wPx - 14)
-            };
-            Canvas.SetLeft(countTb, x + 7);
-            Canvas.SetTop(countTb, y + 52);
-            Panel.SetZIndex(countTb, 2);
-            mapCanvas.Children.Add(countTb);
-
-            var sizeTb = new TextBlock
+                string rootName = !string.IsNullOrWhiteSpace(block?.FamilyName)
+                    ? block.FamilyName
+                    : (block?.MainPersonName ?? "Root0");
+                AddLine("★" + rootName, isRoot ? 14.2 : 13, FontWeights.Bold, textFore);
+                AddLine("Đời 1–" + block?.Generation + " | " + block?.NodeCount + " GD", 12, FontWeights.Normal, subFore);
+                AddLine(block?.SizeText ?? "", 11, FontWeights.Normal, subFore);
+            }
+            else if (isNonStop)
             {
-                Text = line4,
-                FontSize = 11.3,
-                FontWeight = FontWeights.Medium,
-                Foreground = Brushes.SlateGray,
-                TextWrapping = TextWrapping.Wrap,
-                Width = Math.Max(80, wPx - 14)
-            };
-            Canvas.SetLeft(sizeTb, x + 7);
-            Canvas.SetTop(sizeTb, y + 72);
-            Panel.SetZIndex(sizeTb, 2);
-            mapCanvas.Children.Add(sizeTb);
+                int grpCount = block.NonStopGroupCount > 0 ? block.NonStopGroupCount : 1;
+                AddLine("◎ " + grpCount + " nhánh non-STOP (vẽ tiếp)", 12.5, FontWeights.SemiBold, textFore);
+                AddLine("Đời " + block.Generation + " | " + block.NodeCount + " GD", 11.5, FontWeights.Normal, subFore);
+                if (!string.IsNullOrWhiteSpace(block.MainPersonName))
+                {
+                    AddLine("đại diện: " + block.MainPersonName, 11, FontWeights.Normal, subFore);
+                }
+            }
+            else
+            {
+                string familyName = !string.IsNullOrWhiteSpace(block?.FamilyName)
+                    ? block.FamilyName
+                    : (block?.MainPersonName ?? "Gia đình");
+                AddLine("★ Bắt đầu phả con", 12, FontWeights.Bold, textFore);
+                AddLine(familyName, 13, FontWeights.SemiBold, textFore);
+                AddLine("Đời " + block?.Generation + " | " + block?.NodeCount + " GD", 11.5, FontWeights.Normal, subFore);
+                AddLine(block?.SizeText ?? "", 11, FontWeights.Normal, subFore);
+            }
         }
 
-        // Riêng flow phả con cấp cây: width chỉ cần vừa "Tên người" + "Đời thứ".
+        // Tính kích thước box theo loại: root / STOP / non-STOP summary.
         private (double Width, double Height) CalculateHierarchyBoxSize(
             PhaDoSubtreeBranchBlock block,
             double pxPerCm,
             double titleFontSize,
             double generationFontSize)
         {
-            string familyName = !string.IsNullOrWhiteSpace(block?.FamilyName)
-                ? block.FamilyName
-                : (block?.MainPersonName ?? "Gia đình");
-            string line1 = "Phả con: " + familyName;
-            string line2 = "Bắt đầu đời thứ: " + (block?.Generation > 0 ? block.Generation.ToString() : "?");
-            string line3 = "Tổng số gia đình: " + (block?.NodeCount ?? 0);
-            string line4 = "Kích thước: " + (block?.WidthCm ?? 0).ToString("0.#")
-                + " cm x " + (block?.HeightCm ?? 0).ToString("0.#") + " cm";
+            List<(string text, double fs)> lines;
 
-            // Flow này ưu tiên box gọn: width theo text, không scale theo WidthCm của layout.
-            double w1 = Math.Max(1, (line1 ?? "").Trim().Length) * titleFontSize * 0.46;
-            double w2 = Math.Max(1, (line2 ?? "").Trim().Length) * generationFontSize * 0.48;
-            double w3 = Math.Max(1, (line3 ?? "").Trim().Length) * (generationFontSize - 0.5) * 0.49;
-            double w4 = Math.Max(1, (line4 ?? "").Trim().Length) * (generationFontSize - 1) * 0.49;
-            double textWidth = Math.Max(Math.Max(w1, w2), Math.Max(w3, w4)) + 20;
-            double width = Math.Max(150, Math.Min(340, textWidth));
-            if ((line1 ?? "").Length >= 34)
+            if (block == null)
             {
-                width = Math.Min(380, Math.Max(width, 220));
+                lines = new List<(string, double)> { ("?", titleFontSize) };
+            }
+            else if (!block.IsStop && block.IsNonStopSummary)
+            {
+                // Non-STOP summary box.
+                int grpCount = block.NonStopGroupCount > 0 ? block.NonStopGroupCount : 1;
+                lines = new List<(string, double)>
+                {
+                    ("◎ " + grpCount + " nhánh non-STOP (vẽ tiếp)", 12.5),
+                    ("Đời " + block.Generation + " | " + block.NodeCount + " GD", 11.5),
+                    ("đại diện: " + (block.MainPersonName ?? ""), 11)
+                };
+            }
+            else
+            {
+                string familyName = !string.IsNullOrWhiteSpace(block.FamilyName)
+                    ? block.FamilyName
+                    : (block.MainPersonName ?? "Gia đình");
+                lines = new List<(string, double)>
+                {
+                    ("★ Bắt đầu phả con", 12),
+                    (familyName, titleFontSize),
+                    ("Đời " + block.Generation + " | " + block.NodeCount + " GD", 11.5),
+                    (block.SizeText ?? "", 11)
+                };
             }
 
+            double maxW = lines.Max(l => EstimateLineWidth(l.text, l.fs));
+            double width = Math.Max(150, Math.Min(380, maxW + 24));
             double innerW = Math.Max(80, width - 16);
-            double textHeight = EstimateWrappedHeight(line1, titleFontSize, innerW)
-                + EstimateWrappedHeight(line2, generationFontSize, innerW)
-                + EstimateWrappedHeight(line3, generationFontSize - 0.5, innerW)
-                + EstimateWrappedHeight(line4, generationFontSize - 1, innerW)
-                + 18;
-            double height = Math.Max(96, Math.Min(150, textHeight));
+            double textH = lines.Sum(l => EstimateWrappedHeight(l.text, l.fs, innerW)) + 16;
+            double height = Math.Max(88, Math.Min(160, textH));
             return (width, height);
         }
 
@@ -444,20 +490,39 @@ namespace vietnamgiapha
             return Math.Max(2.5, scale);
         }
 
-        private void DrawConnector(double x1, double y1, double x2, double y2)
+        /// <summary>
+        /// Vẽ đường cong Bezier bậc 3 từ (x1,y1) → (x2,y2).
+        /// Control points kéo thẳng theo trục Y để tạo hình chữ S mượt.
+        /// </summary>
+        private void DrawCurvedConnector(double x1, double y1, double x2, double y2, bool isNonStop = false)
         {
-            var line = new Line
+            double dy = y2 - y1;
+            double cp = Math.Abs(dy) * 0.55; // độ cong: 55% khoảng cách dọc
+
+            var geo = new StreamGeometry();
+            using (var ctx = geo.Open())
             {
-                X1 = x1,
-                Y1 = y1,
-                X2 = x2,
-                Y2 = y2,
-                Stroke = Brushes.Gray,
-                StrokeThickness = 1.5,
-                StrokeDashArray = new DoubleCollection { 4, 3 }
+                ctx.BeginFigure(new Point(x1, y1), false, false);
+                ctx.BezierTo(
+                    new Point(x1, y1 + cp),   // control 1: kéo xuống từ cha
+                    new Point(x2, y2 - cp),   // control 2: kéo lên đến con
+                    new Point(x2, y2),
+                    true, false);
+            }
+
+            geo.Freeze();
+            var path = new System.Windows.Shapes.Path
+            {
+                Data = geo,
+                Stroke = isNonStop
+                    ? new SolidColorBrush(Color.FromRgb(0, 151, 167))   // teal cho non-STOP
+                    : new SolidColorBrush(Color.FromRgb(120, 120, 120)), // xám cho STOP/root
+                StrokeThickness = isNonStop ? 1.4 : 1.8,
+                StrokeDashArray = isNonStop ? new DoubleCollection { 5, 3 } : null,
+                Fill = null
             };
-            Panel.SetZIndex(line, 0);
-            mapCanvas.Children.Add(line);
+            Panel.SetZIndex(path, 0);
+            mapCanvas.Children.Add(path);
         }
 
         private void DrawBranchBlock(
@@ -530,13 +595,12 @@ namespace vietnamgiapha
             double currentY = parentY + parentH + rowGapPx;
             double currentCx = currentX + currentW / 2.0;
 
-            DrawConnector(parentCx, parentY + parentH, currentCx, currentY - connectorStubPx / 2.0);
+            DrawCurvedConnector(parentCx, parentY + parentH, currentCx, currentY);
 
             if (childLayouts.Count > 0)
             {
                 double childY = currentY + currentH + rowGapPx;
                 double rowStartX = (canvasW - childRowW) / 2.0;
-                double busY = childY - connectorStubPx;
                 var childCenters = new List<double>();
                 double x = rowStartX;
                 foreach (var child in childLayouts)
@@ -545,18 +609,11 @@ namespace vietnamgiapha
                     x += child.Size.Width + hGapPx;
                 }
 
-                DrawConnector(currentCx, currentY + currentH, currentCx, busY);
-                if (childCenters.Count > 1)
-                {
-                    DrawConnector(childCenters.First(), busY, childCenters.Last(), busY);
-                }
-
                 x = rowStartX;
                 for (int i = 0; i < childLayouts.Count; i++)
                 {
                     var child = childLayouts[i];
-                    double cx = childCenters[i];
-                    DrawConnector(cx, busY, cx, childY);
+                    DrawCurvedConnector(currentCx, currentY + currentH, childCenters[i], childY);
                     DrawBranchBlockEx(x, childY, child.Size.Width, child.Size.Height, child.Block, isCurrent: false, isParent: false);
                     x += child.Size.Width + hGapPx;
                 }

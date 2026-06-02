@@ -133,6 +133,12 @@ namespace vietnamgiapha.GiaPhaRender
         /// <summary>Ghi chú theo FamilyId — null nếu không có.</summary>
         public System.Func<int, System.Collections.Generic.IReadOnlyList<string>> GetFamilyBoxNotes { get; set; }
 
+        /// <summary>
+        /// Nhãn hiển thị trong box gốc ảo của phả con đa gốc (FamilyId &lt; 0).
+        /// Ví dụ: "Non-STOP [1/28] | đời 11 | 12 nhánh | ~197 GD".
+        /// </summary>
+        public string MultiRootScopeLabel { get; set; }
+
         public double ContentWidthMm => PageWidthMm - 2 * MarginMm;
         public double ContentHeightMm => PageHeightMm - 2 * MarginMm;
 

@@ -408,9 +408,6 @@
                     <MenuItem Header="Mở File" Command="{Binding OpenFileCommand}"/>
                     <MenuItem Header="Lưu" Command="{Binding SaveFileCommand}"/>
                     <MenuItem Header="Lưu file khác...(Save As)" Command="{Binding SaveAsFileCommand}"/>
-                    <!-- Tạm ẩn MessagePack — bật lại Visibility khi cần -->
-                    <MenuItem Header="Lưu ra MessagePack..." Click="SaveAsMessagePack_Click" Visibility="Collapsed"/>
-                    <MenuItem Header="Mở MessagePack..." Click="OpenMessagePack_Click" Visibility="Collapsed"/>
                     <Separator/>
                     <MenuItem Header="Quản lý kho SVG..." Click="OpenSvgLibraryManager_Click"/>
                     <Separator/>
@@ -603,7 +600,6 @@
                         >
                             <TreeView.ItemContainerStyle>
                                 <Style TargetType="{x:Type TreeViewItem}" BasedOn="{StaticResource {x:Type TreeViewItem}}">
-                                    <EventSetter Event="RequestBringIntoView" Handler="TreeViewItem_RequestBringIntoView"/>
                                     <EventSetter Event="Selected" Handler="OnSelected"/>
                                     <EventSetter Event="PreviewMouseLeftButtonDown" Handler="TreeViewItem_PreviewMouseLeftButtonDown"/>
                                     <EventSetter Event="PreviewMouseMove" Handler="TreeViewItem_PreviewMouseMove"/>

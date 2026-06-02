@@ -44,6 +44,9 @@ namespace vietnamgiapha.GiaPhaRender
                 return result;
             }
 
+            // Bỏ DOCTYPE / XML declaration — file Illustrator/Inkscape hay có, gây lỗi parse.
+            svgFragment = StripXmlProlog(svgFragment);
+
             try
             {
                 var doc = XDocument.Parse(svgFragment, LoadOptions.None);
@@ -85,22 +88,83 @@ namespace vietnamgiapha.GiaPhaRender
 
         private static string ExtractSvgMarkup(string raw)
         {
+            raw = StripXmlProlog(raw?.Trim() ?? string.Empty);
+            if (string.IsNullOrEmpty(raw))
+            {
+                return null;
+            }
+
+            // Cho phép khoảng trắng trước '>' — Inkscape hay xuất </svg\n>
             var match = Regex.Match(
                 raw,
-                @"<svg\b[\s\S]*?</svg>",
+                @"<svg\b[\s\S]*?</svg\s*>",
                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             if (match.Success)
             {
                 return match.Value;
             }
 
-            raw = raw.Trim();
-            if (raw.StartsWith("<svg", StringComparison.OrdinalIgnoreCase))
+            // Fallback: tìm thủ công khi regex không khớp (tag mở/đóng lạ)
+            int start = raw.IndexOf("<svg", StringComparison.OrdinalIgnoreCase);
+            if (start < 0)
+            {
+                return null;
+            }
+
+            int close = raw.LastIndexOf("</svg", StringComparison.OrdinalIgnoreCase);
+            if (close < start)
+            {
+                return null;
+            }
+
+            int endGt = raw.IndexOf('>', close);
+            if (endGt < 0)
+            {
+                return null;
+            }
+
+            return raw.Substring(start, endGt - start + 1);
+        }
+
+        /// <summary>Loại bỏ &lt;?xml …?&gt; và &lt;!DOCTYPE …&gt; trước khi parse.</summary>
+        private static string StripXmlProlog(string raw)
+        {
+            if (string.IsNullOrEmpty(raw))
             {
                 return raw;
             }
 
-            return null;
+            string s = raw.TrimStart();
+            for (int pass = 0; pass < 4; pass++)
+            {
+                if (s.StartsWith("<?xml", StringComparison.OrdinalIgnoreCase))
+                {
+                    int end = s.IndexOf("?>", StringComparison.Ordinal);
+                    if (end < 0)
+                    {
+                        break;
+                    }
+
+                    s = s.Substring(end + 2).TrimStart();
+                    continue;
+                }
+
+                if (s.StartsWith("<!DOCTYPE", StringComparison.OrdinalIgnoreCase))
+                {
+                    int end = s.IndexOf('>');
+                    if (end < 0)
+                    {
+                        break;
+                    }
+
+                    s = s.Substring(end + 1).TrimStart();
+                    continue;
+                }
+
+                break;
+            }
+
+            return s;
         }
 
         private static void StripUnsafeNodes(XElement element)
