@@ -78,7 +78,8 @@
             <TextBlock Grid.Row="6" Text="Khung SVG" FontWeight="SemiBold" Margin="0 0 0 4"/>
             <ComboBox x:Name="svgFrameCombo" Grid.Row="7" Margin="0 0 0 6"
                       DisplayMemberPath="Display"
-                      SelectionChanged="SvgFrameCombo_SelectionChanged"/>
+                      SelectionChanged="SvgFrameCombo_SelectionChanged"
+                      ToolTip="title_*.svg trong thư mục ZoneSvg, khung lưu trong file gia phả, hoặc tạo khung mới"/>
 
             <StackPanel x:Name="newSvgPanel" Grid.Row="8" Visibility="Collapsed" Margin="0 0 0 6">
                 <TextBlock Text="Tạo khung mới — dán hoặc tải file .svg" FontWeight="SemiBold" Margin="0 0 0 4"/>

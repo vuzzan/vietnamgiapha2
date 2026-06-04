@@ -197,6 +197,8 @@ namespace vietnamgiapha
             FamilyTree = new GiaPhaViewModel(new GiaphaInfo());
             AfterFamilyTreeReplaced(clearUndoStack: true);
             _mainWindow.InvalidatePersonGridCache();
+            // Xóa index AI khi tạo file mới (cây rỗng)
+            _mainWindow.RebuildAiQueryIndex();
             _mainWindow.ResetPhaDoWorkspaceState();
             this.OnPropertyChanged("FamilyTree");
             _mainWindow.ScheduleExpandGiaPhaTreeView();
@@ -276,6 +278,8 @@ namespace vietnamgiapha
                 AfterFamilyTreeReplaced(clearUndoStack: true);
                 _mainWindow.UpdateHtmlGiaPha();
                 _mainWindow.InvalidatePersonGridCache();
+                // Rebuild index cho rule-based AI engine sau khi load file mới
+                _mainWindow.RebuildAiQueryIndex();
                 if (!_mainWindow.IsRestoringWorkspace)
                 {
                     _mainWindow.ResetPhaDoWorkspaceState();
@@ -332,6 +336,8 @@ namespace vietnamgiapha
 
                 _mainWindow.UpdateHtmlGiaPha();
                 _mainWindow.InvalidatePersonGridCache();
+                // Rebuild index AI rule-based khi mở file mới
+                _mainWindow.RebuildAiQueryIndex();
                 if (!_mainWindow.IsRestoringWorkspace)
                 {
                     _mainWindow.ResetPhaDoWorkspaceState();
@@ -365,6 +371,8 @@ namespace vietnamgiapha
                 AfterFamilyTreeReplaced(clearUndoStack: true);
                 _mainWindow.UpdateHtmlGiaPha();
                 _mainWindow.InvalidatePersonGridCache();
+                // Rebuild index AI rule-based khi khôi phục session
+                _mainWindow.RebuildAiQueryIndex();
                 _mainWindow.SyncPhaDoBoxStylesFromGiaPhaFile();
                 this.OnPropertyChanged("FamilyTree");
                 _mainWindow.ScheduleExpandGiaPhaTreeView();
@@ -385,6 +393,8 @@ namespace vietnamgiapha
                 AfterFamilyTreeReplaced(clearUndoStack: true);
                 _mainWindow.UpdateHtmlGiaPha();
                 _mainWindow.InvalidatePersonGridCache();
+                // Build index AI rule-based sau khi khôi phục session
+                _mainWindow.RebuildAiQueryIndex();
                 _mainWindow.SyncPhaDoBoxStylesFromGiaPhaFile();
                 this.OnPropertyChanged("FamilyTree");
                 _mainWindow.ScheduleExpandGiaPhaTreeView();

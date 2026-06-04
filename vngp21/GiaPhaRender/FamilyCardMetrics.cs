@@ -142,7 +142,7 @@ namespace vietnamgiapha.GiaPhaRender
         {
             var metrics = new FamilyCardMetrics();
             metrics.Generation = family.familyInfo.FamilyLevel;
-            metrics.FamilyLabel = "2Đời " + metrics.Generation;
+            metrics.FamilyLabel = "Đời " + metrics.Generation;
 
             var persons = family.ListPerson?.ToList() ?? new List<PersonInfo>();
             metrics.MainPerson = persons.FirstOrDefault(p => p.IsMainPerson == 1)

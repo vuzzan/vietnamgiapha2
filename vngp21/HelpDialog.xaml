@@ -3,11 +3,11 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:mah="http://metro.mahapps.com/winfx/xaml/controls"
         Title="Trợ giúp — Vietnam Gia Phả"
-        Height="640"
-        Width="620"
+        Height="660"
+        Width="640"
         WindowStartupLocation="CenterOwner"
         ResizeMode="CanResizeWithGrip"
-        MinHeight="480"
+        MinHeight="500"
         MinWidth="520"
         ShowInTaskbar="False">
     <Window.Resources>
@@ -17,87 +17,367 @@
                 <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Fonts.xaml" />
                 <ResourceDictionary Source="pack://application:,,,/MahApps.Metro;component/Styles/Themes/Light.Orange.xaml" />
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- ── Tiêu đề mục (TextBlock — không cần copy) ── -->
             <Style x:Key="HelpSectionStyle" TargetType="TextBlock">
                 <Setter Property="FontWeight" Value="SemiBold"/>
                 <Setter Property="FontSize" Value="14"/>
                 <Setter Property="Margin" Value="0,16,0,8"/>
                 <Setter Property="Foreground" Value="#C45C00"/>
             </Style>
-            <Style x:Key="HelpBodyStyle" TargetType="TextBlock">
-                <Setter Property="TextWrapping" Value="Wrap"/>
-                <Setter Property="Margin" Value="0,0,0,6"/>
-                <Setter Property="LineHeight" Value="20"/>
+            <Style x:Key="AiSectionStyle" TargetType="TextBlock">
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter Property="FontSize" Value="13"/>
+                <Setter Property="Margin" Value="0,14,0,6"/>
+                <Setter Property="Foreground" Value="#1E6BB5"/>
             </Style>
-            <Style x:Key="HelpShortcutStyle" TargetType="TextBlock" BasedOn="{StaticResource HelpBodyStyle}">
+
+            <!-- ── Base selectable TextBox (không viền, không nền) ── -->
+            <!-- Custom template xóa hoàn toàn chrome của TextBox / MahApps -->
+            <Style x:Key="SelectableBase" TargetType="TextBox">
+                <Setter Property="IsReadOnly" Value="True"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="BorderBrush" Value="Transparent"/>
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="IsTabStop" Value="False"/>
+                <Setter Property="TextWrapping" Value="Wrap"/>
+                <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                <Setter Property="VerticalAlignment" Value="Top"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type TextBox}">
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Focusable="False"
+                                          Background="Transparent"
+                                          HorizontalScrollBarVisibility="Hidden"
+                                          VerticalScrollBarVisibility="Hidden"/>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- Tab 1 -->
+            <Style x:Key="HelpBodyStyle" TargetType="TextBox" BasedOn="{StaticResource SelectableBase}">
+                <Setter Property="Margin" Value="0,0,0,6"/>
+            </Style>
+            <Style x:Key="HelpShortcutStyle" TargetType="TextBox" BasedOn="{StaticResource SelectableBase}">
                 <Setter Property="Margin" Value="12,0,0,4"/>
                 <Setter Property="FontFamily" Value="Segoe UI"/>
             </Style>
+
+            <!-- Tab 2 -->
+            <Style x:Key="AiBodyStyle" TargetType="TextBox" BasedOn="{StaticResource SelectableBase}">
+                <Setter Property="FontSize" Value="12"/>
+                <Setter Property="Margin" Value="0,0,0,4"/>
+            </Style>
+            <Style x:Key="ExampleLineStyle" TargetType="TextBox" BasedOn="{StaticResource SelectableBase}">
+                <Setter Property="FontFamily" Value="Consolas, Segoe UI Mono, Courier New"/>
+                <Setter Property="FontSize" Value="11.5"/>
+                <Setter Property="Foreground" Value="#0055AA"/>
+                <Setter Property="Margin" Value="0,2,0,2"/>
+            </Style>
+            <Style x:Key="HintStyle" TargetType="TextBox" BasedOn="{StaticResource SelectableBase}">
+                <Setter Property="FontSize" Value="11"/>
+                <Setter Property="Foreground" Value="#666"/>
+                <Setter Property="FontStyle" Value="Italic"/>
+                <Setter Property="Margin" Value="2,0,0,0"/>
+            </Style>
+
+            <!-- Hộp ví dụ — nền xanh nhạt -->
+            <Style x:Key="ExampleBoxStyle" TargetType="Border">
+                <Setter Property="Background" Value="#EEF4FF"/>
+                <Setter Property="BorderBrush" Value="#AACCEE"/>
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="CornerRadius" Value="4"/>
+                <Setter Property="Padding" Value="10,7"/>
+                <Setter Property="Margin" Value="0,3,0,10"/>
+            </Style>
         </ResourceDictionary>
     </Window.Resources>
+
     <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
-        <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
-            <StackPanel>
-                <TextBlock Style="{StaticResource HelpBodyStyle}" FontSize="13" Margin="0,0,0,8"
-                           Text="Ứng dụng quản lý cây gia phả (gia đình — người) và vẽ phả đồ. Làm việc chủ yếu ở cây bên trái và danh sách người của gia đình đang chọn."/>
 
-                <TextBlock Text="1. Tạo gia phả mới" Style="{StaticResource HelpSectionStyle}" Margin="0,8,0,8"/>
-                <TextBlock Style="{StaticResource HelpBodyStyle}"
-                           Text="• Menu File → Mới: lưu file hiện tại (nếu có) rồi tạo gia phả trống với một gia đình gốc (thủy tổ)."/>
-                <TextBlock Style="{StaticResource HelpBodyStyle}"
-                           Text="• Menu File → Mở File: mở file JSON gia phả đã lưu trước đó."/>
-                <TextBlock Style="{StaticResource HelpBodyStyle}"
-                           Text="• Trên cây gia phả: chọn gia đình gốc, dùng phím tắt (mục 3) hoặc chuột phải để thêm gia đình con, anh, em."/>
-                <TextBlock Style="{StaticResource HelpBodyStyle}"
-                           Text="• Chọn một gia đình trên cây → danh sách người bên dưới hiển thị thành viên → thêm người bằng Insert hoặc chuột phải (mục 4)."/>
-                <TextBlock Style="{StaticResource HelpBodyStyle}"
-                           Text="• File → Lưu / Lưu file khác: lưu dữ liệu JSON. Tab Phả đồ: vẽ và in phả đồ sau khi nhập liệu."/>
+        <TabControl Grid.Row="0">
 
-                <TextBlock Text="2. Chỉnh sửa gia phả" Style="{StaticResource HelpSectionStyle}"/>
-                <TextBlock Style="{StaticResource HelpBodyStyle}"
-                           Text="• Chọn gia đình trên cây để xem và sửa danh sách người trong gia đình đó."/>
-                <TextBlock Style="{StaticResource HelpBodyStyle}"
-                           Text="• F2 (khi focus cây): đổi tên nhãn gia đình trên cây; Enter xác nhận, Esc hủy."/>
-                <TextBlock Style="{StaticResource HelpBodyStyle}"
-                           Text="• Double-click một dòng người: mở form chi tiết (họ tên, giới tính, đời, ghi chú…)."/>
-                <TextBlock Style="{StaticResource HelpBodyStyle}"
-                           Text="• Chuột phải trên cây: cắt / dán gia đình, chèn, xóa, kiểm tra nhánh (tương đương một số phím tắt)."/>
-                <TextBlock Style="{StaticResource HelpBodyStyle}"
-                           Text="• Kéo thả gia đình trên cây để đổi vị trí trong cây. Ctrl+Z: hoàn tác tối đa 2 bước sửa cây gần nhất."/>
-                <TextBlock Style="{StaticResource HelpBodyStyle}"
-                           Text="• Settings → Cài đặt phả đồ: khoảng cách, kích thước ô, cỡ chữ khi vẽ phả đồ."/>
+            <!-- ════════════════ TAB 1: HƯỚNG DẪN ════════════════ -->
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="📖" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="Hướng dẫn" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="4,8,4,0">
+                    <StackPanel>
+                        <TextBox Style="{StaticResource HelpBodyStyle}" FontSize="13" Margin="0,0,0,8"
+                                 Text="Ứng dụng quản lý cây gia phả (gia đình — người) và vẽ phả đồ. Làm việc chủ yếu ở cây bên trái và danh sách người của gia đình đang chọn."/>
 
-                <TextBlock Text="3. Phím tắt — gia đình (focus cây gia phả)" Style="{StaticResource HelpSectionStyle}"/>
-                <TextBlock Style="{StaticResource HelpBodyStyle}"
-                           Text="Chọn một gia đình trên cây, giữ phím Shift khi gõ (trừ khi ghi chú khác):"/>
-                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Shift + Insert — Chèn gia đình cha (phía trên gia đình đang chọn)"/>
-                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Shift + + (hoặc Numpad +) — Thêm gia đình con"/>
-                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Shift + E — Thêm gia đình em (xuống dưới anh em)"/>
-                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Shift + A — Thêm gia đình anh (lên trên anh em)"/>
-                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Shift + Delete — Xóa gia đình (theo quy tắc xóa nhánh)"/>
-                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Shift + ↑ / Shift + ↓ — Đổi thứ tự anh em"/>
-                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="F2 — Sửa tên gia đình trên cây"/>
-                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Ctrl + C — Copy nhánh gia đình"/>
-                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Ctrl + V — Dán nhánh đã copy làm con của gia đình đang chọn"/>
+                        <TextBlock Text="1. Tạo gia phả mới" Style="{StaticResource HelpSectionStyle}" Margin="0,8,0,8"/>
+                        <TextBox Style="{StaticResource HelpBodyStyle}"
+                                 Text="• Menu File → Mới: lưu file hiện tại (nếu có) rồi tạo gia phả trống với một gia đình gốc (thủy tổ)."/>
+                        <TextBox Style="{StaticResource HelpBodyStyle}"
+                                 Text="• Menu File → Mở File: mở file JSON gia phả đã lưu trước đó."/>
+                        <TextBox Style="{StaticResource HelpBodyStyle}"
+                                 Text="• Trên cây gia phả: chọn gia đình gốc, dùng phím tắt (mục 3) hoặc chuột phải để thêm gia đình con, anh, em."/>
+                        <TextBox Style="{StaticResource HelpBodyStyle}"
+                                 Text="• Chọn một gia đình trên cây → danh sách người bên dưới hiển thị thành viên → thêm người bằng Insert hoặc chuột phải (mục 4)."/>
+                        <TextBox Style="{StaticResource HelpBodyStyle}"
+                                 Text="• File → Lưu / Lưu file khác: lưu dữ liệu JSON. Tab Phả đồ: vẽ và in phả đồ sau khi nhập liệu."/>
 
-                <TextBlock Text="4. Phím tắt — người (danh sách người trong gia đình)" Style="{StaticResource HelpSectionStyle}"/>
-                <TextBlock Style="{StaticResource HelpBodyStyle}"
-                           Text="Chọn gia đình trên cây, click vào danh sách người bên dưới (focus danh sách):"/>
-                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Insert — Thêm người mới vào gia đình đang chọn"/>
-                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Delete — Xóa người đang chọn (có hộp xác nhận)"/>
-                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Shift + ↑ / Shift + ↓ — Đổi thứ tự người trong ô (người chính / phối)"/>
+                        <TextBlock Text="2. Chỉnh sửa gia phả" Style="{StaticResource HelpSectionStyle}"/>
+                        <TextBox Style="{StaticResource HelpBodyStyle}"
+                                 Text="• Chọn gia đình trên cây để xem và sửa danh sách người trong gia đình đó."/>
+                        <TextBox Style="{StaticResource HelpBodyStyle}"
+                                 Text="• F2 (khi focus cây): đổi tên nhãn gia đình trên cây; Enter xác nhận, Esc hủy."/>
+                        <TextBox Style="{StaticResource HelpBodyStyle}"
+                                 Text="• Double-click một dòng người: mở form chi tiết (họ tên, giới tính, đời, ghi chú…)."/>
+                        <TextBox Style="{StaticResource HelpBodyStyle}"
+                                 Text="• Chuột phải trên cây: cắt / dán gia đình, chèn, xóa, kiểm tra nhánh (tương đương một số phím tắt)."/>
+                        <TextBox Style="{StaticResource HelpBodyStyle}"
+                                 Text="• Kéo thả gia đình trên cây để đổi vị trí trong cây. Ctrl+Z: hoàn tác tối đa 2 bước sửa cây gần nhất."/>
+                        <TextBox Style="{StaticResource HelpBodyStyle}"
+                                 Text="• Settings → Cài đặt phả đồ: khoảng cách, kích thước ô, cỡ chữ khi vẽ phả đồ."/>
 
-                <TextBlock Text="5. Phím tắt khác" Style="{StaticResource HelpSectionStyle}"/>
-                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Ctrl + Z — Hoàn tác sửa cây"/>
-                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="F11 — Toàn màn hình vùng cây hoặc phả đồ (tùy tab đang mở)"/>
-                <TextBlock Style="{StaticResource HelpShortcutStyle}" Text="Esc — Thoát chế độ toàn màn hình / bỏ chọn trên phả đồ"/>
-            </StackPanel>
-        </ScrollViewer>
-        <Button Grid.Row="1" Content="Đóng" Width="88" Margin="0,12,0,0"
-                HorizontalAlignment="Right" IsDefault="True" IsCancel="True"
+                        <TextBlock Text="3. Phím tắt — gia đình (focus cây gia phả)" Style="{StaticResource HelpSectionStyle}"/>
+                        <TextBox Style="{StaticResource HelpBodyStyle}"
+                                 Text="Chọn một gia đình trên cây, giữ phím Shift khi gõ (trừ khi ghi chú khác):"/>
+                        <TextBox Style="{StaticResource HelpShortcutStyle}" Text="Shift + Insert — Chèn gia đình cha (phía trên gia đình đang chọn)"/>
+                        <TextBox Style="{StaticResource HelpShortcutStyle}" Text="Shift + + (hoặc Numpad +) — Thêm gia đình con"/>
+                        <TextBox Style="{StaticResource HelpShortcutStyle}" Text="Shift + E — Thêm gia đình em (xuống dưới anh em)"/>
+                        <TextBox Style="{StaticResource HelpShortcutStyle}" Text="Shift + A — Thêm gia đình anh (lên trên anh em)"/>
+                        <TextBox Style="{StaticResource HelpShortcutStyle}" Text="Shift + Delete — Xóa gia đình (theo quy tắc xóa nhánh)"/>
+                        <TextBox Style="{StaticResource HelpShortcutStyle}" Text="Shift + ↑ / Shift + ↓ — Đổi thứ tự anh em"/>
+                        <TextBox Style="{StaticResource HelpShortcutStyle}" Text="F2 — Sửa tên gia đình trên cây"/>
+                        <TextBox Style="{StaticResource HelpShortcutStyle}" Text="Ctrl + C — Copy nhánh gia đình"/>
+                        <TextBox Style="{StaticResource HelpShortcutStyle}" Text="Ctrl + V — Dán nhánh đã copy làm con của gia đình đang chọn"/>
+
+                        <TextBlock Text="4. Phím tắt — người (danh sách người trong gia đình)" Style="{StaticResource HelpSectionStyle}"/>
+                        <TextBox Style="{StaticResource HelpBodyStyle}"
+                                 Text="Chọn gia đình trên cây, click vào danh sách người bên dưới (focus danh sách):"/>
+                        <TextBox Style="{StaticResource HelpShortcutStyle}" Text="Insert — Thêm người mới vào gia đình đang chọn"/>
+                        <TextBox Style="{StaticResource HelpShortcutStyle}" Text="Delete — Xóa người đang chọn (có hộp xác nhận)"/>
+                        <TextBox Style="{StaticResource HelpShortcutStyle}" Text="Shift + ↑ / Shift + ↓ — Đổi thứ tự người trong ô (người chính / phối)"/>
+
+                        <TextBlock Text="5. Phím tắt khác" Style="{StaticResource HelpSectionStyle}"/>
+                        <TextBox Style="{StaticResource HelpShortcutStyle}" Text="Ctrl + Z — Hoàn tác sửa cây"/>
+                        <TextBox Style="{StaticResource HelpShortcutStyle}" Text="F11 — Toàn màn hình vùng cây hoặc phả đồ (tùy tab đang mở)"/>
+                        <TextBox Style="{StaticResource HelpShortcutStyle}" Text="Esc — Thoát chế độ toàn màn hình / bỏ chọn trên phả đồ"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ════════════════ TAB 2: AI TRA CỨU NỘI BỘ ════════════════ -->
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="📚" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="AI Tra cứu nội bộ" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </TabItem.Header>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="4,8,4,0">
+                    <StackPanel>
+
+                        <!-- Giới thiệu -->
+                        <Border Background="#FFF8EE" BorderBrush="#FFCC80" BorderThickness="1"
+                                CornerRadius="6" Padding="12,10" Margin="0,0,0,12">
+                            <StackPanel>
+                                <TextBlock FontWeight="SemiBold" FontSize="13" Foreground="#BF6000"
+                                           Text="📚 Chế độ tra cứu nội bộ — không cần API key"/>
+                                <TextBox Style="{StaticResource AiBodyStyle}" Margin="0,6,0,0"
+                                         Text="Gõ câu hỏi bằng tiếng Việt vào ô chat AI. Hệ thống tự tìm trực tiếp trong dữ liệu gia phả mà không cần internet. Hỗ trợ gõ có dấu hoặc không dấu đều được."/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ── 1. Tổng quan ── -->
+                        <TextBlock Text="1.  Hỏi tổng quan (không cần tên người)" Style="{StaticResource AiSectionStyle}"/>
+                        <TextBox Style="{StaticResource AiBodyStyle}"
+                                 Text="Những câu hỏi sau không cần biết tên ai — hệ thống trả lời theo toàn bộ gia phả:"/>
+                        <Border Style="{StaticResource ExampleBoxStyle}">
+                            <StackPanel>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Thủy tổ là ai?"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Tổ tiên của dòng họ là ai?"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Hiển thị gia đình gốc (không có cha) kèm ghi chú"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Gia phả có bao nhiêu người?" Margin="0,8,0,2"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Tổng số người trong dòng họ"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Thống kê: số gia đình, số người, số đời"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Đời 3 có ai?"               Margin="0,8,0,2"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Đời 5 có bao nhiêu người?"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Đời 4 có mấy gia đình?"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Liệt kê toàn bộ gia đình trong đời đó"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Ai chưa có con?"            Margin="0,8,0,2"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Người nào không có con cháu?"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Danh sách người chưa có hậu duệ được ghi nhận"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ── 2. Tìm theo năm ── -->
+                        <TextBlock Text="2.  Tìm theo năm sinh / năm mất" Style="{StaticResource AiSectionStyle}"/>
+                        <Border Style="{StaticResource ExampleBoxStyle}">
+                            <StackPanel>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Ai sinh năm 1920?"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Người sinh 1945"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Danh sách người có ngày sinh chứa năm đó"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Ai mất năm 1980?"           Margin="0,8,0,2"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Kỵ năm 1975"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Ai qua đời năm 2000?"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Danh sách người có ngày mất/kỵ chứa năm đó"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ── 3. Thông tin người ── -->
+                        <TextBlock Text="3.  Thông tin một người (cần gõ tên)" Style="{StaticResource AiSectionStyle}"/>
+                        <TextBox Style="{StaticResource AiBodyStyle}"
+                                 Text="Gõ một phần hoặc toàn bộ họ tên. Nếu trùng tên, hệ thống hiển thị tất cả kèm thông tin phân biệt."/>
+                        <Border Style="{StaticResource ExampleBoxStyle}">
+                            <StackPanel>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Nguyễn Văn Chính"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Thông tin đầy đủ: đời, ngày sinh/mất, mộ, cha, con..."/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Con của Nguyễn Văn Chính"   Margin="0,8,0,2"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Con trai của Trần Văn A"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Danh sách con (kèm số cháu của từng con)"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Cha của Lê Thị Hoa"         Margin="0,8,0,2"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Mẹ của Nguyễn Văn B"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Tên cha/mẹ và đời"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Vợ của Trần Công Đào"        Margin="0,8,0,2"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Chồng của Lê Thị C"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Tên vợ/chồng, ngày kỵ, nơi mộ nếu có"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Anh em của Nguyễn Văn D"    Margin="0,8,0,2"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Danh sách anh/chị/em cùng cha"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Cháu của Lê Văn E"           Margin="0,8,0,2"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Cháu nội (con của con)"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Hậu duệ của Nguyễn Văn A"   Margin="0,8,0,2"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Toàn bộ con cháu của cụ B"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Cây hậu duệ đệ quy theo thứ bậc, tối đa 100 người"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ── 4. Ngày kỵ, mộ, ghi chú ── -->
+                        <TextBlock Text="4.  Ngày kỵ · Nơi mộ · Ghi chú" Style="{StaticResource AiSectionStyle}"/>
+                        <Border Style="{StaticResource ExampleBoxStyle}">
+                            <StackPanel>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Ngày kỵ của Nguyễn Văn A"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Ngày mất của Trần Thị B"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Ngày giỗ cụ C"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Ngày mất/kỵ của từng người trong gia đình"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Mộ của ông Nguyễn Văn D"    Margin="0,8,0,2"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Phần mộ của bà Lê Thị E"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Chôn cất Trần Văn F ở đâu?"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Địa điểm mộ"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Ghi chú về Nguyễn Văn G"    Margin="0,8,0,2"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Chi tiết Trần Thị H"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Nội dung ghi chú / mô tả chi tiết"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Tên tự của Nguyễn Văn I"    Margin="0,8,0,2"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Tên thụy của cụ J"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Tên thường gọi của ông K"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Tên tự, tên huý, tên thường gọi"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ── 5. Tổ tiên nhiều cấp ── -->
+                        <TextBlock Text="5.  Tổ tiên nhiều cấp" Style="{StaticResource AiSectionStyle}"/>
+                        <Border Style="{StaticResource ExampleBoxStyle}">
+                            <StackPanel>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Ông nội của Nguyễn Văn A"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Bà nội của Trần Thị B"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Tổ tiên cấp 2 (cha của cha)"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Ông cố của X"               Margin="0,8,0,2"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Cụ ông của Y"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Ông cụ của Z"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Tổ tiên cấp 3 (ông nội của cha)"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Kỵ của Nguyễn Văn A là ai?" Margin="0,8,0,2"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Tổ tiên cấp 4"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ── 6. Số thứ đời ── -->
+                        <TextBlock Text="6.  Số thứ đời" Style="{StaticResource AiSectionStyle}"/>
+                        <Border Style="{StaticResource ExampleBoxStyle}">
+                            <StackPanel>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Nguyễn Văn A đời mấy?"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Đời mấy của Trần Thị B"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Số thứ đời trong gia phả"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ── 7. Quan hệ 2 người ── -->
+                        <TextBlock Text="7.  Quan hệ giữa hai người" Style="{StaticResource AiSectionStyle}"/>
+                        <TextBox Style="{StaticResource AiBodyStyle}"
+                                 Text="Hệ thống tính toán qua tổ tiên chung gần nhất (LCA). Kết quả gần nhất hiển thị trước."/>
+                        <Border Style="{StaticResource ExampleBoxStyle}">
+                            <StackPanel>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Nguyễn Văn A và Trần Thị B có quan hệ gì?"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Quan hệ giữa Lê Văn C và Nguyễn Văn D"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Trần Thị E là gì của Nguyễn Văn F?"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Cha/con, ông/cháu, cụ/chắt, anh/em ruột, chú/cháu, anh/em họ…"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ── 8. "Ai là..." ── -->
+                        <TextBlock Text="8.  Câu hỏi dạng &quot;Ai là...&quot;" Style="{StaticResource AiSectionStyle}"/>
+                        <TextBox Style="{StaticResource AiBodyStyle}"
+                                 Text="Có thể hỏi ngược — hệ thống tự nhận dạng vai trò và tìm đúng người:"/>
+                        <Border Style="{StaticResource ExampleBoxStyle}">
+                            <StackPanel>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Ai là cha của Nguyễn Văn A?"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Ai là mẹ của Trần Thị B?"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Ai là ông nội của X?"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Ai là vợ của Y?"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Tương đương: 'Cha của X là ai?' — cùng kết quả"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Ai có con tên Nguyễn Văn A?" Margin="0,8,0,2"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Ai sinh ra Trần Văn B?"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Tìm cha của người đó"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ── 9. Người đang chọn ── -->
+                        <TextBlock Text="9.  Hỏi về người đang chọn trên cây" Style="{StaticResource AiSectionStyle}"/>
+                        <TextBox Style="{StaticResource AiBodyStyle}"
+                                 Text="Khi đang click chọn một gia đình trên cây, có thể hỏi không cần nhắc lại tên:"/>
+                        <Border Style="{StaticResource ExampleBoxStyle}">
+                            <StackPanel>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Con của người này"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Cha của gia đình này"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Ông nội của người đang chọn"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Hậu duệ của đây"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Ngày kỵ hiện tại"/>
+                                <TextBox Style="{StaticResource ExampleLineStyle}" Text="Mộ của người này ở đâu?"/>
+                                <TextBox Style="{StaticResource HintStyle}"       Text="→ Tra cứu ngay gia đình đang được chọn trên cây"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ── Lưu ý ── -->
+                        <Border Background="#F5FFF5" BorderBrush="#99CC99" BorderThickness="1"
+                                CornerRadius="5" Padding="12,10" Margin="0,4,0,16">
+                            <StackPanel>
+                                <TextBlock FontWeight="SemiBold" FontSize="12" Foreground="#2E7D32"
+                                           Text="💡 Lưu ý khi tra cứu" Margin="0,0,0,6"/>
+                                <TextBox Style="{StaticResource AiBodyStyle}"
+                                         Text="• Gõ không dấu hoặc có dấu đều được: 'Nguyen Van A' hay 'Nguyễn Văn A' cho cùng kết quả."/>
+                                <TextBox Style="{StaticResource AiBodyStyle}"
+                                         Text="• Gõ một phần tên cũng được: 'Văn Chính' thay vì 'Nguyễn Văn Chính'."/>
+                                <TextBox Style="{StaticResource AiBodyStyle}"
+                                         Text="• Nếu trùng tên nhiều người: hệ thống hiển thị danh sách để phân biệt theo đời và cha."/>
+                                <TextBox Style="{StaticResource AiBodyStyle}"
+                                         Text="• Với câu hỏi cụ thể (con, mộ, ngày kỵ…) khi trùng tên: kết quả hiện cho từng người."/>
+                                <TextBox Style="{StaticResource AiBodyStyle}"
+                                         Text="• Phải mở file gia phả trước — chế độ nội bộ chỉ tra trong dữ liệu đang mở."/>
+                            </StackPanel>
+                        </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+        </TabControl>
+
+        <!-- Nút đóng -->
+        <Button Grid.Row="1" Content="Đóng" Width="88" Margin="0,10,0,0"
+                HorizontalAlignment="Right" Click="CloseBtn_Click"
                 Style="{StaticResource MahApps.Styles.Button.Square.Accent}"/>
     </Grid>
 </mah:MetroWindow>

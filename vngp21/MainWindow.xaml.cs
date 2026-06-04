@@ -182,7 +182,7 @@ namespace vietnamgiapha
         private bool _phaDoImmersivePaneWasOpen = true;
         private bool _phaDoToolboxExpanded;
         private const double PhaDoToolboxWidthCollapsed = 52;
-        private const double PhaDoToolboxWidthExpanded = 176;
+        private const double PhaDoToolboxWidthExpanded = 150;
         private bool _treePaneImmersive;
         private double _treePaneImmersiveSavedOpenPaneLength = 300;
         private double _treePaneImmersiveSavedCompactPaneLength = 48;
@@ -243,6 +243,15 @@ namespace vietnamgiapha
         private bool _phaDoShowScopeSummaryNote;
         private string _phaDoScopeStartFamilyName;
         private readonly HashSet<int> _phaConFamilyIds = new HashSet<int>();
+
+        // AI service — khởi tạo lazy khi người dùng mở cài đặt lần đầu.
+        private readonly AI.AiApiService _aiService = new AI.AiApiService();
+        /// <summary>Rule-based engine — được build lại mỗi khi load file gia phả mới.</summary>
+        private readonly AI.GiaPhaQueryEngine _aiQueryEngine = new AI.GiaPhaQueryEngine();
+        /// <summary>Chat dialog AI modeless — giữ 1 instance, reuse khi mở lại.</summary>
+        private AI.AiChatDialog _aiChatDialog;
+        /// <summary>Help dialog modeless — giữ 1 instance, tự dọn khi đóng.</summary>
+        private HelpDialog _helpDialog;
         private readonly HashSet<int> _phaConStopFamilyIds = new HashSet<int>();
         /// <summary>IDs non-STOP đã được gom vào combo đa gốc — dừng ở split level trong scope cha (có trang riêng).</summary>
         private readonly HashSet<int> _phaConNonStopComboFamilyIds = new HashSet<int>();
@@ -1014,19 +1023,65 @@ namespace vietnamgiapha
             }
         }
 
+        /// <summary>Vùng nội dung chữ trong ô (padding/header khớp FamilyTreeCanvasRenderer).</summary>
+        private bool TryGetFamilyInnerContentBoundsPx(
+            int familyId,
+            out double leftPx,
+            out double topPx,
+            out double widthPx,
+            out double heightPx)
+        {
+            leftPx = topPx = widthPx = heightPx = 0;
+            if (!TryGetFamilyBackgroundBounds(familyId, out double boxLeft, out double boxTop, out double boxW, out double boxH))
+            {
+                return false;
+            }
+
+            var opt = _phaDoCurrentOptions;
+            double padMm = opt?.CardPaddingMm ?? 2.5;
+            double padSidePx = MmToPx(padMm);
+            double padBottomPx = MmToPx(opt?.CardBottomPaddingMm ?? 2);
+            bool vertical = opt != null && GiaPhaRenderOptions.IsVerticalCardLayout(opt.CardLayoutMode);
+
+            double padTopPx;
+            if (vertical)
+            {
+                padTopPx = MmToPx(padMm * 0.5);
+            }
+            else
+            {
+                padTopPx = MmToPx(padMm) + MmToPx(opt?.CardHeaderHeightMm ?? 6);
+            }
+
+            leftPx = boxLeft + padSidePx;
+            topPx = boxTop + padTopPx;
+            widthPx = Math.Max(4, boxW - 2 * padSidePx);
+            // Dọc: khớp DrawCardVertical (pad*0.5 trên, pad + bottom dưới).
+            // Ngang: vùng tên từ sau header — pad*0.5 trước dòng đầu, pad + bottomPad đáy ô.
+            if (vertical)
+            {
+                heightPx = Math.Max(4, boxH - padTopPx - padSidePx - padBottomPx);
+            }
+            else
+            {
+                double padTopContentPx = MmToPx(padMm * 0.5);
+                topPx = boxTop + MmToPx(opt?.CardHeaderHeightMm ?? 6) + padTopContentPx;
+                heightPx = Math.Max(4, boxH - (topPx - boxTop) - padSidePx - padBottomPx);
+            }
+
+            return widthPx > 0 && heightPx > 0;
+        }
+
         /// <summary>Bề rộng vùng chữ trong ô (box trừ padding hai bên).</summary>
         private bool TryGetFamilyInnerContentWidthPx(int familyId, out double innerWidthPx, out double contentLeftPx)
         {
             innerWidthPx = 0;
             contentLeftPx = 0;
-            if (!TryGetFamilyBackgroundBounds(familyId, out double boxLeft, out _, out double boxW, out _))
+            if (!TryGetFamilyInnerContentBoundsPx(familyId, out contentLeftPx, out _, out innerWidthPx, out _))
             {
                 return false;
             }
 
-            double padPx = MmToPx(_phaDoCurrentOptions?.CardPaddingMm ?? 2);
-            contentLeftPx = boxLeft + padPx;
-            innerWidthPx = Math.Max(4, boxW - 2 * padPx);
             return innerWidthPx > 0;
         }
 
@@ -1037,6 +1092,10 @@ namespace vietnamgiapha
             {
                 return;
             }
+
+            // Cột dọc / dọc theo từ: không kéo rộng StackPanel = full ô (phá kéo ngang).
+            bool verticalCards = _phaDoCurrentOptions != null
+                && GiaPhaRenderOptions.IsVerticalCardLayout(_phaDoCurrentOptions.CardLayoutMode);
 
             foreach (var fe in theCanvas.Children.OfType<FrameworkElement>())
             {
@@ -1053,21 +1112,28 @@ namespace vietnamgiapha
                     continue;
                 }
 
-                if (fe is TextBlock tb)
+                if (fe is StackPanel)
                 {
-                    tb.Width = innerW;
-                    tb.MaxWidth = innerW;
-                    continue;
-                }
+                    if (verticalCards)
+                    {
+                        continue;
+                    }
 
-                if (fe is StackPanel column)
-                {
+                    var column = (StackPanel)fe;
                     column.Width = innerW;
                     foreach (var line in column.Children.OfType<TextBlock>())
                     {
                         line.Width = innerW;
                         line.MaxWidth = innerW;
                     }
+
+                    continue;
+                }
+
+                if (fe is TextBlock tb)
+                {
+                    tb.Width = innerW;
+                    tb.MaxWidth = innerW;
                 }
             }
         }
@@ -1324,16 +1390,125 @@ namespace vietnamgiapha
             double deltaXmm,
             double deltaYmm)
         {
-            if (!TryGetFamilyBackgroundBounds(familyId, out double boxLeft, out double boxTop, out double boxW, out double boxH))
-            {
-                return;
-            }
+            bool verticalCards = _phaDoCurrentOptions != null
+                && GiaPhaRenderOptions.IsVerticalCardLayout(_phaDoCurrentOptions.CardLayoutMode);
 
-            GetPersonElementSize(element, out double elW, out double elH);
             double newLeft = _phaDoPersonNaturalLeftPx + MmToPx(deltaXmm);
             double newTop = _phaDoPersonNaturalTopPx + MmToPx(deltaYmm);
-            newLeft = Math.Max(boxLeft, Math.Min(boxLeft + boxW - elW, newLeft));
-            newTop = Math.Max(boxTop, Math.Min(boxTop + boxH - elH, newTop));
+
+            if (verticalCards)
+            {
+                if (!TryGetFamilyInnerContentBoundsPx(familyId, out double areaLeft, out double areaTop, out double areaW, out double areaH))
+                {
+                    return;
+                }
+
+                double elLeft = Canvas.GetLeft(element);
+                double elTop = Canvas.GetTop(element);
+                if (double.IsNaN(elLeft))
+                {
+                    elLeft = 0;
+                }
+
+                if (double.IsNaN(elTop))
+                {
+                    elTop = 0;
+                }
+
+                double textRelL;
+                double textRelT;
+                double textW;
+                double textH;
+                if (TryMeasurePersonTextSelectionBounds(element, out double textLeft, out double textTop, out textW, out textH))
+                {
+                    textRelL = textLeft - elLeft;
+                    textRelT = textTop - elTop;
+                }
+                else
+                {
+                    GetPersonElementSize(element, out textW, out textH);
+                    textRelL = 0;
+                    textRelT = 0;
+                }
+
+                double areaRight = areaLeft + areaW;
+                double areaBottom = areaTop + areaH;
+                double minLeft = areaLeft - textRelL;
+                double maxLeft = areaRight - textRelL - textW;
+                double minTop = areaTop - textRelT;
+                double maxTop = areaBottom - textRelT - textH;
+
+                if (maxLeft >= minLeft)
+                {
+                    newLeft = Math.Max(minLeft, Math.Min(maxLeft, newLeft));
+                }
+                else
+                {
+                    newLeft = minLeft;
+                }
+
+                if (maxTop >= minTop)
+                {
+                    newTop = Math.Max(minTop, Math.Min(maxTop, newTop));
+                }
+                else
+                {
+                    newTop = minTop;
+                }
+            }
+            else
+            {
+                // Chữ ngang: ngang = khung chữ trong vùng padding; dọc = cả ô + chiều cao dòng (wrap/line height).
+                if (!TryGetFamilyBackgroundBounds(familyId, out double boxLeft, out double boxTop, out double boxW, out double boxH))
+                {
+                    return;
+                }
+
+                if (!TryGetFamilyInnerContentBoundsPx(familyId, out double areaLeft, out _, out double areaW, out _))
+                {
+                    double padPx = MmToPx(_phaDoCurrentOptions?.CardPaddingMm ?? 2.5);
+                    areaLeft = boxLeft + padPx;
+                    areaW = Math.Max(4, boxW - 2 * padPx);
+                }
+
+                double elLeft = Canvas.GetLeft(element);
+                double elTop = Canvas.GetTop(element);
+                if (double.IsNaN(elLeft))
+                {
+                    elLeft = 0;
+                }
+
+                if (double.IsNaN(elTop))
+                {
+                    elTop = 0;
+                }
+
+                double textRelL;
+                double textW;
+                if (TryMeasurePersonTextSelectionBounds(element, out double textLeft, out _, out textW, out _))
+                {
+                    textRelL = textLeft - elLeft;
+                }
+                else
+                {
+                    GetPersonElementSize(element, out textW, out _);
+                    textRelL = 0;
+                }
+
+                double minLeft = areaLeft - textRelL;
+                double maxLeft = areaLeft + areaW - textRelL - textW;
+                if (maxLeft >= minLeft)
+                {
+                    newLeft = Math.Max(minLeft, Math.Min(maxLeft, newLeft));
+                }
+                else
+                {
+                    newLeft = minLeft;
+                }
+
+                GetPersonElementSize(element, out _, out double elH);
+                newTop = Math.Max(boxTop, Math.Min(boxTop + boxH - elH, newTop));
+            }
 
             Canvas.SetLeft(element, newLeft);
             Canvas.SetTop(element, newTop);
@@ -2148,8 +2323,19 @@ namespace vietnamgiapha
 
         private void OpenHelpDialog_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new HelpDialog { Owner = this };
-            dlg.ShowDialog();
+            // Nếu cửa sổ đã mở thì chỉ đưa lên trước, không tạo thêm
+            if (_helpDialog != null)
+            {
+                _helpDialog.Activate();
+                if (_helpDialog.WindowState == WindowState.Minimized)
+                    _helpDialog.WindowState = WindowState.Normal;
+                return;
+            }
+
+            _helpDialog = new HelpDialog { Owner = this };
+            // Dọn field khi cửa sổ bị đóng
+            _helpDialog.Closed += (s, args) => _helpDialog = null;
+            _helpDialog.Show();
         }
 
         private async void OpenSettingsDialog_Click(object sender, RoutedEventArgs e)
@@ -6438,6 +6624,20 @@ namespace vietnamgiapha
 
             return "\"" + value.Replace("\"", "\"\"") + "\"";
         }
+        /// <summary>Rebuild index rule-based engine sau khi load hoặc sửa cây gia phả.</summary>
+        public void RebuildAiQueryIndex()
+        {
+            var root = viewModel?.FamilyTree?.Family?.RootPerson;
+            _aiQueryEngine.BuildIndex(root);
+
+            // Nếu chat dialog đang mở → thông báo file mới và cập nhật root
+            if (_aiChatDialog != null && _aiChatDialog.IsVisible)
+            {
+                var selected = viewModel?.FamilyTree?.Family?.SelectedFamily;
+                _aiChatDialog.UpdateFileRoot(root, selected);
+            }
+        }
+
         public void UpdateHtmlGiaPha()
         {
             if (viewModel != null)
@@ -6554,6 +6754,9 @@ namespace vietnamgiapha
             {
                 ApplyLeftPaneSearchScale(leftPaneSearchPanel.ActualWidth);
             }
+
+            // Mặc định toolbox mở rộng khi khởi động.
+            SetPhaDoToolboxExpanded(true);
         }
 
         public void ResetPhaDoWorkspaceState()
@@ -13279,6 +13482,67 @@ namespace vietnamgiapha
             return ReferenceEquals(current, phaDoToolboxPanel);
         }
 
+        private void PhaDoToolboxToggleBtn_Click(object sender, RoutedEventArgs e)
+        {
+            SetPhaDoToolboxExpanded(!_phaDoToolboxExpanded);
+        }
+
+        /// <summary>Mở thẳng dialog cài đặt AI — dùng từ menu AI → Cài đặt AI.</summary>
+        private void AiMenuSettings_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new AI.AiSettingsDialog(_aiService) { Owner = this };
+            if (dlg.ShowDialog() == true && dlg.ResultSettings != null)
+            {
+                _aiService.ApplySettings(dlg.ResultSettings);
+                dlg.ResultSettings.Save();
+
+                // Nếu chat đang mở, thông báo chế độ đã đổi
+                if (_aiChatDialog != null && _aiChatDialog.IsVisible)
+                {
+                    _aiChatDialog.UpdateModeIndicator();
+                }
+            }
+        }
+
+        private void AiSettingsBtn_Click(object sender, RoutedEventArgs e)
+        {
+            // Chỉ hiện settings khi chưa cấu hình gì cả (không có cả key lẫn chế độ nội bộ)
+            bool hasAnyConfig = _aiService.IsConfigured
+                               || (_aiService.Settings?.UseLocalRuleEngine == true)
+                               || (_aiService.Settings?.IsEnabled == true);
+
+            if (!hasAnyConfig)
+            {
+                // Lần đầu dùng → mở settings để người dùng chọn chế độ
+                var settingsDlg = new AI.AiSettingsDialog(_aiService) { Owner = this };
+                if (settingsDlg.ShowDialog() != true)
+                {
+                    return;
+                }
+            }
+
+            var fileRoot = viewModel?.FamilyTree?.Family?.RootPerson;
+            var selected = viewModel?.FamilyTree?.Family?.SelectedFamily;
+
+            // Build index lazy — phòng khi path load nào đó chưa gọi RebuildAiQueryIndex
+            if (!_aiQueryEngine.IsReady && fileRoot != null)
+            {
+                _aiQueryEngine.BuildIndex(fileRoot);
+            }
+
+            // Reuse dialog nếu còn mở, cập nhật gia đình đang chọn
+            if (_aiChatDialog != null && _aiChatDialog.IsVisible)
+            {
+                _aiChatDialog.UpdateCurrentFamily(selected);
+                _aiChatDialog.Activate();
+                return;
+            }
+
+            // Tạo mới dialog modeless — truyền rule engine đã build index
+            _aiChatDialog = new AI.AiChatDialog(_aiService, _aiQueryEngine, fileRoot, selected) { Owner = this };
+            _aiChatDialog.Show();
+        }
+
         private void SetPhaDoToolboxExpanded(bool expanded)
         {
             _phaDoToolboxExpanded = expanded;
@@ -13302,7 +13566,26 @@ namespace vietnamgiapha
                     : "Double-click vùng trống để mở rộng (icon + chữ)";
             }
 
+            // Cập nhật icon và caption của nút toggle theo trạng thái.
+            if (phaDoToolboxToggleIcon != null)
+            {
+                // E76C = ChevronRight (thu gọn), E76B = ChevronLeft (mở rộng)
+                phaDoToolboxToggleIcon.Text = expanded ? "\uE76B" : "\uE76C";
+            }
+
             ApplyPhaDoToolboxCaptionsVisible(expanded);
+
+            // Cập nhật caption nút toggle sau khi ẩn/hiện.
+            if (phaDoToolboxToggleBtn != null)
+            {
+                var caption = phaDoToolboxToggleBtn.Parent is StackPanel sp
+                    ? sp.Children.OfType<TextBlock>().FirstOrDefault(t => t.Tag as string == "ToolboxCaption")
+                    : null;
+                if (caption != null)
+                {
+                    caption.Text = expanded ? "Thu gọn" : "Mở rộng";
+                }
+            }
         }
 
         private void ApplyPhaDoToolboxCaptionsVisible(bool visible)

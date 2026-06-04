@@ -58,7 +58,10 @@ namespace vietnamgiapha
         private void RebuildSvgFrameList(IDictionary<string, PhaDoSvgShape> catalog)
         {
             _svgFrameItems.Clear();
-            _svgFrameItems.AddRange(PhaDoSvgFrameListBuilder.Build(catalog));
+            // title_*.svg từ ZoneSvg + khung trong file gia phả
+            _svgFrameItems.AddRange(PhaDoSvgFrameListBuilder.Build(
+                catalog,
+                PhaDoZoneSvgFolderLoader.TitlePrefix));
             _suppressSvgFrameSelectionChanged = true;
             try
             {
@@ -164,6 +167,7 @@ namespace vietnamgiapha
                     style.ClearFrame();
                     return true;
 
+                case PhaDoSvgFrameListItem.FrameKind.ZoneSvg:
                 case PhaDoSvgFrameListItem.FrameKind.Catalog:
                     if (frame.Shape == null)
                     {
@@ -174,7 +178,11 @@ namespace vietnamgiapha
                     string markup = frame.Shape.GetSvgMarkup();
                     if (string.IsNullOrWhiteSpace(markup))
                     {
-                        MessageBox.Show("SVG trong catalog không hợp lệ.", "Khung SVG");
+                        MessageBox.Show(
+                            frame.Kind == PhaDoSvgFrameListItem.FrameKind.ZoneSvg
+                                ? "SVG trong ZoneSvg không hợp lệ."
+                                : "SVG trong catalog không hợp lệ.",
+                            "Khung SVG");
                         return false;
                     }
 
@@ -243,9 +251,10 @@ namespace vietnamgiapha
                     UpdateSvgPreviewVisual();
                     break;
 
+                case PhaDoSvgFrameListItem.FrameKind.ZoneSvg:
                 case PhaDoSvgFrameListItem.FrameKind.Catalog:
                     newSvgPanel.Visibility = Visibility.Collapsed;
-                    PreviewCatalogShape(item.Shape);
+                    PreviewCatalogShape(item.Shape, item.Kind == PhaDoSvgFrameListItem.FrameKind.ZoneSvg);
                     break;
 
                 case PhaDoSvgFrameListItem.FrameKind.CreateNew:
@@ -266,24 +275,36 @@ namespace vietnamgiapha
             }
         }
 
-        private void PreviewCatalogShape(PhaDoSvgShape shape)
+        private void PreviewCatalogShape(PhaDoSvgShape shape, bool fromZoneFolder = false)
         {
             if (shape == null)
             {
-                _lastSvgSanitize = new PhaDoBoxSvgSanitizeResult { Success = false, Message = "Không đọc được khung." };
+                _lastSvgSanitize = new PhaDoBoxSvgSanitizeResult
+                {
+                    Success = false,
+                    Message = fromZoneFolder
+                        ? "Không đọc được khung trong ZoneSvg."
+                        : "Không đọc được khung."
+                };
             }
             else
             {
                 string markup = shape.GetSvgMarkup();
                 _lastSvgSanitize = string.IsNullOrWhiteSpace(markup)
-                    ? new PhaDoBoxSvgSanitizeResult { Success = false, Message = "SVG không hợp lệ." }
+                    ? new PhaDoBoxSvgSanitizeResult
+                    {
+                        Success = false,
+                        Message = fromZoneFolder
+                            ? "SVG trong ZoneSvg không hợp lệ."
+                            : "SVG không hợp lệ."
+                    }
                     : new PhaDoBoxSvgSanitizeResult
                     {
                         Success = true,
                         SanitizedSvgMarkup = markup,
                         ViewBoxWidth = shape.ViewBoxWidth,
                         ViewBoxHeight = shape.ViewBoxHeight,
-                        Message = "Khung: " + (shape.SvgId ?? "")
+                        Message = (fromZoneFolder ? "Khung ZoneSvg: " : "Khung: ") + (shape.SvgId ?? "")
                     };
             }
 
@@ -300,7 +321,8 @@ namespace vietnamgiapha
             }
 
             var item = _svgFrameItems.FirstOrDefault(
-                i => i.Kind == PhaDoSvgFrameListItem.FrameKind.Catalog
+                i => (i.Kind == PhaDoSvgFrameListItem.FrameKind.Catalog
+                        || i.Kind == PhaDoSvgFrameListItem.FrameKind.ZoneSvg)
                     && string.Equals(i.SvgId, svgId, StringComparison.Ordinal));
             if (item != null)
             {
@@ -423,7 +445,9 @@ namespace vietnamgiapha
 
         private void RunSvgValidateAndPreview()
         {
-            if (GetSelectedFrameItem()?.Kind == PhaDoSvgFrameListItem.FrameKind.Catalog)
+            var kind = GetSelectedFrameItem()?.Kind;
+            if (kind == PhaDoSvgFrameListItem.FrameKind.Catalog
+                || kind == PhaDoSvgFrameListItem.FrameKind.ZoneSvg)
             {
                 return;
             }

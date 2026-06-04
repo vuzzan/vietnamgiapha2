@@ -40,11 +40,7 @@ namespace vietnamgiapha
             int rootLevelMax,
             int splitLevel)
         {
-            if (analysisText != null)
-            {
-                analysisText.Text = analysisReport ?? "";
-            }
-
+            SetAnalysisDocument(analysisReport ?? "");
             RenderMap(rootBlock, subTrees, rootLevelMax, splitLevel);
         }
 
@@ -55,12 +51,253 @@ namespace vietnamgiapha
             PhaDoSubtreeBranchBlock currentBlock,
             IReadOnlyList<PhaDoSubtreeBranchBlock> childBlocks)
         {
-            if (analysisText != null)
+            SetAnalysisDocument(analysisReport ?? "");
+            RenderFocusedChainMap(parentBlock, currentBlock, childBlocks ?? Array.Empty<PhaDoSubtreeBranchBlock>());
+        }
+
+        // ── Hiển thị báo cáo phân tích ────────────────────────────────────────
+
+        private void SetAnalysisDocument(string text)
+        {
+            if (analysisViewer == null) return;
+            analysisViewer.Document = BuildReportDocument(text);
+        }
+
+        /// <summary>
+        /// Chuyển plain text báo cáo phân tích thành FlowDocument có định dạng:
+        /// tiêu đề mục (màu xanh), key:value (bold key), bullet ▸, combo [N] (nền xanh),
+        /// indent chi tiết → , separator ─────.
+        /// </summary>
+        private static FlowDocument BuildReportDocument(string plainText)
+        {
+            var doc = new FlowDocument
             {
-                analysisText.Text = analysisReport ?? "";
+                FontFamily  = new FontFamily("Segoe UI"),
+                FontSize    = 12,
+                Foreground  = Brushes.Black,
+                LineHeight  = 20,
+                PagePadding = new Thickness(10, 8, 10, 12)
+            };
+
+            if (string.IsNullOrWhiteSpace(plainText))
+                return doc;
+
+            // ── Màu palette ──
+            var accentOrange  = new SolidColorBrush(Color.FromRgb(196, 92, 0));
+            var sectionFore   = new SolidColorBrush(Color.FromRgb(25, 80, 155));
+            var sectionBg     = new SolidColorBrush(Color.FromArgb(15, 25, 80, 200));
+            var sectionBorder = new SolidColorBrush(Color.FromRgb(60, 120, 200));
+            var keyFore       = new SolidColorBrush(Color.FromRgb(35, 35, 35));
+            var arrowFore     = new SolidColorBrush(Color.FromRgb(155, 65, 0));
+            var subNoteFore   = new SolidColorBrush(Color.FromRgb(110, 110, 110));
+            var comboGreen    = new SolidColorBrush(Color.FromRgb(20, 100, 20));
+            var comboBg       = new SolidColorBrush(Color.FromArgb(18, 20, 140, 20));
+            var bigHeaderBg   = new SolidColorBrush(Color.FromRgb(30, 90, 160));
+            var importantFore = new SolidColorBrush(Color.FromRgb(160, 60, 0));
+
+            string[] lines = plainText.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+
+            foreach (string rawLine in lines)
+            {
+                string line    = rawLine.TrimEnd();
+                string trimmed = line.Trim();
+
+                // Dòng trống → khoảng cách nhỏ
+                if (string.IsNullOrWhiteSpace(line))
+                {
+                    doc.Blocks.Add(new Paragraph { Margin = new Thickness(0, 2, 0, 2) });
+                    continue;
+                }
+
+                // ── Dải separator (═══ / ─── / ===) ──
+                if (IsReportSeparator(line))
+                {
+                    // Paragraph rỗng với border-top thay cho HR — hoạt động ổn trong FlowDocument
+                    doc.Blocks.Add(new Paragraph
+                    {
+                        BorderBrush     = new SolidColorBrush(Color.FromRgb(170, 180, 210)),
+                        BorderThickness = new Thickness(0, 1.5, 0, 0),
+                        Margin          = new Thickness(0, 6, 0, 4),
+                        Padding         = new Thickness(0, 4, 0, 0)
+                    });
+                    continue;
+                }
+
+                // ── Tiêu đề lớn KẾ HOẠCH VẼ ──
+                if (trimmed.StartsWith("KẾ HOẠCH") || trimmed.StartsWith("KE HOACH"))
+                {
+                    var p = new Paragraph
+                    {
+                        Margin    = new Thickness(0, 8, 0, 6),
+                        Padding   = new Thickness(10, 6, 10, 6),
+                        Background = bigHeaderBg
+                    };
+                    p.Inlines.Add(new Run("📋  " + trimmed)
+                    {
+                        FontWeight = FontWeights.Bold,
+                        FontSize   = 13,
+                        Foreground = Brushes.White
+                    });
+                    doc.Blocks.Add(p);
+                    continue;
+                }
+
+                // ── Combo item [N] title ──
+                if (trimmed.StartsWith("[") && trimmed.Contains("]"))
+                {
+                    int closeIdx  = trimmed.IndexOf(']');
+                    string idxPart   = trimmed.Substring(0, closeIdx + 1);
+                    string titlePart = trimmed.Substring(closeIdx + 1).Trim();
+                    var p = new Paragraph
+                    {
+                        Margin          = new Thickness(0, 5, 0, 1),
+                        Padding         = new Thickness(7, 4, 7, 4),
+                        Background      = comboBg,
+                        BorderBrush     = comboGreen,
+                        BorderThickness = new Thickness(4, 0, 0, 0)
+                    };
+                    p.Inlines.Add(new Run(idxPart + " ")
+                    {
+                        FontWeight = FontWeights.Bold,
+                        Foreground = comboGreen,
+                        FontFamily = new FontFamily("Consolas, Courier New")
+                    });
+                    p.Inlines.Add(new Run(titlePart)
+                    {
+                        FontWeight = FontWeights.SemiBold,
+                        Foreground = comboGreen
+                    });
+                    doc.Blocks.Add(p);
+                    continue;
+                }
+
+                // ── Indent 4 spaces: chi tiết arrow / label (trong mục combo) ──
+                if (line.StartsWith("    "))
+                {
+                    string inner    = line.Substring(4).TrimStart();
+                    bool   hasArrow = inner.StartsWith("→");
+                    var p = new Paragraph { Margin = new Thickness(18, 0, 0, 1) };
+                    if (hasArrow)
+                    {
+                        p.Inlines.Add(new Run(" → ")
+                            { Foreground = arrowFore, FontWeight = FontWeights.SemiBold });
+                        string rest = inner.Length > 1 ? inner.Substring(1).TrimStart() : "";
+                        p.Inlines.Add(new Run(rest) { Foreground = subNoteFore, FontSize = 11.5 });
+                    }
+                    else
+                    {
+                        p.Inlines.Add(new Run(inner)
+                            { Foreground = subNoteFore, FontStyle = FontStyles.Italic, FontSize = 11.5 });
+                    }
+                    doc.Blocks.Add(p);
+                    continue;
+                }
+
+                // ── Indent 2 spaces: ghi chú phụ ──
+                if (line.StartsWith("  ") && !line.StartsWith("    "))
+                {
+                    var p = new Paragraph { Margin = new Thickness(8, 0, 0, 1) };
+                    p.Inlines.Add(new Run(trimmed)
+                        { Foreground = subNoteFore, FontStyle = FontStyles.Italic, FontSize = 11 });
+                    doc.Blocks.Add(p);
+                    continue;
+                }
+
+                // ── Bullet line "- ..." ──
+                if (trimmed.StartsWith("- "))
+                {
+                    string body = trimmed.Substring(2).TrimStart();
+                    var p = new Paragraph { Margin = new Thickness(8, 1, 0, 1) };
+                    p.Inlines.Add(new Run("▸ ") { Foreground = accentOrange, FontWeight = FontWeights.Bold });
+                    AddTextInlines(p, body, keyFore, arrowFore, importantFore);
+                    doc.Blocks.Add(p);
+                    continue;
+                }
+
+                // ── Section header: không thụt đầu, kết thúc ':' ──
+                if (!line.StartsWith(" ") && !trimmed.StartsWith("-") && !trimmed.StartsWith("[")
+                    && trimmed.EndsWith(":") && !trimmed.Contains(" → "))
+                {
+                    var p = new Paragraph
+                    {
+                        Margin          = new Thickness(0, 10, 0, 3),
+                        Padding         = new Thickness(8, 3, 4, 3),
+                        BorderBrush     = sectionBorder,
+                        BorderThickness = new Thickness(4, 0, 0, 0),
+                        Background      = sectionBg
+                    };
+                    p.Inlines.Add(new Run(trimmed.TrimEnd(':'))
+                    {
+                        FontWeight = FontWeights.SemiBold,
+                        FontSize   = 12.5,
+                        Foreground = sectionFore
+                    });
+                    doc.Blocks.Add(p);
+                    continue;
+                }
+
+                // ── Dòng thường ──
+                {
+                    var p = new Paragraph { Margin = new Thickness(0, 1, 0, 1) };
+                    AddTextInlines(p, trimmed, keyFore, arrowFore, importantFore);
+                    doc.Blocks.Add(p);
+                }
             }
 
-            RenderFocusedChainMap(parentBlock, currentBlock, childBlocks ?? Array.Empty<PhaDoSubtreeBranchBlock>());
+            return doc;
+        }
+
+        /// <summary>Kiểm tra dòng là separator thuần (tất cả ký tự ═ ─ = hoặc space).</summary>
+        private static bool IsReportSeparator(string s)
+        {
+            bool hasDelimChar = false;
+            foreach (char c in s)
+            {
+                if (c == '═' || c == '─' || c == '=') { hasDelimChar = true; }
+                else if (c != ' ') { return false; }
+            }
+            return hasDelimChar && s.Length >= 4;
+        }
+
+        /// <summary>
+        /// Thêm inlines vào paragraph: phát hiện "key: value" và "text → result".
+        /// Key quan trọng (Tổng số, Gợi ý, Đời cắt, Kích thước) hiển thị bold màu accent.
+        /// </summary>
+        private static void AddTextInlines(
+            Paragraph p, string text,
+            Brush keyFore, Brush arrowFore, Brush importantFore)
+        {
+            // Có mũi tên " → "
+            int arrowIdx = text.IndexOf(" → ");
+            if (arrowIdx > 0)
+            {
+                p.Inlines.Add(new Run(text.Substring(0, arrowIdx)));
+                p.Inlines.Add(new Run(" → ") { Foreground = arrowFore, FontWeight = FontWeights.Bold });
+                p.Inlines.Add(new Run(text.Substring(arrowIdx + 3)));
+                return;
+            }
+
+            // Có dấu ": " và key không quá 70 ký tự
+            int colonIdx = text.IndexOf(": ");
+            if (colonIdx > 0 && colonIdx < 70)
+            {
+                string key = text.Substring(0, colonIdx);
+                string val = text.Substring(colonIdx + 2);
+                bool important = key.Contains("Tổng số") || key.Contains("Gợi ý")
+                    || key.Contains("Đời cắt") || key.Contains("Kích thước");
+                p.Inlines.Add(new Run(key)
+                {
+                    FontWeight = important ? FontWeights.Bold : FontWeights.SemiBold,
+                    Foreground = important ? importantFore : keyFore
+                });
+                p.Inlines.Add(new Run(": "));
+                p.Inlines.Add(new Run(val)
+                    { FontWeight = important ? FontWeights.SemiBold : FontWeights.Normal });
+                return;
+            }
+
+            // Plain text
+            p.Inlines.Add(new Run(text));
         }
 
         /// <summary>Sơ đồ root0 → các phả con (đời N): tên người chính + kích thước cm.</summary>

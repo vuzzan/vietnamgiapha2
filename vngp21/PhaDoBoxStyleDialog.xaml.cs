@@ -28,8 +28,10 @@ namespace vietnamgiapha
             public enum FrameKind
             {
                 DefaultRect = 0,
-                Catalog = 1,
-                CreateNew = 2
+                /// <summary>family_*.svg trong thư mục ZoneSvg.</summary>
+                ZoneFamily = 1,
+                Catalog = 2,
+                CreateNew = 3
             }
 
             public FrameKind Kind { get; set; }
@@ -129,7 +131,8 @@ namespace vietnamgiapha
             if (string.IsNullOrWhiteSpace(keepId))
             {
                 var current = GetSelectedFrameItem();
-                if (current?.Kind == SvgFrameListItem.FrameKind.Catalog)
+                if (current?.Kind == SvgFrameListItem.FrameKind.Catalog
+                    || current?.Kind == SvgFrameListItem.FrameKind.ZoneFamily)
                 {
                     keepId = current.SvgId;
                 }
@@ -151,6 +154,29 @@ namespace vietnamgiapha
                 Display = "Mặc định (rect bo góc)"
             });
 
+            // family_*.svg từ thư mục ZoneSvg (ưu tiên hiển thị trước catalog)
+            var zoneIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var zoneLoaded = PhaDoZoneSvgFolderLoader.Load(PhaDoZoneSvgFolderLoader.ResolveFolderPath());
+            foreach (var entry in zoneLoaded.FamilyEntries.OrderBy(e => e.Id, StringComparer.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(entry?.Id)
+                    || !zoneLoaded.ShapesById.TryGetValue(entry.Id, out var zoneShape)
+                    || zoneShape == null
+                    || string.IsNullOrWhiteSpace(zoneShape.GetSvgMarkup()))
+                {
+                    continue;
+                }
+
+                zoneIds.Add(entry.Id);
+                _svgFrameItems.Add(new SvgFrameListItem
+                {
+                    Kind = SvgFrameListItem.FrameKind.ZoneFamily,
+                    SvgId = entry.Id,
+                    Shape = zoneShape,
+                    Display = FormatZoneFamilyDisplay(entry, zoneShape)
+                });
+            }
+
             if (svgCatalog != null)
             {
                 foreach (var kv in svgCatalog.OrderBy(k => k.Key, StringComparer.Ordinal))
@@ -162,6 +188,12 @@ namespace vietnamgiapha
                     }
 
                     string id = string.IsNullOrWhiteSpace(shape.SvgId) ? kv.Key : shape.SvgId;
+                    // Đã có bản ZoneSvg — không trùng dòng trong combo
+                    if (zoneIds.Contains(id))
+                    {
+                        continue;
+                    }
+
                     _svgFrameItems.Add(new SvgFrameListItem
                     {
                         Kind = SvgFrameListItem.FrameKind.Catalog,
@@ -199,6 +231,17 @@ namespace vietnamgiapha
                 + "×" + shape.ViewBoxHeight.ToString("0.##", CultureInfo.InvariantCulture) + ")";
         }
 
+        /// <summary>Nhãn combo cho family_*.svg trong ZoneSvg.</summary>
+        private static string FormatZoneFamilyDisplay(PhaDoZoneSvgFileEntry entry, PhaDoSvgShape shape)
+        {
+            string shortName = !string.IsNullOrWhiteSpace(entry?.Display)
+                ? entry.Display
+                : (entry?.Id ?? shape?.SvgId ?? "?");
+            return shortName + "  ·  ZoneSvg  ("
+                + shape.ViewBoxWidth.ToString("0.##", CultureInfo.InvariantCulture)
+                + "×" + shape.ViewBoxHeight.ToString("0.##", CultureInfo.InvariantCulture) + ")";
+        }
+
         private SvgFrameListItem GetSelectedFrameItem()
         {
             return svgFrameCombo?.SelectedItem as SvgFrameListItem;
@@ -231,9 +274,10 @@ namespace vietnamgiapha
                     UpdateSvgPreviewVisual();
                     break;
 
+                case SvgFrameListItem.FrameKind.ZoneFamily:
                 case SvgFrameListItem.FrameKind.Catalog:
                     newSvgPanel.Visibility = Visibility.Collapsed;
-                    PreviewCatalogShape(item.Shape);
+                    PreviewCatalogShape(item.Shape, item.Kind == SvgFrameListItem.FrameKind.ZoneFamily);
                     break;
 
                 case SvgFrameListItem.FrameKind.CreateNew:
@@ -254,14 +298,16 @@ namespace vietnamgiapha
             }
         }
 
-        private void PreviewCatalogShape(PhaDoSvgShape shape)
+        private void PreviewCatalogShape(PhaDoSvgShape shape, bool fromZoneFolder = false)
         {
             if (shape == null)
             {
                 _lastSvgSanitize = new PhaDoBoxSvgSanitizeResult
                 {
                     Success = false,
-                    Message = "Không đọc được khung trong catalog."
+                    Message = fromZoneFolder
+                        ? "Không đọc được khung trong ZoneSvg."
+                        : "Không đọc được khung trong catalog."
                 };
                 UpdateSvgStatus(_lastSvgSanitize);
                 UpdateSvgPreviewVisual();
@@ -274,7 +320,9 @@ namespace vietnamgiapha
                 _lastSvgSanitize = new PhaDoBoxSvgSanitizeResult
                 {
                     Success = false,
-                    Message = "SVG trong catalog không hợp lệ."
+                    Message = fromZoneFolder
+                        ? "SVG trong ZoneSvg không hợp lệ."
+                        : "SVG trong catalog không hợp lệ."
                 };
             }
             else
@@ -285,7 +333,8 @@ namespace vietnamgiapha
                     SanitizedSvgMarkup = markup,
                     ViewBoxWidth = shape.ViewBoxWidth,
                     ViewBoxHeight = shape.ViewBoxHeight,
-                    Message = "Khung từ file gia phả: " + (shape.SvgId ?? "")
+                    Message = (fromZoneFolder ? "Khung ZoneSvg: " : "Khung file gia phả: ")
+                        + (shape.SvgId ?? "")
                 };
             }
 
@@ -302,7 +351,8 @@ namespace vietnamgiapha
             }
 
             var item = _svgFrameItems.FirstOrDefault(
-                i => i.Kind == SvgFrameListItem.FrameKind.Catalog
+                i => (i.Kind == SvgFrameListItem.FrameKind.Catalog
+                        || i.Kind == SvgFrameListItem.FrameKind.ZoneFamily)
                     && string.Equals(i.SvgId, svgId, StringComparison.Ordinal));
             if (item != null)
             {
@@ -427,7 +477,9 @@ namespace vietnamgiapha
 
         private void RunSvgValidateAndPreview()
         {
-            if (GetSelectedFrameItem()?.Kind == SvgFrameListItem.FrameKind.Catalog)
+            var kind = GetSelectedFrameItem()?.Kind;
+            if (kind == SvgFrameListItem.FrameKind.Catalog
+                || kind == SvgFrameListItem.FrameKind.ZoneFamily)
             {
                 return;
             }
@@ -639,6 +691,7 @@ namespace vietnamgiapha
                     style.CustomShapeSvg = null;
                     return true;
 
+                case SvgFrameListItem.FrameKind.ZoneFamily:
                 case SvgFrameListItem.FrameKind.Catalog:
                     if (frame.Shape == null)
                     {
@@ -649,7 +702,11 @@ namespace vietnamgiapha
                     string markup = frame.Shape.GetSvgMarkup();
                     if (string.IsNullOrWhiteSpace(markup))
                     {
-                        MessageBox.Show("SVG trong catalog không hợp lệ.", "Khung SVG");
+                        MessageBox.Show(
+                            frame.Kind == SvgFrameListItem.FrameKind.ZoneFamily
+                                ? "SVG trong ZoneSvg không hợp lệ."
+                                : "SVG trong catalog không hợp lệ.",
+                            "Khung SVG");
                         return false;
                     }
 

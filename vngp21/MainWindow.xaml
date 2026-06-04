@@ -313,19 +313,20 @@
                 <Setter Property="Header" Value="{Binding Mode=OneTime}" />
             </Style>
 
-            <!-- Menu chính (File, Settings, Update): icon nhỏ + chữ, padding thấp để vừa titlebar -->
+            <!-- Menu chính (File, AI, Settings…): dạng pill-button góc tròn, nền nhẹ -->
             <Style x:Key="MainMenuTopLevelItemStyle"
                    TargetType="MenuItem"
                    BasedOn="{StaticResource MahApps.Styles.MenuItem}">
-                <Setter Property="Padding" Value="8,3"/>
-                <Setter Property="Margin" Value="2,0"/>
+                <Setter Property="Padding" Value="10,4"/>
+                <Setter Property="Margin" Value="2,2"/>
                 <Setter Property="VerticalAlignment" Value="Center"/>
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="MenuItem">
+                            <!-- Nền nhẹ + góc tròn để pill shape luôn hiện ngay cả khi không hover -->
                             <Border x:Name="TopLevelBorder"
-                                    Background="Transparent"
-                                    CornerRadius="6"
+                                    Background="#18000000"
+                                    CornerRadius="10"
                                     BorderBrush="Transparent"
                                     BorderThickness="1"
                                     Padding="{TemplateBinding Padding}"
@@ -358,12 +359,12 @@
                             </Border>
                             <ControlTemplate.Triggers>
                                 <Trigger Property="IsHighlighted" Value="True">
-                                    <Setter TargetName="TopLevelBorder" Property="Background" Value="#E3EBF7"/>
-                                    <Setter TargetName="TopLevelBorder" Property="BorderBrush" Value="#B8C8E2"/>
+                                    <Setter TargetName="TopLevelBorder" Property="Background" Value="#D0E4FF"/>
+                                    <Setter TargetName="TopLevelBorder" Property="BorderBrush" Value="#90B8E8"/>
                                 </Trigger>
                                 <Trigger Property="IsSubmenuOpen" Value="True">
-                                    <Setter TargetName="TopLevelBorder" Property="Background" Value="#DCE6F5"/>
-                                    <Setter TargetName="TopLevelBorder" Property="BorderBrush" Value="#A8BCE0"/>
+                                    <Setter TargetName="TopLevelBorder" Property="Background" Value="#BDD6F5"/>
+                                    <Setter TargetName="TopLevelBorder" Property="BorderBrush" Value="#80AADA"/>
                                 </Trigger>
                                 <Trigger Property="IsEnabled" Value="False">
                                     <Setter Property="Foreground" Value="{DynamicResource MahApps.Brushes.Gray}"/>
@@ -386,6 +387,114 @@
                 </Setter>
             </Style>
 
+            <!-- ── Style tab con: 3.1 Gia sử / 3.2 Thủy tổ / 3.3 Tộc ước / 3.4 Hương hỏa ── -->
+            <!-- Nhỏ hơn tab chính, gạch accent tím-xanh, hover màu xanh nhạt -->
+            <Style x:Key="SubTabStyle" TargetType="{x:Type TabItem}">
+                <Setter Property="Cursor"     Value="Hand"/>
+                <Setter Property="FontSize"   Value="11.5"/>
+                <Setter Property="FontFamily" Value="Segoe UI, Tahoma"/>
+                <Setter Property="Foreground" Value="#555555"/>
+                <Setter Property="Padding"    Value="0"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type TabItem}">
+                            <Border x:Name="Outer"
+                                    Background="#F5F6F8"
+                                    CornerRadius="5,5,0,0"
+                                    Margin="1,3,1,0"
+                                    SnapsToDevicePixels="True">
+                                <Border x:Name="AccentBar"
+                                        BorderThickness="0,0,0,2"
+                                        BorderBrush="Transparent"
+                                        Padding="11,6,11,6">
+                                    <ContentPresenter ContentSource="Header"
+                                                      HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"
+                                                      RecognizesAccessKey="True"
+                                                      TextElement.Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                </Border>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Outer"     Property="Background"  Value="#D6EAF8"/>
+                                    <Setter TargetName="AccentBar" Property="BorderBrush" Value="#85C1E9"/>
+                                </Trigger>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter TargetName="Outer"     Property="Background"  Value="White"/>
+                                    <Setter TargetName="Outer"     Property="Margin"      Value="1,2,1,0"/>
+                                    <Setter TargetName="AccentBar" Property="BorderBrush" Value="#2E86C1"/>
+                                    <Setter Property="Foreground"  Value="#1A5276"/>
+                                    <Setter Property="FontWeight"  Value="SemiBold"/>
+                                </Trigger>
+                                <MultiTrigger>
+                                    <MultiTrigger.Conditions>
+                                        <Condition Property="IsSelected"  Value="True"/>
+                                        <Condition Property="IsMouseOver" Value="True"/>
+                                    </MultiTrigger.Conditions>
+                                    <Setter TargetName="Outer" Property="Background" Value="White"/>
+                                </MultiTrigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <!-- ── Style tab chính: Gia Phả / Gia Đình / Tư liệu / Phả đồ / Người ── -->
+            <!-- Góc bo trên, nền nhẹ, gạch accent dưới khi selected, đổi màu khi hover -->
+            <Style x:Key="MainTabStyle" TargetType="{x:Type TabItem}">
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="FontSize" Value="12.5"/>
+                <Setter Property="FontFamily" Value="Segoe UI, Tahoma"/>
+                <Setter Property="Foreground" Value="#555555"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="Padding" Value="0"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="{x:Type TabItem}">
+                            <!-- Lớp ngoài bo góc trên; lớp trong vẽ gạch accent dưới -->
+                            <Border x:Name="Outer"
+                                    Background="#F0F1F3"
+                                    CornerRadius="7,7,0,0"
+                                    Margin="1,3,1,0"
+                                    SnapsToDevicePixels="True">
+                                <Border x:Name="AccentBar"
+                                        BorderThickness="0,0,0,3"
+                                        BorderBrush="Transparent"
+                                        Padding="14,8,14,8">
+                                    <ContentPresenter ContentSource="Header"
+                                                      HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"
+                                                      RecognizesAccessKey="True"
+                                                      TextElement.Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
+                                </Border>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <!-- Hover: nền xanh nhạt ấm -->
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Outer"    Property="Background"    Value="#DDE8F8"/>
+                                    <Setter TargetName="AccentBar" Property="BorderBrush"  Value="#B0C8E8"/>
+                                </Trigger>
+                                <!-- Selected: nền trắng + gạch accent cam/orange -->
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter TargetName="Outer"     Property="Background"   Value="White"/>
+                                    <Setter TargetName="Outer"     Property="Margin"       Value="1,2,1,0"/>
+                                    <Setter TargetName="AccentBar" Property="BorderBrush"  Value="{DynamicResource MahApps.Brushes.Accent}"/>
+                                    <Setter Property="Foreground"  Value="{DynamicResource MahApps.Brushes.Accent}"/>
+                                    <Setter Property="FontWeight"  Value="SemiBold"/>
+                                </Trigger>
+                                <!-- Hover khi đang selected: vẫn giữ trắng -->
+                                <MultiTrigger>
+                                    <MultiTrigger.Conditions>
+                                        <Condition Property="IsSelected"   Value="True"/>
+                                        <Condition Property="IsMouseOver"  Value="True"/>
+                                    </MultiTrigger.Conditions>
+                                    <Setter TargetName="Outer" Property="Background" Value="White"/>
+                                </MultiTrigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
 
         </ResourceDictionary>
     </Window.Resources>
@@ -412,6 +521,21 @@
                     <MenuItem Header="Quản lý kho SVG..." Click="OpenSvgLibraryManager_Click"/>
                     <Separator/>
                     <MenuItem Header="Exit" Command="{Binding ExitAppCommand}"/>
+                </MenuItem>
+                <!-- Menu AI — nằm giữa File và Settings -->
+                <MenuItem Style="{StaticResource MainMenuTopLevelItemStyle}">
+                    <MenuItem.Header>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="&#xE99A;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                                       VerticalAlignment="Center" Margin="0,0,5,0"/>
+                            <TextBlock Text="AI" FontSize="12" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </MenuItem.Header>
+                    <MenuItem Header="💬  Chat AI..." Click="AiSettingsBtn_Click"
+                              ToolTip="Hỏi thông tin gia phả bằng ngôn ngữ tự nhiên"/>
+                    <Separator/>
+                    <MenuItem Header="⚙️  Cài đặt AI..." Click="AiMenuSettings_Click"
+                              ToolTip="Chọn chế độ tra cứu nội bộ hoặc AI API, cài đặt API key"/>
                 </MenuItem>
                 <MenuItem Style="{StaticResource MainMenuTopLevelItemStyle}">
                     <MenuItem.Header>
@@ -690,7 +814,13 @@
                 </mah:SplitView.Pane>
                 <Grid x:Name="mainTabContentGrid">
                     <mah:MetroTabControl Name="tabControl" Background="BlanchedAlmond" SelectionChanged="TabControl_SelectionChanged">
-                        <TabItem Header="1.Gia Phả">
+                        <TabItem Style="{StaticResource MainTabStyle}">
+                            <TabItem.Header>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="🌿" FontSize="14" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                    <TextBlock Text="Gia Phả" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </TabItem.Header>
                             <Grid Background="White">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="10"  />
@@ -781,7 +911,13 @@
                                 </ScrollViewer>
                             </Grid>
                         </TabItem>
-                        <TabItem Header="2.Gia Đình">
+                        <TabItem Style="{StaticResource MainTabStyle}">
+                            <TabItem.Header>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="🏠" FontSize="14" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                    <TextBlock Text="Gia Đình" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </TabItem.Header>
                             <Grid Background="BlanchedAlmond">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="1*" />
@@ -964,26 +1100,62 @@ SelectedIndex="0"
                                 </mah:MetroHeader>
                             </Grid>
                         </TabItem>
-                        <TabItem Header="3.Tư liệu">
+                        <TabItem Style="{StaticResource MainTabStyle}">
+                            <TabItem.Header>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="📜" FontSize="14" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                    <TextBlock Text="Tư liệu" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </TabItem.Header>
                             <TabControl x:Name="giaPhaDocumentsTabControl" Background="White">
-                                <TabItem Header="3.1.Gia sử">
+                                <TabItem Style="{StaticResource SubTabStyle}">
+                                    <TabItem.Header>
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="📖" FontSize="13" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <TextBlock Text="Gia sử" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </TabItem.Header>
                                     <smith:HtmlEditor x:Name="htmlEditorPhaKy" LostFocus="htmlEditorPhaKy_LostFocus"/>
                                 </TabItem>
-                                <TabItem Header="3.2.Thủy tổ">
+                                <TabItem Style="{StaticResource SubTabStyle}">
+                                    <TabItem.Header>
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="👴" FontSize="13" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <TextBlock Text="Thủy tổ" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </TabItem.Header>
                                     <smith:HtmlEditor x:Name="htmlEditorThuyto" LostFocus="htmlEditorThuyto_LostFocus"/>
                                 </TabItem>
-                                <TabItem Header="3.3.Tộc ước">
+                                <TabItem Style="{StaticResource SubTabStyle}">
+                                    <TabItem.Header>
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="📋" FontSize="13" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <TextBlock Text="Tộc ước" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </TabItem.Header>
                                     <smith:HtmlEditor x:Name="htmlEditorTocUoc" LostFocus="htmlEditorTocUoc_LostFocus"/>
                                 </TabItem>
-                                <TabItem Header="3.4.Hương hỏa">
+                                <TabItem Style="{StaticResource SubTabStyle}">
+                                    <TabItem.Header>
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="🕯" FontSize="13" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <TextBlock Text="Hương hỏa" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </TabItem.Header>
                                     <smith:HtmlEditor x:Name="htmlEditorHuongHoa" LostFocus="htmlEditorHuongHoa_LostFocus"/>
                                 </TabItem>
                             </TabControl>
                         </TabItem>
-                        <TabItem Header="4.Phả đồ">
+                        <TabItem Style="{StaticResource MainTabStyle}">
+                            <TabItem.Header>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="🗺" FontSize="14" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                    <TextBlock Text="Phả đồ" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </TabItem.Header>
                             <Grid Background="White">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition x:Name="phaDoToolboxColumn" Width="52"/>
+                                    <ColumnDefinition x:Name="phaDoToolboxColumn" Width="176"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <!-- Toolbox: icon tròn; double-click vùng nền thanh → hiện/ẩn chữ -->
@@ -1110,6 +1282,20 @@ SelectedIndex="0"
                                                 </Button>
                                                 <TextBlock Tag="ToolboxCaption" Style="{StaticResource PhaDoToolboxCaptionStyle}" Text="Toàn màn hình"/>
                                             </StackPanel>
+
+                                            <Rectangle Height="1" Fill="#D0D8E8" Margin="0,4,0,4"/>
+
+                                            <!-- Nút mở rộng / thu gọn toolbox — thay thế cho double-click -->
+                                            <StackPanel Style="{StaticResource PhaDoToolboxRowStyle}">
+                                                <Button x:Name="phaDoToolboxToggleBtn"
+                                                        Style="{StaticResource PhaDoToolboxIconButtonStyle}"
+                                                        Click="PhaDoToolboxToggleBtn_Click"
+                                                        ToolTip="Mở rộng / thu gọn thanh công cụ">
+                                                    <TextBlock x:Name="phaDoToolboxToggleIcon"
+                                                               Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                                                </Button>
+                                                <TextBlock Tag="ToolboxCaption" Style="{StaticResource PhaDoToolboxCaptionStyle}" Text="Thu gọn"/>
+                                            </StackPanel>
                                         </StackPanel>
                                     </ScrollViewer>
                                 </Border>
@@ -1220,7 +1406,13 @@ SelectedIndex="0"
                        
 
                         </TabItem>
-                        <TabItem Header="5.Người">
+                        <TabItem Style="{StaticResource MainTabStyle}">
+                            <TabItem.Header>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="👥" FontSize="14" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                    <TextBlock Text="Người" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </TabItem.Header>
                             <Grid Background="WhiteSmoke">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>

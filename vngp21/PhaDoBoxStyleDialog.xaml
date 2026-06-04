@@ -59,7 +59,7 @@
             <ComboBox x:Name="svgFrameCombo" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="3" Margin="6 0 0 8"
                       DisplayMemberPath="Display"
                       SelectionChanged="SvgFrameCombo_SelectionChanged"
-                      ToolTip="Chọn khung có trong file gia phả, hoặc tạo khung mới"/>
+                      ToolTip="family_*.svg trong thư mục ZoneSvg, khung lưu trong file gia phả, hoặc tạo khung mới"/>
 
             <StackPanel x:Name="newSvgPanel" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="4" Visibility="Collapsed">
                 <TextBlock Text="Tạo khung mới — dán hoặc tải file .svg" FontWeight="SemiBold" Margin="0 0 0 4"/>

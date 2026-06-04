@@ -26,19 +26,13 @@
             <ColumnDefinition Width="3*"/>
         </Grid.ColumnDefinitions>
 
-        <!-- Trái: phân tích -->
+        <!-- Trái: phân tích — FlowDocumentScrollViewer để hỗ trợ rich text đẹp và select/copy -->
         <Border Grid.Column="0" BorderBrush="#DDD" BorderThickness="1" Background="#FFFDF8">
-            <TextBox x:Name="analysisText"
-                     IsReadOnly="True"
-                     TextWrapping="Wrap"
-                     AcceptsReturn="True"
-                     VerticalScrollBarVisibility="Auto"
-                     HorizontalScrollBarVisibility="Disabled"
-                     BorderThickness="0"
-                     Background="Transparent"
-                     FontFamily="Consolas"
-                     FontSize="12"
-                     Padding="10"/>
+            <FlowDocumentScrollViewer x:Name="analysisViewer"
+                                      VerticalScrollBarVisibility="Auto"
+                                      IsSelectionEnabled="True"
+                                      IsToolBarVisible="False"
+                                      Background="Transparent"/>
         </Border>
 
         <GridSplitter Grid.Column="1"

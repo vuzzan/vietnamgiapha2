@@ -115,6 +115,7 @@
       <HintPath>$(SmithHtmlEditorOutput)Smith.WPF.HtmlEditor.dll</HintPath>
     </Reference>
     <Reference Include="System" />
+    <Reference Include="System.Security" />
     <Reference Include="System.ComponentModel.DataAnnotations" />
     <Reference Include="System.Configuration" />
     <Reference Include="System.Data" />
@@ -220,6 +221,25 @@
       <DependentUpon>PhaDoSubtreeMapDialog.xaml</DependentUpon>
     </Compile>
     <Compile Include="PhaDoSubtreeBranchBlock.cs" />
+    <Compile Include="AI\AiProviderConfig.cs" />
+    <Compile Include="AI\AiSettings.cs" />
+    <Compile Include="AI\AiApiService.cs" />
+    <Compile Include="AI\FamilyContextSerializer.cs" />
+    <Compile Include="AI\GiaPhaQueryEngine.cs" />
+    <Page Include="AI\AiSettingsDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="AI\AiSettingsDialog.xaml.cs">
+      <DependentUpon>AiSettingsDialog.xaml</DependentUpon>
+    </Compile>
+    <Page Include="AI\AiChatDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="AI\AiChatDialog.xaml.cs">
+      <DependentUpon>AiChatDialog.xaml</DependentUpon>
+    </Compile>
     <Compile Include="MainWindowViewModel.cs" />
     <Compile Include="Models\FamilyInfo.cs" />
     <Compile Include="Models\FamilyTreeViewModel.cs" />
