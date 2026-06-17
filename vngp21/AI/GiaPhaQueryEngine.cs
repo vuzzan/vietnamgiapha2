@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 namespace vietnamgiapha.AI
 {
     /// <summary>Rule-based query engine — tra cứu gia phả không cần API key.</summary>
-    public sealed class GiaPhaQueryEngine
+    public sealed partial class GiaPhaQueryEngine
     {
         private List<SearchEntry> _index = new List<SearchEntry>();
 
@@ -46,116 +46,60 @@ namespace vietnamgiapha.AI
 
         // ── API chính ─────────────────────────────────────────────────────────
 
+        /// <summary>Tìm gia đình theo tên người (húy/tự) — dùng cho lệnh sửa gia phả.</summary>
+        public List<FamilyViewModel> FindFamiliesByPersonName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return new List<FamilyViewModel>();
+            }
+
+            string norm = NormalizeNameForMatch(name);
+            var families = new List<FamilyViewModel>();
+            var seen = new HashSet<int>();
+
+            foreach (SearchEntry entry in FindByName(norm))
+            {
+                if (entry?.Family?.familyInfo == null)
+                {
+                    continue;
+                }
+
+                int id = entry.Family.familyInfo.FamilyId;
+                if (seen.Add(id))
+                {
+                    families.Add(entry.Family);
+                }
+            }
+
+            return families;
+        }
+
+        /// <summary>Bỏ dấu + lowercase — dùng chung tra cứu và sửa tên.</summary>
+        public string NormalizeNameForMatch(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return "";
+            }
+
+            return RemoveDiacritics(name.Trim().ToLowerInvariant());
+        }
+
         /// <summary>
         /// Xử lý câu hỏi tự nhiên và trả về câu trả lời dạng text.
         /// currentFamily là gia đình đang chọn trên cây (có thể null).
         /// </summary>
+        /// <summary>Tra cứu qua intent (rule parse) — tương thích API cũ.</summary>
         public string Query(string question, FamilyViewModel currentFamily = null)
         {
-            if (string.IsNullOrWhiteSpace(question))
+            var parsed = TryParseRule(question, currentFamily);
+            if (!parsed.IsParsed)
             {
-                return "Bạn muốn hỏi gì về gia phả?";
+                return GetParseHelpMessage();
             }
 
-            if (!IsReady)
-            {
-                return "⚠️ Chưa có dữ liệu gia phả. Hãy mở file gia phả trước.";
-            }
-
-            string q = RemoveDiacritics(question.Trim().ToLowerInvariant());
-
-            // Chuẩn hóa "Ai là [vai trò] của [tên]?" → "[vai trò] cua [tên]?"
-            // (ví dụ: "Ai là cha của X?" → gọi lại Query("cha cua X?") để tái dùng routing)
-            string normalizedForm = TryNormalizeAiLaQuestion(question, q);
-            if (normalizedForm != null)
-                return Query(normalizedForm, currentFamily);
-
-            // 1. Pattern cố định không cần tên người
-            if (ContainsAny(q, "thuy to", "thuythu", "to tien", "thuy-to"))
-                return QueryThuyTo();
-
-            if (ContainsAny(q, "bao nhieu", "tong so", "so nguoi", "tong cong", "dem nguoi"))
-                return QuerySoNguoi();
-
-            // Lọc người chưa có con cháu
-            if (ContainsAny(q, "chua co con", "khong co con", "vo hau", "tuyet tu", "khong con"))
-                return QueryChuaCoCon();
-
-            // Tìm theo năm sinh — "sinh năm 1920", "sinh 1920"
-            var mNamSinh = Regex.Match(q, @"sinh\s*(?:nam)?\s*(\d{4})");
-            if (mNamSinh.Success && int.TryParse(mNamSinh.Groups[1].Value, out int namSinh))
-                return QueryTheoNam(namSinh, true);
-
-            // Tìm theo năm mất — "mất năm 1980", "kỵ năm 1980", "chết 1980"
-            var mNamMat = Regex.Match(q, @"(?:mat|chet|qua doi|tu tran|ky)\s*(?:nam)?\s*(\d{4})");
-            if (mNamMat.Success && int.TryParse(mNamMat.Groups[1].Value, out int namMat))
-                return QueryTheoNam(namMat, false);
-
-            // 2. Pattern "đời N"
-            var matchDoi = Regex.Match(q, @"doi\s*(\d+)");
-            if (matchDoi.Success && int.TryParse(matchDoi.Groups[1].Value, out int level))
-            {
-                // Xử lý khi không có tên người sau "đời N" hoặc chỉ hỏi số lượng
-                string afterDoi = q.Substring(matchDoi.Index + matchDoi.Length).Trim();
-                if (string.IsNullOrWhiteSpace(afterDoi)
-                    || afterDoi.StartsWith("co ai") || afterDoi.StartsWith("co gi")
-                    || afterDoi.StartsWith("co bao nhieu") || afterDoi.StartsWith("bao nhieu")
-                    || afterDoi.StartsWith("co may") || afterDoi.StartsWith("may nguoi"))
-                {
-                    return QueryDoiSo(level);
-                }
-            }
-
-            // 3. Câu hỏi về "người này" / "gia đình đang chọn"
-            if (ContainsAny(q, "nguoi nay", "gia dinh nay", "day", "nguoi dang chon", "hien tai"))
-            {
-                return QueryCurrentFamily(currentFamily, q);
-            }
-
-            // 4. Tìm quan hệ giữa 2 người: "X và Y", "X với Y", "X là gì của Y"
-            string nameA, nameB;
-            if (TryExtractTwoNames(question, out nameA, out nameB))
-            {
-                return QueryRelationship(nameA, nameB);
-            }
-
-            // 5. Các pattern cần tên người — trích tên, rồi tìm
-            string name = ExtractName(question); // dùng bản gốc có dấu để tìm
-            string nameNorm = RemoveDiacritics(name.ToLowerInvariant());
-
-            if (string.IsNullOrWhiteSpace(nameNorm))
-            {
-                return "Xin hỏi cụ thể hơn, ví dụ:\n• \"Con của Nguyễn Văn Chính\"\n• \"Mộ của Trần Thị Thê ở đâu?\"\n• \"Đời 4 có ai?\"";
-            }
-
-            var entries = FindByName(nameNorm);
-
-            if (entries.Count == 0)
-            {
-                return $"Không tìm thấy ai tên \"{name}\" trong gia phả.\n"
-                    + "Hãy kiểm tra lại tên hoặc thử gõ một phần tên họ.";
-            }
-
-            // Lấy hàm xử lý theo loại câu hỏi
-            Func<SearchEntry, string> detailFunc = GetDetailQueryFunc(q);
-
-            if (entries.Count == 1)
-            {
-                // Duy nhất 1 kết quả → trả lời trực tiếp
-                return detailFunc != null
-                    ? detailFunc(entries[0])
-                    : QueryThongTinDay(entries[0]);
-            }
-
-            // Nhiều người cùng tên
-            if (detailFunc == null)
-            {
-                // Câu hỏi chung (tìm / thông tin) → liệt kê danh sách để người dùng chọn
-                return FormatMultipleResults(name, entries);
-            }
-
-            // Câu hỏi cụ thể (con, cha, mộ…) → trả lời cho TẤT CẢ người cùng tên
-            return QueryDetailForAll(name, entries, detailFunc);
+            return Execute(parsed.Intent, currentFamily, parsed.Source).AnswerText;
         }
 
         // ── Routing helpers ───────────────────────────────────────────────────
@@ -166,63 +110,51 @@ namespace vietnamgiapha.AI
         /// </summary>
         private Func<SearchEntry, string> GetDetailQueryFunc(string q)
         {
-            if (ContainsAny(q, "con cua", "con cai", "con trai", "con gai", "co may con"))
-                return QueryConCua;
+            int ancestorLevels;
+            string spouseRole;
+            string kind = MapDetailKindFromQuestion(q, out ancestorLevels, out spouseRole);
+            return GetDetailFuncForKind(kind, ancestorLevels, spouseRole);
+        }
 
-            if (ContainsAny(q, "cha cua", "ba cua", "cha la ai", "ba la ai"))
-                return QueryChaCua;
+        /// <summary>Map kind (từ rule file) → hàm tra fact — dùng chung intent + fallback.</summary>
+        private Func<SearchEntry, string> GetDetailFuncForKind(string kind, int ancestorLevels, string spouseRole)
+        {
+            switch (kind)
+            {
+                case GiaPhaIntentKinds.Children:
+                    return QueryConCua;
+                case GiaPhaIntentKinds.Parents:
+                    return QueryChaCua;
+                case GiaPhaIntentKinds.Mother:
+                    return QueryMeCua;
+                case GiaPhaIntentKinds.Spouse:
+                    if (spouseRole == "Chồng")
+                    {
+                        return e => QueryVoChong(e, "Chồng");
+                    }
+                    return e => QueryVoChong(e, "Vợ");
+                case GiaPhaIntentKinds.Siblings:
+                    return QueryAnhEm;
+                case GiaPhaIntentKinds.Descendants:
+                    return QueryChauCua;
+                case GiaPhaIntentKinds.MemorialDay:
+                    return QueryNgayKy;
+                case GiaPhaIntentKinds.Grave:
+                    return QueryMo;
+                case GiaPhaIntentKinds.GenerationRank:
+                    return QueryDoiMay;
+                case GiaPhaIntentKinds.Note:
+                    return QueryGhiChu;
+                case GiaPhaIntentKinds.FullDescendants:
+                    return QueryHauDue;
+                case GiaPhaIntentKinds.CourtesyName:
+                    return QueryTenTu;
+                case GiaPhaIntentKinds.Ancestor:
+                    int levels = ancestorLevels > 0 ? ancestorLevels : 2;
+                    return e => QueryToTienN(e, levels);
+            }
 
-            if (ContainsAny(q, "me cua", "ma cua", "me la ai"))
-                return QueryMeCua;
-
-            if (ContainsAny(q, "vo cua", "vo la ai", "nguoi vo"))
-                return e => QueryVoChong(e, "Vợ");
-
-            if (ContainsAny(q, "chong cua", "chong la ai", "nguoi chong"))
-                return e => QueryVoChong(e, "Chồng");
-
-            if (ContainsAny(q, "anh em cua", "anh chi em cua", "anh cua", "em cua", "chi cua"))
-                return QueryAnhEm;
-
-            if (ContainsAny(q, "chau cua", "chau noi", "chau ngoai"))
-                return QueryChauCua;
-
-            // Ngày kỵ — thêm synonym "ngày mất", "ngày chết", "ngày qua đời"
-            if (ContainsAny(q, "ngay ky", "ngay gio", "ky nhat", "gio",
-                               "ngay mat", "ngay chet", "ngay qua doi"))
-                return QueryNgayKy;
-
-            if (ContainsAny(q, "mo ", "phan mo", "lang mo", "an tang", "chon cat"))
-                return QueryMo;
-
-            if (ContainsAny(q, "doi may", "the he thu", "thu may"))
-                return QueryDoiMay;
-
-            if (ContainsAny(q, "ghi chu", "chi tiet", "mo ta", "ghi nhan"))
-                return QueryGhiChu;
-
-            // Tổ tiên nhiều cấp — ông bà nội (2 cấp)
-            if (ContainsAny(q, "ong noi", "ba noi"))
-                return e => QueryToTienN(e, 2);
-
-            // Tổ tiên nhiều cấp — ông bà cố/cụ (3 cấp)
-            if (ContainsAny(q, "ong co", "ba co", "cu ong", "cu ba",
-                               "ong cu", "ba cu", "ong to", "ba to"))
-                return e => QueryToTienN(e, 3);
-
-            // Tổ tiên 4 cấp — kỵ
-            if (ContainsAny(q, "ky cua", "ky la ai"))
-                return e => QueryToTienN(e, 4);
-
-            // Hậu duệ đầy đủ theo cây đệ quy
-            if (ContainsAny(q, "hau due", "tat ca con chau", "toan bo con chau", "con chau la ai"))
-                return QueryHauDue;
-
-            // Tên tự / thụy / thường gọi
-            if (ContainsAny(q, "ten tu", "ten thuy", "ten thuong", "ten huy", "biet danh"))
-                return QueryTenTu;
-
-            return null; // câu hỏi chung
+            return null;
         }
 
         /// <summary>
@@ -836,8 +768,24 @@ namespace vietnamgiapha.AI
         {
             if (string.IsNullOrWhiteSpace(qNormalized)) return null;
 
-            // Pattern: "ai là [role] của [tên]?"
+            // Pattern: "cho em biết nhà ông/bà [tên] có mấy đời con cháu"
+            // Mục tiêu: chuẩn hóa về dạng "hậu duệ của [tên]?" để rule/ExtractName bắt chắc.
+            // Lưu ý: dùng chỉ số group trên qNormalized để cắt tên theo original.Trim() (giữ dấu).
             var m = Regex.Match(qNormalized,
+                @"^(?:cho\s+(?:em|toi|minh)\s+biet|xin\s+cho\s+biet|lam\s+on\s+cho\s+biet)\s+(?:nha\s+)?(?:ong|ba)\s+(.+?)\s+co\s+may\s+doi\s+con\s+chau(\?)?$");
+            if (m.Success)
+            {
+                string trimmed = original.Trim();
+                int nameIdx = m.Groups[1].Index;
+                int nameLen = m.Groups[1].Length;
+                string nameOriginal = (nameIdx + nameLen <= trimmed.Length)
+                    ? trimmed.Substring(nameIdx, nameLen)
+                    : m.Groups[1].Value;
+                return "hau due cua " + nameOriginal.Trim() + "?";
+            }
+
+            // Pattern: "ai là [role] của [tên]?"
+            m = Regex.Match(qNormalized,
                 @"^ai\s+la\s+([\w ]+?)\s+cua\s+(.+?)(\?)?$");
             if (m.Success)
             {
@@ -892,47 +840,12 @@ namespace vietnamgiapha.AI
             ).ToList();
         }
 
-        /// <summary>Trích tên người từ câu hỏi bằng cách loại prefix/suffix phổ biến.</summary>
+        /// <summary>Trích tên người — prefix/suffix từ ai/rules/extract-name-*.txt.</summary>
         private static string ExtractName(string originalQuestion)
         {
-            // Danh sách prefix cần loại bỏ (dùng bản gốc có dấu)
-            string[] prefixes = {
-                "con của ", "con cua ", "con cái của ", "con cai cua ",
-                "cha của ", "cha cua ", "ba của ", "ba cua ",
-                "mẹ của ", "me cua ", "mẹ ruột của ", "ma cua ",
-                "vợ của ", "vo cua ", "vợ là ", "vo la ",
-                "chồng của ", "chong cua ", "chồng là ", "chong la ",
-                "anh em của ", "anh em cua ", "anh chị em của ", "anh chi em cua ",
-                "cháu của ", "chau cua ", "cháu nội của ", "chau noi cua ",
-                "ngày kỵ của ", "ngay ky cua ", "ngày kỵ ", "ngay ky ",
-                "ngày giỗ của ", "ngay gio cua ", "ngày giỗ ", "ngay gio ",
-                "ngày mất của ", "ngay mat cua ", "ngày mất ", "ngay mat ",
-                "ngày chết của ", "ngay chet cua ",
-                "mộ của ", "mo cua ", "phần mộ của ", "phan mo cua ",
-                "đời mấy của ", "doi may cua ", "đời mấy ", "doi may ",
-                // Tổ tiên nhiều cấp
-                "ông nội của ", "ong noi cua ", "bà nội của ", "ba noi cua ",
-                "ông cố của ", "ong co cua ", "bà cố của ", "ba co cua ",
-                "ông cụ của ", "ong cu cua ", "bà cụ của ", "ba cu cua ",
-                "kỵ của ", "ky cua ",
-                // Hậu duệ / tên tự
-                "hậu duệ của ", "hau due cua ",
-                "tên tự của ", "ten tu cua ", "tên thụy của ", "ten thuy cua ",
-                "tên thường của ", "ten thuong cua ",
-                "thông tin về ", "thong tin ve ", "thông tin của ", "thong tin cua ",
-                "ghi chú về ", "ghi chu ve ", "ghi chú của ", "ghi chu cua ",
-                "tra cứu ", "tra cuu ", "tìm ", "tim ",
-                "cho tôi biết về ", "cho toi biet ve ",
-                "hỏi về ", "hoi ve ",
-            };
-
-            string[] suffixes = {
-                " là ai?", " la ai?", " là ai", " la ai",
-                " đời mấy?", " doi may?", " đời mấy", " doi may",
-                " ở đâu?", " o dau?", " ở đâu", " o dau",
-                " có ai?", " co ai?", "?", "!",
-            };
-
+            GiaPhaRuleEngineSnapshot rules = GiaPhaRuleEngineLoader.GetSnapshot();
+            string[] prefixes = rules.ExtractNamePrefixes;
+            string[] suffixes = rules.ExtractNameSuffixes;
             string s = originalQuestion.Trim();
 
             // Loại prefix — so sánh không phân biệt hoa/thường

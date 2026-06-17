@@ -1,0 +1,36 @@
+# Mỗi dòng: Kind: mẫu câu tiếng Việt (thêm dòng mới khi Qwen hay nhầm)
+# Rule engine C# cũng đọc pattern tương tự — ưu tiên sửa file này + bấm Reload
+
+ThuyTo: thủy tổ, tổ tiên đầu dòng, ai là thủy tổ, gốc dòng họ
+CountPeople: bao nhiêu người, tổng số, đếm người, có mấy người, tổng cộng bao nhiêu
+NoDescendants: chưa có con, không có con, vô hậu, tuyệt tự, không con nối dõi
+ByBirthYear: sinh năm, sinh ngày, năm sinh, ai sinh năm, sinh ra năm
+ByDeathYear: mất năm, chết năm, qua đời năm, từ trần năm, mất ngày
+GenerationList: đời N có ai, đời N bao nhiêu người, thế hệ N, đời thứ N
+CurrentFamily: người đang chọn, gia đình này, người này, hiện tại, đang xem, gia đình đang chọn
+
+Relationship: A và B quan hệ gì, quan hệ giữa A và B, mối quan hệ, A với B quan hệ
+Children: con của X, con cái của X, X có mấy con, ai là con của X, con trai con gái của X, sinh ra X, ai sinh ra X, ai có con tên X
+Parents: cha của X, ba của X, cha mẹ của X, bố của X, cha ruột của X
+Mother: mẹ của X, má của X, mẹ ruột của X, u của X
+Spouse: vợ của X, chồng của X, người vợ, người chồng, vợ là ai, chồng là ai
+Siblings: anh em của X, anh chị em của X, anh của X, chị của X, em của X
+Descendants: cháu của X, cháu nội, cháu ngoại, chắt của X
+FullDescendants: hậu duệ của X, toàn bộ con cháu, tất cả con cháu, dòng dõi của X, con cháu là ai
+
+Ancestor: ông nội của X, bà nội của X, ông cố của X, bà cố của X, ông cụ, bà cụ, kỵ của X, tổ tiên của X
+MemorialDay: ngày kỵ của X, ngày giỗ, kỵ nhật, ngày mất của X, ngày chết của X, giỗ của X
+Grave: mộ của X, phần mộ, lăng mộ, mộ ở đâu, an táng, chôn cất, nghĩa địa
+GenerationRank: đời mấy của X, thế hệ thứ mấy, X đời mấy, thuộc đời nào
+CourtesyName: tên tự của X, tên thụy, tên thường, tên húy, biệt danh, tên gọi khác
+Note: ghi chú của X, chi tiết về X, mô tả về X, ghi nhận về X
+
+PersonSummary: thông tin về X, thông tin đầy đủ về X, tóm tắt về X, cho biết về X
+Search: tìm X, tìm kiếm X, tra cứu X, hỏi về X, X là ai trong gia phả
+
+AddPerson: thêm người, thêm thành viên, thêm vợ, thêm chồng, chèn người, thêm người tên X, thêm vào gia đình
+AddChildFamily: thêm gia đình con, thêm đời con, thêm nhánh con, tạo gia đình con
+AddSiblingEm: thêm gia đình em, thêm em
+AddSiblingAnh: thêm gia đình anh, thêm anh
+RenamePerson: đổi tên X thành Y, sửa tên, đặt tên
+DeletePerson: xóa người, gỡ người, loại người khỏi gia đình

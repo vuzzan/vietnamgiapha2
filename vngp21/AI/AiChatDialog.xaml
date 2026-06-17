@@ -83,6 +83,16 @@
                     </StackPanel>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="reloadRulesBtn" Content="↻ Rules" Padding="8,4"
+                            ToolTip="Tải lại rule base (ai\rules\) + Qwen (ai\intent\)"
+                            Foreground="White" Background="Transparent"
+                            BorderBrush="#5080C0" BorderThickness="1"
+                            Click="ReloadRulesBtn_Click" Margin="0,0,8,0" FontSize="11"/>
+                    <Button x:Name="openRulesBtn" Content="📁" Width="28" Height="28"
+                            ToolTip="Mở thư mục ai\ (rules + intent)"
+                            Foreground="White" Background="Transparent"
+                            BorderBrush="#5080C0" BorderThickness="1"
+                            Click="OpenRulesBtn_Click" Margin="0,0,8,0" FontSize="12"/>
                     <Button x:Name="clearBtn" Content="Xóa lịch sử" Padding="8,4"
                             Foreground="White" Background="Transparent"
                             BorderBrush="#5080C0" BorderThickness="1"
@@ -110,6 +120,8 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBox x:Name="inputBox"
                          AcceptsReturn="False"
@@ -122,9 +134,21 @@
                          Padding="8,6"
                          FontSize="13"
                          Margin="0,0,8,0"
-                         mah:TextBoxHelper.Watermark="Hỏi về gia phả... (Enter để gửi)"
-                         KeyDown="InputBox_KeyDown"/>
-                <Button Grid.Column="1" x:Name="sendBtn"
+                         mah:TextBoxHelper.Watermark="Hỏi về gia phả... (Enter gửi, ↑↓ câu trước)"
+                         PreviewKeyDown="InputBox_PreviewKeyDown"/>
+                <Button Grid.Column="1" x:Name="historyUpBtn"
+                        Content="↑" Width="32" Height="36"
+                        ToolTip="Câu hỏi trước"
+                        Click="HistoryUpBtn_Click"
+                        Margin="0,0,4,0"
+                        FontSize="14" Padding="0"/>
+                <Button Grid.Column="2" x:Name="historyDownBtn"
+                        Content="↓" Width="32" Height="36"
+                        ToolTip="Câu hỏi sau"
+                        Click="HistoryDownBtn_Click"
+                        Margin="0,0,8,0"
+                        FontSize="14" Padding="0"/>
+                <Button Grid.Column="3" x:Name="sendBtn"
                         Content="Gửi ▶" Width="72" Height="36"
                         Click="SendBtn_Click"
                         Background="#2E5FA3" Foreground="White"

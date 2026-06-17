@@ -14,8 +14,21 @@ namespace vietnamgiapha.AI
         public bool IsEnabled { get; set; } = false;
 
         /// <summary>
-        /// True = dùng rule-based engine nội bộ (không cần API key).
-        /// False = dùng AI API (cần API key).
+        /// Chế độ backend: RuleEngine | LocalLlama | CloudApi.
+        /// </summary>
+        public string BackendMode { get; set; } = AiBackendModes.RuleEngine;
+
+        /// <summary>Đường dẫn file .gguf (tùy chọn — trống thì dùng ai\models hoặc manifest).</summary>
+        public string LocalLlamaModelPath { get; set; }
+
+        /// <summary>Cổng llama-server; 0 = dùng manifest hoặc 8765.</summary>
+        public int LocalLlamaPort { get; set; }
+
+        /// <summary>Qwen local parse intent JSON khi rule không hiểu câu hỏi.</summary>
+        public bool UseLlmForIntentParse { get; set; } = true;
+
+        /// <summary>
+        /// Tương thích file cài đặt cũ — đồng bộ với BackendMode khi lưu/đọc.
         /// </summary>
         public bool UseLocalRuleEngine { get; set; } = false;
 
@@ -67,8 +80,52 @@ namespace vietnamgiapha.AI
                 }
             }
 
+            // Đồng bộ cờ cũ để file settings cũ vẫn đọc được
+            UseLocalRuleEngine = AiBackendModes.IsRuleEngine(BackendMode);
+
             var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(SettingsPath, json, Encoding.UTF8);
+        }
+
+        /// <summary>Chuyển cài đặt cũ (chỉ UseLocalRuleEngine) sang BackendMode.</summary>
+        private static void MigrateBackendMode(AiSettings s, string rawJson)
+        {
+            if (s == null)
+            {
+                return;
+            }
+
+            bool jsonHasBackendMode = rawJson != null
+                && rawJson.IndexOf("\"BackendMode\"", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            if (!jsonHasBackendMode)
+            {
+                if (s.UseLocalRuleEngine)
+                {
+                    s.BackendMode = AiBackendModes.RuleEngine;
+                }
+                else if (s.IsEnabled && !string.IsNullOrEmpty(s.EncryptedApiKey))
+                {
+                    s.BackendMode = AiBackendModes.CloudApi;
+                }
+                else if (s.IsEnabled && s.EncryptedApiKey == "__dpapi__")
+                {
+                    s.BackendMode = AiBackendModes.CloudApi;
+                }
+                else
+                {
+                    s.BackendMode = AiBackendModes.RuleEngine;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(s.BackendMode))
+            {
+                s.BackendMode = s.UseLocalRuleEngine
+                    ? AiBackendModes.RuleEngine
+                    : AiBackendModes.CloudApi;
+            }
+
+            s.UseLocalRuleEngine = AiBackendModes.IsRuleEngine(s.BackendMode);
         }
 
         /// <summary>Đọc cài đặt từ file — giải mã API key.</summary>
@@ -83,6 +140,7 @@ namespace vietnamgiapha.AI
 
                 var json = File.ReadAllText(SettingsPath, Encoding.UTF8);
                 var s = JsonSerializer.Deserialize<AiSettings>(json) ?? new AiSettings();
+                MigrateBackendMode(s, json);
 
                 // Giải mã key từ file .key
                 if (s.EncryptedApiKey == "__dpapi__" && File.Exists(KeyFilePath))

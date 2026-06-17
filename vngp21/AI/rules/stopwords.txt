@@ -1,0 +1,20 @@
+# Không coi là tên người — rule fail → Qwen (nếu bật) hoặc gợi ý hỏi lại
+# Mỗi dòng 1 cụm (có dấu OK, app tự bỏ dấu khi so khớp)
+chào
+xin chào
+chào bạn
+xin chào bạn
+hello
+hi
+hey
+ok
+oke
+cảm ơn
+camon
+thanks
+thank you
+giúp tôi
+giúp mình
+help
+test
+thử

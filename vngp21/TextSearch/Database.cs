@@ -26,7 +26,9 @@ namespace vietnamgiapha
     public class Database
     {
         private static readonly log4net.ILog log = log4net.LogManager.GetLogger("m0");
-
+        //public static string BASE_SYNC_URL = "https://vietnamgiapha.com/export/index2c.php";
+        //public static string BASE_SYNC_URL = "https://api.vietnamgiapha.com/api/vngp2/sync";
+        public static string BASE_SYNC_URL = "https://mail.semisoftware.com/api/vngp2/sync";
         private static void ReportParseError(string message, Exception ex = null)
         {
             if (ex != null)
@@ -176,8 +178,7 @@ namespace vietnamgiapha
                 client.DefaultRequestHeaders.Accept.Clear();
                 client.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml,application/json;q=0.9,image/avif,image/webp,*/*;q=0.8");
                 client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36");
-                //https://vietnamgiapha.com/export/index2c.php?u=nghia&p=shogun
-                string url = "https://vietnamgiapha.com/export/index2c.php?f=u&u=" + u + "&p=" + p;
+                string url = BASE_SYNC_URL + "?f=u&u=" + u + "&p=" + p;
                 log.Info("Upload " + url);
                 var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
                 var response = await client.PostAsync(url, content).ConfigureAwait(false);
@@ -206,7 +207,7 @@ namespace vietnamgiapha
                 client.DefaultRequestHeaders.Accept.Clear();
                 client.DefaultRequestHeaders.Add("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
                 client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/104.0.0.0 Safari/537.36");
-                string url = "https://vietnamgiapha.com/export/index2c.php?u="+u+"&p="+p;
+                string url = BASE_SYNC_URL + "?u=" + u + "&p=" + p;
                 log.Info("Download " + url);
                 var response = await client.GetAsync(url).ConfigureAwait(false);
                 string responseBody = await response.Content.ReadAsStringAsync().ConfigureAwait(false);

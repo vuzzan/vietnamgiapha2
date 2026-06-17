@@ -1,0 +1,33 @@
+# Mỗi dòng 1 suffix
+ có mấy đời con cháu?
+ co may doi con chau?
+ có mấy đời con cháu
+ co may doi con chau
+ bao nhiêu đời con cháu?
+ bao nhieu doi con chau?
+ bao nhiêu đời con cháu
+ bao nhieu doi con chau
+ bao nhiêu đời?
+ bao nhieu doi?
+ bao nhiêu đời
+ bao nhieu doi
+ có mấy đời?
+ co may doi?
+ có mấy đời
+ co may doi
+ là ai?
+ la ai?
+ là ai
+ la ai
+ đời mấy?
+ doi may?
+ đời mấy
+ doi may
+ ở đâu?
+ o dau?
+ ở đâu
+ o dau
+ có ai?
+ co ai?
+?
+!

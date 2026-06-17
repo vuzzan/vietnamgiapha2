@@ -1,0 +1,5 @@
+# Intent cấp cao — không bắt buộc có tên người
+ThuyTo: thuy to, thuythu, to tien, thuy-to
+CountPeople: bao nhieu, tong so, so nguoi, tong cong, dem nguoi
+NoDescendants: chua co con, khong co con, vo hau, tuyet tu, khong con
+CurrentFamily|useCurrentFamily: nguoi nay, gia dinh nay, day, nguoi dang chon, hien tai

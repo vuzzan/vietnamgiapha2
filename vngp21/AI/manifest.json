@@ -1,0 +1,5 @@
+{
+  "serverExe": "llama-server.exe",
+  "defaultModelFile": "models/qwen3-4b-instruct-q4_k_m.gguf",
+  "port": 8765
+}

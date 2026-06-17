@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:vietnamgiapha"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:smith="clr-namespace:Smith.WPF.HtmlEditor;assembly=Smith.WPF.HtmlEditor"
+        xmlns:gpctrl="clr-namespace:vietnamgiapha.Controls"
         d:DataContext="{d:DesignInstance local:MainWindowViewModel}"
         Title="Việt Nam Gia Phả 2.2026 - www.vietnamgiapha.com từ năm 2003" 
         Width="1024"
@@ -1115,7 +1115,7 @@ SelectedIndex="0"
                                             <TextBlock Text="Gia sử" VerticalAlignment="Center"/>
                                         </StackPanel>
                                     </TabItem.Header>
-                                    <smith:HtmlEditor x:Name="htmlEditorPhaKy" LostFocus="htmlEditorPhaKy_LostFocus"/>
+                                    <gpctrl:WebView2HtmlEditor x:Name="htmlEditorPhaKy" LostFocus="htmlEditorPhaKy_LostFocus"/>
                                 </TabItem>
                                 <TabItem Style="{StaticResource SubTabStyle}">
                                     <TabItem.Header>
@@ -1124,7 +1124,7 @@ SelectedIndex="0"
                                             <TextBlock Text="Thủy tổ" VerticalAlignment="Center"/>
                                         </StackPanel>
                                     </TabItem.Header>
-                                    <smith:HtmlEditor x:Name="htmlEditorThuyto" LostFocus="htmlEditorThuyto_LostFocus"/>
+                                    <gpctrl:WebView2HtmlEditor x:Name="htmlEditorThuyto" LostFocus="htmlEditorThuyto_LostFocus"/>
                                 </TabItem>
                                 <TabItem Style="{StaticResource SubTabStyle}">
                                     <TabItem.Header>
@@ -1133,7 +1133,7 @@ SelectedIndex="0"
                                             <TextBlock Text="Tộc ước" VerticalAlignment="Center"/>
                                         </StackPanel>
                                     </TabItem.Header>
-                                    <smith:HtmlEditor x:Name="htmlEditorTocUoc" LostFocus="htmlEditorTocUoc_LostFocus"/>
+                                    <gpctrl:WebView2HtmlEditor x:Name="htmlEditorTocUoc" LostFocus="htmlEditorTocUoc_LostFocus"/>
                                 </TabItem>
                                 <TabItem Style="{StaticResource SubTabStyle}">
                                     <TabItem.Header>
@@ -1142,7 +1142,7 @@ SelectedIndex="0"
                                             <TextBlock Text="Hương hỏa" VerticalAlignment="Center"/>
                                         </StackPanel>
                                     </TabItem.Header>
-                                    <smith:HtmlEditor x:Name="htmlEditorHuongHoa" LostFocus="htmlEditorHuongHoa_LostFocus"/>
+                                    <gpctrl:WebView2HtmlEditor x:Name="htmlEditorHuongHoa" LostFocus="htmlEditorHuongHoa_LostFocus"/>
                                 </TabItem>
                             </TabControl>
                         </TabItem>

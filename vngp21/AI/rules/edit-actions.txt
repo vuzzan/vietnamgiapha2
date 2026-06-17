@@ -1,0 +1,9 @@
+# Lệnh sửa gia phả — khớp trước tra cứu
+# Kind|useCurrentFamily: cụm1, cụm2
+
+AddPerson|useCurrentFamily: them nguoi vao gia dinh, them nguoi vao gia pha, them thanh vien, them nguoi moi, chen nguoi, insert nguoi, them vo, them chong, them nguoi ten, them thanh vien vao
+AddChildFamily|useCurrentFamily: them gia dinh con, them doi con, them nhanh con, them con moi, tao gia dinh con, tao doi con
+AddSiblingEm|useCurrentFamily: them gia dinh em, them em, tao gia dinh em
+AddSiblingAnh|useCurrentFamily: them gia dinh anh, them anh, tao gia dinh anh
+RenamePerson: doi ten, sua ten, dat ten, doi ten thanh, sua ten thanh
+DeletePerson: xoa nguoi, go nguoi, xoa thanh vien, loai nguoi

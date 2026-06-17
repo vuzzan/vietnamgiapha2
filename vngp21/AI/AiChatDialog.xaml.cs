@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -13,6 +14,7 @@ namespace vietnamgiapha.AI
     public partial class AiChatDialog : MetroWindow
     {
         private readonly AiApiService _service;
+        private readonly GiaPhaIntentOrchestrator _intentOrchestrator = new GiaPhaIntentOrchestrator();
         private readonly GiaPhaQueryEngine _ruleEngine;
         private FamilyViewModel _currentFamily;   // gia đình đang chọn (có thể null)
         private FamilyViewModel _fileRoot;         // gốc cây gia phả
@@ -23,9 +25,13 @@ namespace vietnamgiapha.AI
         private readonly List<(string role, string content)> _history =
             new List<(string, string)>();
 
-        // Lịch sử câu hỏi người dùng — phím ↑ để gọi lại
+        // Lịch sử câu hỏi người dùng — phím ↑ / nút ↑ để gọi lại
         private readonly List<string> _questionHistory = new List<string>();
         private int _historyIndex = -1; // -1 = chưa điều hướng
+        private string _draftBeforeHistory; // nháp đang gõ trước khi duyệt lịch sử
+
+        /// <summary>Sau khi sửa gia phả qua chat — MainWindow chọn lại node và rebuild index.</summary>
+        public event Action<FamilyViewModel> AfterEditApplied;
 
         public AiChatDialog(AiApiService service, GiaPhaQueryEngine ruleEngine,
             FamilyViewModel fileRoot, FamilyViewModel currentFamily)
@@ -35,6 +41,16 @@ namespace vietnamgiapha.AI
             _ruleEngine = ruleEngine;
             _fileRoot = fileRoot;
             _currentFamily = currentFamily;
+
+            _intentOrchestrator.EditActionHandler = ExecuteEditOnUiThreadAsync;
+
+            Loaded += (_, __) =>
+            {
+                FocusInputBox();
+                GiaPhaRuleEngineLoader.ReloadFromDisk();
+                GiaPhaIntentPromptLoader.ReloadFromDisk();
+            };
+            UpdateHistoryNavButtons();
 
             // Cập nhật tiêu đề theo chế độ
             UpdateModeIndicator();
@@ -46,32 +62,53 @@ namespace vietnamgiapha.AI
         /// <summary>Cập nhật nhãn chế độ hiển thị trên header.</summary>
         public void UpdateModeIndicator()
         {
-            bool isLocal = _service?.Settings?.UseLocalRuleEngine == true
-                          || !(_service?.IsConfigured == true);
-            statusText.Text = isLocal ? "Chế độ tra cứu nội bộ" : "Chế độ AI API";
+            var settings = _service?.Settings;
+            string mode = settings?.BackendMode ?? AiBackendModes.RuleEngine;
+
+            if (AiBackendModes.IsLocalLlama(mode))
+            {
+                statusText.Text = "Qwen: hiểu câu hỏi → fact engine";
+            }
+            else if (AiBackendModes.IsCloudApi(mode))
+            {
+                statusText.Text = "Fact engine (rule) — cloud API tắt trả lời tự do";
+            }
+            else
+            {
+                statusText.Text = "Fact engine (rule)";
+            }
         }
 
         // ── Giao diện ─────────────────────────────────────────────────────────
 
         private string BuildWelcomeMessage()
         {
-            bool isLocal = _service?.Settings?.UseLocalRuleEngine == true
-                          || !(_service?.IsConfigured == true);
+            var settings = _service?.Settings;
+            string mode = settings?.BackendMode ?? AiBackendModes.RuleEngine;
 
-            string modeNote = isLocal
-                ? "📚 Chế độ tra cứu nội bộ — không cần API key."
-                : "🤖 Chế độ AI API — " + (_service?.Settings?.Provider ?? "AI") + " đang hoạt động.";
+            string modeNote;
+            if (AiBackendModes.IsLocalLlama(mode))
+            {
+                modeNote = "🦙 Qwen chỉ hiểu câu hỏi (intent); câu trả lời từ dữ liệu gia phả (fact).";
+            }
+            else if (AiBackendModes.IsCloudApi(mode))
+            {
+                modeNote = "📚 Fact từ engine — chưa dùng cloud để trả lời (chỉ rule parse).";
+            }
+            else
+            {
+                modeNote = "📚 Fact từ engine (rule) — không cần API key.";
+            }
 
             string ctx = _currentFamily?.familyInfo != null
                 ? "Bạn đang xem gia đình đời " + _currentFamily.familyInfo.FamilyLevel
                   + ": " + (_currentFamily.familyInfo.Name0 ?? "") + "."
                 : "Hỏi tôi về bất kỳ ai trong gia phả!";
 
-            string examples = isLocal
-                ? "💡 Ví dụ:\n• \"Con của Nguyễn Văn Chính\"\n• \"Mộ của Trần Thị Hà ở đâu?\"\n• \"Đời 4 có ai?\"\n• \"Thủy tổ là ai?\"\n• \"Lương Văn A và Trần Thị B có quan hệ gì?\""
-                : "💡 Ví dụ: \"Trần Công Đào ở đời mấy?\" hoặc \"Ai là con của người này?\"";
+            string examples = "💡 Tra cứu:\n• \"Con của Nguyễn Văn Chính\"\n• \"Đời 4 có ai?\"\n\n✏️ Sửa (chọn gia đình trên cây trước):\n• \"Thêm người vào gia đình\"\n• \"Thêm gia đình con\"\n• \"Đổi tên A thành B\"";
+            string rulesHint = "📝 Rule base: ai\\rules\\ | Qwen: ai\\intent\\ → sửa txt → ↻ Rules.";
 
-            return $"👋 Xin chào! {ctx}\n\n{modeNote}\n\n{examples}";
+            return $"👋 Xin chào! {ctx}\n\n{modeNote}\n\n{examples}\n\n{rulesHint}";
         }
 
         private void AppendUserBubble(string text)
@@ -88,6 +125,30 @@ namespace vietnamgiapha.AI
             border.Child = MakeSelectableTextBox(text,
                 new SolidColorBrush(Color.FromRgb(30, 40, 60)), 13, isUserBubble: false);
             chatPanel.Children.Add(border);
+            ScrollToBottom();
+        }
+
+        /// <summary>Bong bóng AI rỗng — cập nhật text khi stream.</summary>
+        private TextBox BeginStreamingAiBubble()
+        {
+            var border = new Border { Style = (Style)Resources["AiBubble"] };
+            var tb = MakeSelectableTextBox("",
+                new SolidColorBrush(Color.FromRgb(30, 40, 60)), 13, isUserBubble: false);
+            border.Child = tb;
+            chatPanel.Children.Add(border);
+            ScrollToBottom();
+            return tb;
+        }
+
+        private void AppendStreamChunk(TextBox streamBox, string chunk, StringBuilder accumulator)
+        {
+            if (streamBox == null || string.IsNullOrEmpty(chunk))
+            {
+                return;
+            }
+
+            accumulator?.Append(chunk);
+            streamBox.Text = accumulator != null ? accumulator.ToString() : streamBox.Text + chunk;
             ScrollToBottom();
         }
 
@@ -140,6 +201,17 @@ namespace vietnamgiapha.AI
             _isBusy = busy;
             sendBtn.IsEnabled = !busy;
             inputBox.IsEnabled = !busy;
+            if (reloadRulesBtn != null)
+            {
+                reloadRulesBtn.IsEnabled = !busy;
+            }
+
+            if (openRulesBtn != null)
+            {
+                openRulesBtn.IsEnabled = !busy;
+            }
+
+            UpdateHistoryNavButtons();
             if (busy)
             {
                 statusText.Text = "Đang xử lý...";
@@ -151,6 +223,29 @@ namespace vietnamgiapha.AI
             }
         }
 
+        /// <summary>Đưa focus về ô nhập câu hỏi — sau gửi hoặc mở dialog.</summary>
+        private void FocusInputBox()
+        {
+            if (inputBox == null)
+            {
+                return;
+            }
+
+            Dispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.Input,
+                new Action(() =>
+                {
+                    if (!inputBox.IsEnabled)
+                    {
+                        return;
+                    }
+
+                    inputBox.Focus();
+                    Keyboard.Focus(inputBox);
+                    inputBox.CaretIndex = inputBox.Text?.Length ?? 0;
+                }));
+        }
+
         // ── Gửi câu hỏi ──────────────────────────────────────────────────────
 
         private async void SendBtn_Click(object sender, RoutedEventArgs e)
@@ -158,62 +253,97 @@ namespace vietnamgiapha.AI
             await SendMessageAsync();
         }
 
-        private async void InputBox_KeyDown(object sender, KeyEventArgs e)
+        private async void InputBox_PreviewKeyDown(object sender, KeyEventArgs e)
         {
+            // ↑↓ duyệt lịch sử câu đã gửi (bắt trước TextBox để không bị nuốt phím)
+            if (e.Key == Key.Up && _questionHistory.Count > 0 && !_isBusy)
+            {
+                e.Handled = true;
+                ShowPreviousQuestion();
+                return;
+            }
+
+            if (e.Key == Key.Down && _historyIndex >= 0 && !_isBusy)
+            {
+                e.Handled = true;
+                ShowNextQuestion();
+                return;
+            }
+
             if (e.Key == Key.Enter && !Keyboard.IsKeyDown(Key.LeftShift) && !Keyboard.IsKeyDown(Key.RightShift))
             {
                 e.Handled = true;
                 await SendMessageAsync();
+            }
+        }
+
+        private void HistoryUpBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowPreviousQuestion();
+        }
+
+        private void HistoryDownBtn_Click(object sender, RoutedEventArgs e)
+        {
+            ShowNextQuestion();
+        }
+
+        /// <summary>Lùi về câu hỏi đã gửi trước đó (mới → cũ).</summary>
+        private void ShowPreviousQuestion()
+        {
+            if (_questionHistory.Count == 0 || _isBusy)
+            {
                 return;
             }
 
-            // Phím ↑ — gọi lại câu hỏi trước trong lịch sử
-            if (e.Key == Key.Up && _questionHistory.Count > 0)
+            if (_historyIndex < 0)
             {
-                // Chỉ điều hướng khi cursor đang ở dòng đầu (hoặc text một dòng)
-                bool isOnFirstLine = inputBox.GetLineIndexFromCharacterIndex(inputBox.CaretIndex) == 0;
-                if (isOnFirstLine)
-                {
-                    e.Handled = true;
-                    if (_historyIndex < 0)
-                    {
-                        // Lần đầu bấm ↑ — lưu text hiện tại (nếu có) rồi nhảy về câu cuối
-                        _historyIndex = _questionHistory.Count - 1;
-                    }
-                    else if (_historyIndex > 0)
-                    {
-                        _historyIndex--;
-                    }
+                _draftBeforeHistory = inputBox.Text ?? "";
+                _historyIndex = _questionHistory.Count - 1;
+            }
+            else if (_historyIndex > 0)
+            {
+                _historyIndex--;
+            }
 
-                    inputBox.Text = _questionHistory[_historyIndex];
-                    inputBox.CaretIndex = inputBox.Text.Length;
-                }
+            inputBox.Text = _questionHistory[_historyIndex];
+            inputBox.CaretIndex = inputBox.Text.Length;
+            inputBox.Focus();
+            UpdateHistoryNavButtons();
+        }
 
+        /// <summary>Tiến tới câu hỏi mới hơn; hết lịch sử thì khôi phục nháp.</summary>
+        private void ShowNextQuestion()
+        {
+            if (_historyIndex < 0 || _isBusy)
+            {
                 return;
             }
 
-            // Phím ↓ — đi tới câu hỏi sau (hoặc xóa nếu hết)
-            if (e.Key == Key.Down && _historyIndex >= 0)
+            if (_historyIndex < _questionHistory.Count - 1)
             {
-                bool isOnLastLine = inputBox.GetLineIndexFromCharacterIndex(inputBox.CaretIndex)
-                                    == inputBox.LineCount - 1;
-                if (isOnLastLine)
-                {
-                    e.Handled = true;
-                    if (_historyIndex < _questionHistory.Count - 1)
-                    {
-                        _historyIndex++;
-                        inputBox.Text = _questionHistory[_historyIndex];
-                        inputBox.CaretIndex = inputBox.Text.Length;
-                    }
-                    else
-                    {
-                        // Đã qua câu mới nhất → reset
-                        _historyIndex = -1;
-                        inputBox.Text = "";
-                    }
-                }
+                _historyIndex++;
+                inputBox.Text = _questionHistory[_historyIndex];
             }
+            else
+            {
+                _historyIndex = -1;
+                inputBox.Text = _draftBeforeHistory ?? "";
+            }
+
+            inputBox.CaretIndex = inputBox.Text?.Length ?? 0;
+            inputBox.Focus();
+            UpdateHistoryNavButtons();
+        }
+
+        private void UpdateHistoryNavButtons()
+        {
+            if (historyUpBtn == null || historyDownBtn == null)
+            {
+                return;
+            }
+
+            historyUpBtn.IsEnabled = !_isBusy && _questionHistory.Count > 0;
+            historyDownBtn.IsEnabled = !_isBusy && _historyIndex >= 0;
         }
 
         private async Task SendMessageAsync()
@@ -230,7 +360,8 @@ namespace vietnamgiapha.AI
             }
 
             inputBox.Text = "";
-            _historyIndex = -1; // Reset điều hướng lịch sử khi gửi câu hỏi mới
+            _historyIndex = -1;
+            _draftBeforeHistory = null;
 
             // Lưu câu hỏi vào lịch sử phím ↑ (tránh trùng liên tiếp)
             if (_questionHistory.Count == 0
@@ -246,53 +377,57 @@ namespace vietnamgiapha.AI
 
             AppendUserBubble(question);
 
-            // Chọn chế độ xử lý: rule-based hoặc API
-            bool useLocal = _service?.Settings?.UseLocalRuleEngine == true
-                           || !(_service?.IsConfigured == true);
+            var settings = _service?.Settings;
+            _history.Add(("user", question));
 
-            if (useLocal)
-            {
-                // Chế độ rule-based — đồng bộ, không cần async
-                string answer = _ruleEngine != null
-                    ? _ruleEngine.Query(question, _currentFamily)
-                    : "⚠️ Engine tra cứu chưa được khởi tạo. Hãy mở file gia phả trước.";
-
-                _history.Add(("user", question));
-                _history.Add(("assistant", answer));
-                AppendAiBubble(answer);
-                return;
-            }
-
-            // Chế độ API AI
             var indicator = AppendTypingIndicator();
             SetBusy(true);
             _cts = new CancellationTokenSource();
 
             try
             {
-                // Xây dựng context từ dữ liệu gia phả
-                string familyContext = BuildFamilyContext(question);
+                var progress = new Progress<string>(msg =>
+                {
+                    if (!string.IsNullOrEmpty(msg))
+                    {
+                        statusText.Text = msg;
+                    }
+                });
 
-                // System prompt chứa context
-                string systemPrompt = BuildSystemPrompt(familyContext);
+                GiaPhaQueryResult result = await _intentOrchestrator.AskAsync(
+                    question,
+                    _ruleEngine,
+                    settings,
+                    _currentFamily,
+                    _fileRoot,
+                    progress,
+                    _cts.Token);
 
-                // Thêm vào lịch sử
-                _history.Add(("user", question));
+                chatPanel.Children.Remove(indicator);
 
-                // Gọi AI
-                string fullUserMsg = BuildUserMessageWithHistory(question);
-                string answer = await _service.AskAsync(systemPrompt, fullUserMsg, _cts.Token);
+                string answer = result != null && result.Success
+                    ? result.AnswerText
+                    : (result != null ? result.AnswerText : "❌ Không có kết quả.");
 
-                _history.Add(("assistant", answer));
+                if (!string.IsNullOrEmpty(result?.StatusHint))
+                {
+                    statusText.Text = result.StatusHint;
+                }
 
-                // Giới hạn lịch sử: giữ 10 lượt gần nhất
+                _history.Add(("assistant", answer ?? ""));
+
                 if (_history.Count > 20)
                 {
                     _history.RemoveRange(0, _history.Count - 20);
                 }
 
-                chatPanel.Children.Remove(indicator);
                 AppendAiBubble(answer);
+
+                if (result?.AffectedFamily != null)
+                {
+                    _currentFamily = result.AffectedFamily;
+                    AfterEditApplied?.Invoke(result.AffectedFamily);
+                }
             }
             catch (OperationCanceledException)
             {
@@ -307,7 +442,35 @@ namespace vietnamgiapha.AI
             finally
             {
                 SetBusy(false);
+                UpdateModeIndicator();
+                FocusInputBox();
             }
+        }
+
+        /// <summary>Biên tập gia phả phải chạy trên UI thread (ObservableCollection).</summary>
+        private Task<GiaPhaQueryResult> ExecuteEditOnUiThreadAsync(
+            GiaPhaIntent intent,
+            GiaPhaParseSource source)
+        {
+            var tcs = new TaskCompletionSource<GiaPhaQueryResult>();
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    GiaPhaQueryResult editResult = GiaPhaEditActionExecutor.Execute(
+                        intent,
+                        _currentFamily,
+                        _fileRoot,
+                        _ruleEngine,
+                        source);
+                    tcs.TrySetResult(editResult);
+                }
+                catch (Exception ex)
+                {
+                    tcs.TrySetException(ex);
+                }
+            }));
+            return tcs.Task;
         }
 
         // ── Xây context AI ────────────────────────────────────────────────────
@@ -393,6 +556,48 @@ namespace vietnamgiapha.AI
         }
 
         // ── Buttons ───────────────────────────────────────────────────────────
+
+        private void ReloadRulesBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isBusy)
+            {
+                return;
+            }
+
+            GiaPhaRuleEngineSnapshot ruleSnap = GiaPhaRuleEngineLoader.ReloadFromDisk();
+            GiaPhaIntentRulesSnapshot qwenSnap = GiaPhaIntentPromptLoader.ReloadFromDisk();
+            string summary = GiaPhaRuleEngineLoader.FormatReloadSummary(ruleSnap)
+                + Environment.NewLine + Environment.NewLine
+                + GiaPhaIntentPromptLoader.FormatReloadSummary(qwenSnap);
+            GiaPhaIntentTraceLog.WriteBlock("=== RELOAD RULES ===", summary);
+            AppendAiBubble(summary);
+            statusText.Text = "Rules đã tải lại " + ruleSnap.LoadedAt.ToString("HH:mm:ss");
+            FocusInputBox();
+        }
+
+        private void OpenRulesBtn_Click(object sender, RoutedEventArgs e)
+        {
+            if (!TryOpenAiConfigFolder())
+            {
+                AppendAiBubble("❌ Không mở được thư mục ai\\");
+            }
+        }
+
+        private static bool TryOpenAiConfigFolder()
+        {
+            try
+            {
+                LocalLlamaPaths.EnsureAiFoldersExist();
+                GiaPhaRuleEngineLoader.EnsureRulesFolderExists();
+                GiaPhaIntentPromptLoader.EnsureIntentFolderExists();
+                System.Diagnostics.Process.Start("explorer.exe", LocalLlamaPaths.AiRootDirectory);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
         private void ClearBtn_Click(object sender, RoutedEventArgs e)
         {

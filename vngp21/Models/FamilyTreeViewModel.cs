@@ -304,8 +304,16 @@ namespace vietnamgiapha
                 return;
             }
 
-            SelectFamily(person);
-            RequestScrollToFamilyInTree?.Invoke(person);
+            // Ensure that this person is in view.
+            if (person.Parent != null)
+            {
+                person.Parent.IsExpanded = true;
+            }
+
+            person.IsSelected = true;
+
+            //SelectFamily(person);
+            //RequestScrollToFamilyInTree?.Invoke(person);
         }
 
         void VerifyMatchingPeopleEnumerator()

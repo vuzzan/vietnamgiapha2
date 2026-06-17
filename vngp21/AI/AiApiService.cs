@@ -58,6 +58,32 @@ namespace vietnamgiapha.AI
             return await CallOpenAiCompatibleAsync(provider, systemPrompt, userMessage, ct);
         }
 
+        /// <summary>Gửi câu hỏi và nhận text dần qua <paramref name="onChunk"/> (SSE stream).</summary>
+        public async Task<string> AskStreamAsync(
+            string systemPrompt,
+            string userMessage,
+            Action<string> onChunk,
+            CancellationToken ct = default)
+        {
+            if (_settings == null || !_settings.HasKey)
+            {
+                throw new InvalidOperationException("Chưa cài đặt API key. Vào menu AI → Cài đặt để thêm key.");
+            }
+
+            var provider = AiProviderConfig.Find(_settings.Provider);
+            if (provider == null)
+            {
+                throw new InvalidOperationException("Provider không hợp lệ: " + _settings.Provider);
+            }
+
+            if (provider.Key == "gemini")
+            {
+                return await CallGeminiStreamAsync(provider, systemPrompt, userMessage, onChunk, ct);
+            }
+
+            return await CallOpenAiCompatibleStreamAsync(provider, systemPrompt, userMessage, onChunk, ct);
+        }
+
         /// <summary>Kiểm tra kết nối bằng câu hỏi nhỏ.</summary>
         public async Task<string> TestConnectionAsync(AiSettings s, CancellationToken ct = default)
         {
@@ -149,7 +175,81 @@ namespace vietnamgiapha.AI
             }
         }
 
+        private async Task<string> CallGeminiStreamAsync(
+            AiProviderInfo provider,
+            string systemPrompt,
+            string userMessage,
+            Action<string> onChunk,
+            CancellationToken ct)
+        {
+            string model = _settings.Model ?? "gemini-2.0-flash";
+            string url = provider.EndpointTemplate
+                .Replace("{model}", model)
+                .Replace("{key}", _settings.ApiKey)
+                .Replace(":generateContent?", ":streamGenerateContent?alt=sse&");
+
+            var body = new
+            {
+                system_instruction = string.IsNullOrWhiteSpace(systemPrompt)
+                    ? (object)null
+                    : new { parts = new[] { new { text = systemPrompt } } },
+                contents = new[]
+                {
+                    new { role = "user", parts = new[] { new { text = userMessage } } }
+                },
+                generationConfig = new { temperature = 0.7 }
+            };
+
+            string json = JsonSerializer.Serialize(body);
+            using (var req = new HttpRequestMessage(HttpMethod.Post, url))
+            {
+                req.Content = new StringContent(json, Encoding.UTF8, "application/json");
+                using (var resp = await _http.SendAsync(
+                    req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false))
+                {
+                    return await GeminiStreamHelper.ReadStreamAsync(resp, onChunk, ct)
+                        .ConfigureAwait(false);
+                }
+            }
+        }
+
         // ── OpenAI-compatible (Groq, OpenAI…) ───────────────────────────────
+
+        private async Task<string> CallOpenAiCompatibleStreamAsync(
+            AiProviderInfo provider,
+            string systemPrompt,
+            string userMessage,
+            Action<string> onChunk,
+            CancellationToken ct)
+        {
+            string url = provider.EndpointTemplate;
+            string model = _settings.Model ?? provider.Models[0];
+
+            var messages = string.IsNullOrWhiteSpace(systemPrompt)
+                ? new object[] { new { role = "user", content = userMessage } }
+                : new object[]
+                {
+                    new { role = "system", content = systemPrompt },
+                    new { role = "user", content = userMessage }
+                };
+
+            var body = new { model, messages, temperature = 0.7, stream = true };
+            string json = JsonSerializer.Serialize(body);
+
+            using (var req = new HttpRequestMessage(HttpMethod.Post, url))
+            {
+                req.Headers.Authorization =
+                    new AuthenticationHeaderValue("Bearer", _settings.ApiKey);
+                req.Content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                using (var resp = await _http.SendAsync(
+                    req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false))
+                {
+                    return await OpenAiStreamHelper.ReadChatCompletionStreamAsync(
+                        resp, onChunk, ct).ConfigureAwait(false);
+                }
+            }
+        }
 
         private async Task<string> CallOpenAiCompatibleAsync(
             AiProviderInfo provider,

@@ -1,0 +1,36 @@
+# Mỗi dòng 1 cụm (không dấu) — câu hỏi chứa cụm → Unknown
+# Dòng # là ghi chú
+chao
+xin chao
+chao ban
+hello
+hi
+hey
+cam on
+camon
+thoi tiet
+bao nhieu do
+nhiet do
+nau an
+mon an
+cong thuc
+lap trinh
+python
+javascript
+code 
+viet bai
+tho 
+truyen 
+chung khoan
+bitcoin
+gia vang
+du lich
+phim 
+bong da
+lam sao de
+huong dan
+cach lam
+sua loi
+bug 
+windows 
+may tinh

@@ -41,12 +41,8 @@
     <BootstrapperEnabled>true</BootstrapperEnabled>
     <BootstrapperComponentsUrl>D:\work\vngp29\vngp21\publish</BootstrapperComponentsUrl>
   </PropertyGroup>
-  <!-- Smith.WPF.HtmlEditor + Interop.MSHTML: COM 32-bit — app phải x86 -->
-  <PropertyGroup>
-    <SmithHtmlEditorOutput>$(MSBuildThisFileDirectory)..\SmithHtmlEditor\bin\$(Configuration)\net462\win-x86\</SmithHtmlEditorOutput>
-  </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PlatformTarget>x86</PlatformTarget>
+    <PlatformTarget>AnyCPU</PlatformTarget>
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
@@ -57,7 +53,7 @@
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <PlatformTarget>x86</PlatformTarget>
+    <PlatformTarget>AnyCPU</PlatformTarget>
     <DebugType>pdbonly</DebugType>
     <Optimize>false</Optimize>
     <OutputPath>bin\Release\</OutputPath>
@@ -94,26 +90,15 @@
     <!--And use it after like any other variable:-->
     <Message Text="VersionInfo = $(VersionInfo)" Importance="high" />
   </Target>
-  <Target Name="ZipBuild" AfterTargets="GetVersion" Condition="'$(Configuration)'=='Release11'">
+  <Target Name="ZipBuild" AfterTargets="GetVersion" Condition="'$(Configuration)'=='Release'">
     <Message Text="ZIP VersionInfo = $(VersionInfo)" Importance="high" />
-    <Exec Command="%SYSTEMROOT%\System32\WindowsPowerShell\v1.0\powershell Compress-Archive -Path '$(OutDir)*.exe','$(OutDir)log4net.config','$(OutDir)*.js' -DestinationPath '$(OutDir)\VietNamGiaPha2.zip' -Force" />
+    <Exec Command="%SYSTEMROOT%\System32\WindowsPowerShell\v1.0\powershell Compress-Archive -Path '$(OutDir)*.exe','$(OutDir)log4net.config' -DestinationPath '$(OutDir)\VietNamGiaPha2.zip' -Force" />
   </Target>
   <Target Name="Upload" AfterTargets="ZipBuild" Condition="'$(Configuration)'=='Release'">
     <Message Text="Upload VersionInfo = $(VersionInfo)" Importance="high" />
-    <Exec Command="curl -F &quot;version=$(VersionInfo)&quot; -F &quot;file=@$(OutDir)VietNamGiaPha2.zip&quot; http://download.vietnamgiapha.com/files/index.php" />
-  </Target>
-  <Target Name="EnsureSmithHtmlEditorBuilt" BeforeTargets="ResolveAssemblyReferences">
-    <Error Condition="!Exists('$(SmithHtmlEditorOutput)Smith.WPF.HtmlEditor.dll')" Text="Thiếu Smith.WPF.HtmlEditor (x86). Build SmithHtmlEditor trước: ..\SmithHtmlEditor — hoặc chạy .\build.ps1" />
+    <Exec Command="%SYSTEMROOT%\System32\curl -F &quot;version=$(VersionInfo)&quot; -F &quot;file=@$(OutDir)VietNamGiaPha2.zip&quot; http://download.vietnamgiapha.com/files/index.php" />
   </Target>
   <ItemGroup>
-    <Reference Include="Interop.MSHTML">
-      <HintPath>$(SmithHtmlEditorOutput)Interop.MSHTML.dll</HintPath>
-      <EmbedInteropTypes>False</EmbedInteropTypes>
-    </Reference>
-    <Reference Include="Smith.WPF.HtmlEditor, Version=1.0.0.0, Culture=neutral, processorArchitecture=x86">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>$(SmithHtmlEditorOutput)Smith.WPF.HtmlEditor.dll</HintPath>
-    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Security" />
     <Reference Include="System.ComponentModel.DataAnnotations" />
@@ -195,6 +180,9 @@
     <Compile Include="Services\GiaPhaUndoStack.cs" />
     <Compile Include="Services\SvgCloudApiService.cs" />
     <Compile Include="Services\SvgCloudDuplicateException.cs" />
+    <Compile Include="Controls\WebView2HtmlEditor.xaml.cs">
+      <DependentUpon>WebView2HtmlEditor.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Models\SvgCloudModels.cs" />
     <Compile Include="MainWindow.xaml.cs">
       <DependentUpon>MainWindow.xaml</DependentUpon>
@@ -209,6 +197,10 @@
     <Compile Include="WindowUpload.xaml.cs">
       <DependentUpon>WindowUpload.xaml</DependentUpon>
     </Compile>
+    <Page Include="Controls\WebView2HtmlEditor.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -226,6 +218,27 @@
     <Compile Include="AI\AiApiService.cs" />
     <Compile Include="AI\FamilyContextSerializer.cs" />
     <Compile Include="AI\GiaPhaQueryEngine.cs" />
+    <Compile Include="AI\GiaPhaQueryEngine.Intent.cs" />
+    <Compile Include="AI\GiaPhaIntentKinds.cs" />
+    <Compile Include="AI\GiaPhaIntentLlmGuide.cs" />
+    <Compile Include="AI\GiaPhaIntentPromptLoader.cs" />
+    <Compile Include="AI\GiaPhaRuleEngineLoader.cs" />
+    <Compile Include="AI\GiaPhaIntentRulesSnapshot.cs" />
+    <Compile Include="AI\GiaPhaIntent.cs" />
+    <Compile Include="AI\GiaPhaParseResult.cs" />
+    <Compile Include="AI\GiaPhaQueryResult.cs" />
+    <Compile Include="AI\GiaPhaFactsBuilder.cs" />
+    <Compile Include="AI\GiaPhaIntentOrchestrator.cs" />
+    <Compile Include="AI\GiaPhaEditActionExecutor.cs" />
+    <Compile Include="AI\GiaPhaIntentTraceLog.cs" />
+    <Compile Include="AI\LocalLlamaIntentParser.cs" />
+    <Compile Include="AI\AiBackendModes.cs" />
+    <Compile Include="AI\LocalLlamaPaths.cs" />
+    <Compile Include="AI\LocalLlamaDownloadLinks.cs" />
+    <Compile Include="AI\OpenAiStreamHelper.cs" />
+    <Compile Include="AI\GeminiStreamHelper.cs" />
+    <Compile Include="AI\LocalLlamaHost.cs" />
+    <Compile Include="AI\LocalLlamaChatService.cs" />
     <Page Include="AI\AiSettingsDialog.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -489,6 +502,7 @@
     <PackageReference Include="MaterialDesignThemes.MahApps">
       <Version>3.1.0</Version>
     </PackageReference>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2792.45" />
     <PackageReference Include="MvvmLight">
       <Version>5.4.1.1</Version>
     </PackageReference>
@@ -504,6 +518,32 @@
     <Content Include="ZoneSvg\*.svg">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="ai\manifest.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="ai\README.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="ai\intent\README.txt" />
+    <Content Include="ai\intent\system-prompt.txt" />
+    <Content Include="ai\intent\intent-mapping.txt" />
+    <Content Include="ai\intent\examples.txt" />
+    <Content Include="ai\intent\user-prompt.txt" />
+    <Content Include="ai\intent\blocked-keywords.txt" />
+    <Content Include="ai\rules\README.txt" />
+    <Content Include="ai\rules\top-intent.txt" />
+    <Content Include="ai\rules\detail-intent.txt" />
+    <Content Include="ai\rules\extract-name-prefixes.txt" />
+    <Content Include="ai\rules\extract-name-suffixes.txt" />
+    <Content Include="ai\rules\stopwords.txt" />
+    <Content Include="ai\rules\edit-actions.txt" />
+    <Content Include="ai\models\.gitkeep">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>ai\models\.gitkeep</Link>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="AI\models\" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

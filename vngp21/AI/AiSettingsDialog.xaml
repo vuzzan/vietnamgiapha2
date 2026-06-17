@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:mah="http://metro.mahapps.com/winfx/xaml/controls"
         Title="Cài đặt AI"
-        Height="540"
+        Height="680"
         Width="520"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
@@ -65,6 +65,15 @@
                                            Style="{StaticResource GuideText}" Margin="0,2,0,0"/>
                             </StackPanel>
                         </RadioButton>
+                        <RadioButton x:Name="localLlamaModeRadio" GroupName="AiMode" Margin="0,0,0,6"
+                                     Checked="ModeRadio_Changed" Unchecked="ModeRadio_Changed">
+                            <StackPanel Orientation="Vertical">
+                                <TextBlock Text="🦙 Qwen trên máy (AI local)"
+                                           FontWeight="SemiBold" FontSize="12"/>
+                                <TextBlock Text="Chạy llama-server trong thư mục ai\ — không cần API key, không cần internet khi chat."
+                                           Style="{StaticResource GuideText}" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </RadioButton>
                         <RadioButton x:Name="apiModeRadio" GroupName="AiMode"
                                      Checked="ModeRadio_Changed" Unchecked="ModeRadio_Changed">
                             <StackPanel Orientation="Vertical">
@@ -76,6 +85,50 @@
                         </RadioButton>
                     </StackPanel>
                 </Border>
+
+                <!-- Cài đặt Qwen local -->
+                <StackPanel x:Name="localLlamaSettingsPanel" Visibility="Collapsed">
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="AI Qwen trên máy"/>
+                    <Border Background="#FFF8F0" CornerRadius="4" BorderBrush="#E8D4B8"
+                            BorderThickness="1" Padding="10,8" Margin="0,0,0,6">
+                        <StackPanel>
+                            <TextBlock x:Name="localLlamaGuideText" Style="{StaticResource GuideText}"
+                                       Text="Đặt llama-server.exe và file .gguf vào thư mục ai\ cạnh chương trình."/>
+                            <TextBlock Style="{StaticResource GuideText}" Margin="0,4,0,6"
+                                      Text="RAM gợi ý: Qwen3-4B Q4 ~8–16 GB; Qwen3-8B Q4 nên 16 GB+."/>
+                            <TextBlock Style="{StaticResource SectionHeader}" Text="Tải về (mở trình duyệt)" Margin="0,0,0,4"/>
+                            <Button x:Name="downloadServerBtn" Content="⬇ Tải llama-server (Windows x64)"
+                                    HorizontalAlignment="Left" Padding="10,6" Margin="0,0,0,4"
+                                    Click="DownloadLlamaServerBtn_Click"/>
+                            <Button x:Name="downloadModelBtn" Content="⬇ Tải model Qwen3-4B GGUF (Hugging Face)"
+                                    HorizontalAlignment="Left" Padding="10,6" Margin="0,0,0,4"
+                                    Click="DownloadQwenModelBtn_Click"/>
+                            <Button x:Name="downloadModelSearchBtn" Content="🔎 Xem thêm model Qwen3 GGUF"
+                                    HorizontalAlignment="Left" Padding="10,4"
+                                    Click="DownloadQwenSearchBtn_Click"/>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock Style="{StaticResource SectionHeader}" Text="File model (.gguf)"/>
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="localModelPathBox" Grid.Column="0" Height="32"
+                                 Margin="0,0,4,0" ToolTip="Để trống = tự tìm trong ai\models\"/>
+                        <Button Grid.Column="1" Content="Chọn…" Padding="8,4" Height="32"
+                                Margin="0,0,4,0" Click="BrowseLocalModelBtn_Click"/>
+                        <Button Grid.Column="2" Content="📁 ai\" Padding="8,4" Height="32"
+                                ToolTip="Mở thư mục ai" Click="OpenAiFolderBtn_Click"/>
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <Button x:Name="testLocalBtn" Content="🔍 Khởi động &amp; thử"
+                                Padding="10,6" Click="TestLocalBtn_Click"/>
+                        <TextBlock x:Name="testLocalResultText" VerticalAlignment="Center"
+                                   Margin="10,0,0,0" TextWrapping="Wrap" MaxWidth="280"/>
+                    </StackPanel>
+                </StackPanel>
 
                 <!-- Phần API — chỉ hiện khi chọn chế độ AI API -->
                 <StackPanel x:Name="apiSettingsPanel">

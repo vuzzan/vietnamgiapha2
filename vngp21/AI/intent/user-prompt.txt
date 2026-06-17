@@ -1,0 +1,4 @@
+NHIỆM VỤ: Phân loại CÂU HỎI sau vào đúng 1 intent trong whitelist gia phả.
+KHÔNG trả lời nội dung — chỉ JSON intent.
+
+NGỮ CẢNH PHẢ ĐỒ (tham khảo, không bịa tên):

@@ -1,16 +1,13 @@
 # Build vngp21 bằng MSBuild Full (.NET Framework) — không dùng "dotnet build".
-# Smith.WPF.HtmlEditor + Interop.MSHTML: COM 32-bit (win-x86); vngp21 PlatformTarget=x86.
 param(
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Debug',
-    [string]$Platform = 'AnyCPU',
-    [switch]$SkipSmithHtmlEditor
+    [string]$Platform = 'AnyCPU'
 )
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
 $projectFile = Join-Path $projectRoot 'vngp21.csproj'
-$smithProject = Join-Path (Split-Path $projectRoot -Parent) 'SmithHtmlEditor\SmithHtmlEditor.csproj'
 
 function Get-VsMsBuildPath {
     $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -30,12 +27,6 @@ function Get-VsMsBuildPath {
 
 $msbuild = Get-VsMsBuildPath
 Write-Host "MSBuild: $msbuild" -ForegroundColor Cyan
-
-if (-not $SkipSmithHtmlEditor -and (Test-Path $smithProject)) {
-    Write-Host "Build SmithHtmlEditor (win-x86 / x86)..." -ForegroundColor Cyan
-    & $msbuild $smithProject /restore /p:Configuration=$Configuration /p:RuntimeIdentifier=win-x86 /p:PlatformTarget=x86 /v:m
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-}
 
 Write-Host "Build vngp21 ($Configuration|$Platform)..." -ForegroundColor Cyan
 & $msbuild $projectFile /restore /p:Configuration=$Configuration /p:Platform=$Platform /v:m

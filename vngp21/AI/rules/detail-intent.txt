@@ -1,0 +1,19 @@
+# Intent chi tiết — thường kèm tên người (thứ tự = ưu tiên khớp)
+Children: con cua, con cai, con trai, con gai, co may con
+Parents: cha cua, ba cua, cha la ai, ba la ai
+Mother: me cua, ma cua, me la ai
+Spouse|spouse=Vợ: vo cua, vo la ai, nguoi vo
+Spouse|spouse=Chồng: chong cua, chong la ai, nguoi chong
+Siblings: anh em cua, anh chi em cua, anh cua, em cua, chi cua
+Descendants: chau cua, chau noi, chau ngoai
+MemorialDay: ngay ky, ngay gio, ky nhat, gio, ngay mat, ngay chet, ngay qua doi
+Grave: mo , phan mo, lang mo, an tang, chon cat
+GenerationRank: doi may, the he thu, thu may
+Note: ghi chu, chi tiet, mo ta, ghi nhan
+Ancestor|ancestorLevels=2: ong noi, ba noi
+Ancestor|ancestorLevels=3: ong co, ba co, cu ong, cu ba, ong cu, ba cu, ong to, ba to
+Ancestor|ancestorLevels=4: ky cua, ky la ai
+FullDescendants: hau due, con chau, dong doi, tat ca con chau, toan bo con chau, con chau la ai, co may doi con chau, may doi con chau, bao nhieu doi con chau, co may doi, bao nhieu doi
+CourtesyName: ten tu, ten thuy, ten thuong, ten huy, biet danh
+Search: tim , tim kiem, tra cuu, thong tin ve, thong tin cua, hoi ve, cho biet ve, cho toi biet ve
+PersonSummary: ai la, la ai, thong tin day du, tom tat

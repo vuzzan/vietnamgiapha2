@@ -1,0 +1,82 @@
+# Ví dụ few-shot — thêm câu Qwen hay nhầm (format: Câu + JSON một dòng)
+
+Câu: "Con của Lương Văn B?"
+{"kind":"Children","names":["Lương Văn B"],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":false,"spouseRole":null}
+
+Câu: "Ai sinh ra Nguyễn Văn A?"
+{"kind":"Children","names":["Nguyễn Văn A"],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":false,"spouseRole":null}
+
+Câu: "Đời 3 có ai?"
+{"kind":"GenerationList","names":[],"generation":3,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":false,"spouseRole":null}
+
+Câu: "Tìm Nghĩa"
+{"kind":"Search","names":["Nghĩa"],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":false,"spouseRole":null}
+
+Câu: "Tra cứu Trần Thị Lan"
+{"kind":"Search","names":["Trần Thị Lan"],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":false,"spouseRole":null}
+
+Câu: "Thông tin về Lê Văn C"
+{"kind":"PersonSummary","names":["Lê Văn C"],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":false,"spouseRole":null}
+
+Câu: "Nguyễn Văn A và Trần Thị C quan hệ gì?"
+{"kind":"Relationship","names":["Nguyễn Văn A","Trần Thị C"],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":false,"spouseRole":null}
+
+Câu: "Vợ của Phạm Văn D là ai?"
+{"kind":"Spouse","names":["Phạm Văn D"],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":false,"spouseRole":"Vợ"}
+
+Câu: "Chồng của Trần Thị E?"
+{"kind":"Spouse","names":["Trần Thị E"],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":false,"spouseRole":"Chồng"}
+
+Câu: "Ông nội của X là ai?"
+{"kind":"Ancestor","names":["X"],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":2,"useCurrentFamily":false,"spouseRole":null}
+
+Câu: "Kỵ của Y là ai?"
+{"kind":"Ancestor","names":["Y"],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":4,"useCurrentFamily":false,"spouseRole":null}
+
+Câu: "Mộ của Trần Thị Hà ở đâu?"
+{"kind":"Grave","names":["Trần Thị Hà"],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":false,"spouseRole":null}
+
+Câu: "Ngày kỵ của Nguyễn Văn K?"
+{"kind":"MemorialDay","names":["Nguyễn Văn K"],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":false,"spouseRole":null}
+
+Câu: "Sinh năm 1945 có ai?"
+{"kind":"ByBirthYear","names":[],"generation":null,"year":1945,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":false,"spouseRole":null}
+
+Câu: "Thủy tổ là ai?"
+{"kind":"ThuyTo","names":[],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":false,"spouseRole":null}
+
+Câu: "Người này là ai?"
+{"kind":"CurrentFamily","names":[],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":true,"spouseRole":null}
+
+Câu: "chào"
+{"kind":"Unknown","names":[],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":false,"spouseRole":null}
+
+Câu: "xin chào bạn"
+{"kind":"Unknown","names":[],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":false,"spouseRole":null}
+
+Câu: "tìm người tên Nghĩa"
+{"kind":"Search","names":["Nghĩa"],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":false,"spouseRole":null}
+
+Câu: "tôi muốn tìm ông Nghĩa"
+{"kind":"Search","names":["Nghĩa"],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":false,"spouseRole":null}
+
+Câu: "Thời tiết hôm nay thế nào?"
+{"kind":"Unknown","names":[],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":false,"spouseRole":null,"newPersonName":null}
+
+Câu: "thêm người vào gia đình"
+{"kind":"AddPerson","names":[],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":true,"spouseRole":null,"newPersonName":null}
+
+Câu: "thêm người tên Nguyễn Văn Mới"
+{"kind":"AddPerson","names":[],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":true,"spouseRole":null,"newPersonName":"Nguyễn Văn Mới"}
+
+Câu: "thêm gia đình con"
+{"kind":"AddChildFamily","names":[],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":true,"spouseRole":null,"newPersonName":null}
+
+Câu: "thêm gia đình em"
+{"kind":"AddSiblingEm","names":[],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":true,"spouseRole":null,"newPersonName":null}
+
+Câu: "đổi tên Nguyễn Văn A thành Nguyễn Văn B"
+{"kind":"RenamePerson","names":["Nguyễn Văn A"],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":false,"spouseRole":null,"newPersonName":"Nguyễn Văn B"}
+
+Câu: "xóa người"
+{"kind":"DeletePerson","names":[],"generation":null,"year":null,"isBirthYear":true,"ancestorLevels":null,"useCurrentFamily":true,"spouseRole":null,"newPersonName":null}

@@ -1,0 +1,113 @@
+# Mỗi dòng 1 prefix — dài hơn nên đứng trước (app tự sắp lại khi load)
+con cái của 
+con cai cua 
+con của 
+con cua 
+anh chị em của 
+anh chi em cua 
+anh em của 
+anh em cua 
+cháu nội của 
+chau noi cua 
+cháu của 
+chau cua 
+ngày giỗ của 
+ngay gio cua 
+ngày giỗ 
+ngay gio 
+ngày mất của 
+ngay mat cua 
+ngày mất 
+ngay mat 
+ngày chết của 
+ngay chet cua 
+ngày kỵ của 
+ngay ky cua 
+ngày kỵ 
+ngay ky 
+phần mộ của 
+phan mo cua 
+mộ của 
+mo cua 
+đời mấy của 
+doi may cua 
+đời mấy 
+doi may 
+ông nội của 
+ong noi cua 
+bà nội của 
+ba noi cua 
+ông cố của 
+ong co cua 
+bà cố của 
+ba co cua 
+ông cụ của 
+ong cu cua 
+bà cụ của 
+ba cu cua 
+con cháu của 
+con chau cua 
+hậu duệ của 
+hau due cua 
+tên thụy của 
+ten thuy cua 
+tên tự của 
+ten tu cua 
+tên thường của 
+ten thuong cua 
+thông tin về 
+thong tin ve 
+thông tin của 
+thong tin cua 
+ghi chú về 
+ghi chu ve 
+ghi chú của 
+ghi chu cua 
+cho tôi biết về 
+cho toi biet ve 
+cho em biết 
+cho em biet 
+cho mình biết 
+cho minh biet 
+xin cho biết 
+xin cho biet 
+cha của 
+cha cua 
+ba của 
+ba cua 
+mẹ ruột của 
+mẹ của 
+me cua 
+ma cua 
+chồng của 
+chong cua 
+chồng là 
+chong la 
+vợ của 
+vo cua 
+vợ là 
+vo la 
+nhà ông 
+nha ong 
+nhà bà 
+nha ba 
+kỵ của 
+ky cua 
+người có tên 
+nguoi co ten 
+người tên 
+nguoi ten 
+tên là 
+ten la 
+tra cứu 
+tra cuu 
+tìm 
+tim 
+tên 
+ten 
+hỏi về 
+hoi ve 
+ông 
+ong 
+bà 
+ba 

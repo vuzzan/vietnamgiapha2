@@ -5624,6 +5624,10 @@ namespace vietnamgiapha
             log4net.Config.XmlConfigurator.Configure(repository, fileInfo);
             //
             InitializeComponent();
+
+            // Dừng llama-server sidecar khi thoát app
+            Application.Current.Exit += (s, args) => AI.LocalLlamaHost.Instance.Stop();
+
             phaDoSubtreeListBox.ItemsSource = _phaDoRenderScopes;
             UpdatePhaDoSubtreeListBoxToolTip();
             InitPhaDoCardLayoutCombo();
@@ -6638,14 +6642,28 @@ namespace vietnamgiapha
             }
         }
 
+        /// <summary>Chat AI vừa sửa gia phả — chọn lại node và cập nhật index tra cứu.</summary>
+        private void OnAiChatEditApplied(FamilyViewModel affectedFamily)
+        {
+            if (affectedFamily != null)
+            {
+                SelectFamilyInTreeView(affectedFamily);
+            }
+
+            // Chỉ rebuild index — không gọi RebuildAiQueryIndex (tránh bubble "tải file mới" trong chat)
+            var root = viewModel?.FamilyTree?.Family?.RootPerson;
+            _aiQueryEngine.BuildIndex(root);
+            UpdateHtmlGiaPha();
+        }
+
         public void UpdateHtmlGiaPha()
         {
             if (viewModel != null)
             {
-                htmlEditorTocUoc.ContentHtml = viewModel.FamilyTree.Tocuoc;
-                htmlEditorPhaKy.ContentHtml = viewModel.FamilyTree.PhaKy;
-                htmlEditorHuongHoa.ContentHtml = viewModel.FamilyTree.HuongHoa;
-                htmlEditorThuyto.ContentHtml = viewModel.FamilyTree.ThuyTo;
+                htmlEditorTocUoc.SetContentHtml(viewModel.FamilyTree.Tocuoc);
+                htmlEditorPhaKy.SetContentHtml(viewModel.FamilyTree.PhaKy);
+                htmlEditorHuongHoa.SetContentHtml(viewModel.FamilyTree.HuongHoa);
+                htmlEditorThuyto.SetContentHtml(viewModel.FamilyTree.ThuyTo);
 
                 if (viewModel.FamilyTree.GP.FileName.Length == 0)
                 {
@@ -6662,68 +6680,91 @@ namespace vietnamgiapha
             htmlEditorThuyto.DocumentReady += HtmlEditorThuyto_DocumentReady;
             htmlEditorTocUoc.DocumentReady += HtmlEditorTocUoc_DocumentReady;
         }
-        private void htmlEditorPhaKy_LostFocus(object sender, RoutedEventArgs e)
+        private async void htmlEditorPhaKy_LostFocus(object sender, RoutedEventArgs e)
         {
-            viewModel.FamilyTree.PhaKy = htmlEditorPhaKy.ContentHtml;
-        }
-        private void htmlEditorHuongHoa_LostFocus(object sender, RoutedEventArgs e)
-        {
-            viewModel.FamilyTree.HuongHoa    = htmlEditorHuongHoa.ContentHtml;
-        }
-        private void htmlEditorThuyto_LostFocus(object sender, RoutedEventArgs e)
-        {
-            viewModel.FamilyTree.ThuyTo = htmlEditorThuyto.ContentHtml;
-        }
-        private void htmlEditorTocUoc_LostFocus(object sender, RoutedEventArgs e)
-        {
-            viewModel.FamilyTree.Tocuoc = htmlEditorTocUoc.ContentHtml;
+            if (viewModel?.FamilyTree == null)
+            {
+                return;
+            }
+
+            viewModel.FamilyTree.PhaKy = await htmlEditorPhaKy.GetContentHtmlAsync();
         }
 
-        private void HtmlEditorTocUoc_DocumentReady(object sender, RoutedEventArgs e)
+        private async void htmlEditorHuongHoa_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (viewModel?.FamilyTree == null)
+            {
+                return;
+            }
+
+            viewModel.FamilyTree.HuongHoa = await htmlEditorHuongHoa.GetContentHtmlAsync();
+        }
+
+        private async void htmlEditorThuyto_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (viewModel?.FamilyTree == null)
+            {
+                return;
+            }
+
+            viewModel.FamilyTree.ThuyTo = await htmlEditorThuyto.GetContentHtmlAsync();
+        }
+
+        private async void htmlEditorTocUoc_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (viewModel?.FamilyTree == null)
+            {
+                return;
+            }
+
+            viewModel.FamilyTree.Tocuoc = await htmlEditorTocUoc.GetContentHtmlAsync();
+        }
+
+        private void HtmlEditorTocUoc_DocumentReady(object sender, EventArgs e)
         {
             if (viewModel != null)
             {
-                htmlEditorTocUoc.ContentHtml = viewModel.FamilyTree.Tocuoc;
+                htmlEditorTocUoc.SetContentHtml(viewModel.FamilyTree.Tocuoc);
             }
             else
             {
-                htmlEditorTocUoc.ContentHtml = "";
+                htmlEditorTocUoc.SetContentHtml("");
             }
         }
 
-        private void HtmlEditorThuyto_DocumentReady(object sender, RoutedEventArgs e)
+        private void HtmlEditorThuyto_DocumentReady(object sender, EventArgs e)
         {
             if (viewModel != null)
             {
-                htmlEditorThuyto.ContentHtml = viewModel.FamilyTree.ThuyTo;
+                htmlEditorThuyto.SetContentHtml(viewModel.FamilyTree.ThuyTo);
             }
             else
             {
-                htmlEditorThuyto.ContentHtml = "";
+                htmlEditorThuyto.SetContentHtml("");
             }
         }
 
-        private void HtmlEditorHuongHoa_DocumentReady(object sender, RoutedEventArgs e)
+        private void HtmlEditorHuongHoa_DocumentReady(object sender, EventArgs e)
         {
             if (viewModel != null)
             {
-                htmlEditorHuongHoa.ContentHtml = viewModel.FamilyTree.HuongHoa;
+                htmlEditorHuongHoa.SetContentHtml(viewModel.FamilyTree.HuongHoa);
             }
             else
             {
-                htmlEditorHuongHoa.ContentHtml = "";
+                htmlEditorHuongHoa.SetContentHtml("");
             }
         }
 
-        private void HtmlEditorPhaKy_DocumentReady(object sender, RoutedEventArgs e)
+        private void HtmlEditorPhaKy_DocumentReady(object sender, EventArgs e)
         {
             if (viewModel != null)
             {
-                htmlEditorPhaKy.ContentHtml = viewModel.FamilyTree.PhaKy;
+                htmlEditorPhaKy.SetContentHtml(viewModel.FamilyTree.PhaKy);
             }
             else
             {
-                htmlEditorPhaKy.ContentHtml = "";
+                htmlEditorPhaKy.SetContentHtml("");
             }
         }
 
@@ -13508,6 +13549,7 @@ namespace vietnamgiapha
         {
             // Chỉ hiện settings khi chưa cấu hình gì cả (không có cả key lẫn chế độ nội bộ)
             bool hasAnyConfig = _aiService.IsConfigured
+                               || AI.AiBackendModes.IsLocalLlama(_aiService.Settings?.BackendMode)
                                || (_aiService.Settings?.UseLocalRuleEngine == true)
                                || (_aiService.Settings?.IsEnabled == true);
 
@@ -13540,6 +13582,7 @@ namespace vietnamgiapha
 
             // Tạo mới dialog modeless — truyền rule engine đã build index
             _aiChatDialog = new AI.AiChatDialog(_aiService, _aiQueryEngine, fileRoot, selected) { Owner = this };
+            _aiChatDialog.AfterEditApplied += OnAiChatEditApplied;
             _aiChatDialog.Show();
         }
 

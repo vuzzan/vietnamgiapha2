@@ -11,6 +11,7 @@ namespace vietnamgiapha.AI
     public partial class AiSettingsDialog : MetroWindow
     {
         private readonly AiApiService _service;
+        private readonly LocalLlamaChatService _localLlama = new LocalLlamaChatService();
         private AiSettings _current;
         private bool _keyVisible;
         private CancellationTokenSource _testCts;
@@ -64,16 +65,22 @@ namespace vietnamgiapha.AI
             enabledCheck.IsChecked = s.IsEnabled;
 
             // Chọn chế độ
-            if (s.UseLocalRuleEngine)
+            if (AiBackendModes.IsLocalLlama(s.BackendMode))
             {
-                localModeRadio.IsChecked = true;
+                localLlamaModeRadio.IsChecked = true;
             }
-            else
+            else if (AiBackendModes.IsCloudApi(s.BackendMode))
             {
                 apiModeRadio.IsChecked = true;
             }
+            else
+            {
+                localModeRadio.IsChecked = true;
+            }
 
-            UpdateApiSectionVisibility();
+            localModelPathBox.Text = s.LocalLlamaModelPath ?? "";
+            UpdateModePanelsVisibility();
+            RefreshLocalLlamaGuideText();
 
             // Chọn provider
             int provIdx = 0;
@@ -95,15 +102,42 @@ namespace vietnamgiapha.AI
             }
         }
 
-        private void UpdateApiSectionVisibility()
+        private void UpdateModePanelsVisibility()
         {
             bool isApiMode = apiModeRadio.IsChecked == true;
+            bool isLocalLlama = localLlamaModeRadio.IsChecked == true;
+
             if (apiSettingsPanel != null)
             {
                 apiSettingsPanel.Visibility = isApiMode
-                    ? System.Windows.Visibility.Visible
-                    : System.Windows.Visibility.Collapsed;
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
             }
+
+            if (localLlamaSettingsPanel != null)
+            {
+                localLlamaSettingsPanel.Visibility = isLocalLlama
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+            }
+        }
+
+        private void RefreshLocalLlamaGuideText()
+        {
+            if (localLlamaGuideText == null)
+            {
+                return;
+            }
+
+            string server = LocalLlamaPaths.GetServerExePath();
+            string model = LocalLlamaPaths.ResolveModelPath(localModelPathBox?.Text);
+            bool hasServer = System.IO.File.Exists(server);
+            bool hasModel = !string.IsNullOrEmpty(model);
+
+            localLlamaGuideText.Text =
+                "Thư mục: " + LocalLlamaPaths.AiRootDirectory + "\n"
+                + "• llama-server: " + (hasServer ? "✅ có" : "❌ thiếu — bấm nút Tải llama-server bên dưới") + "\n"
+                + "• model GGUF: " + (hasModel ? "✅ " + System.IO.Path.GetFileName(model) : "❌ thiếu — bấm Tải model hoặc Chọn file");
         }
 
         private void UpdateGuideAndModels(AiProviderInfo provider)
@@ -250,8 +284,129 @@ namespace vietnamgiapha.AI
 
         private void ModeRadio_Changed(object sender, RoutedEventArgs e)
         {
-            UpdateApiSectionVisibility();
+            UpdateModePanelsVisibility();
+            RefreshLocalLlamaGuideText();
             UpdateTestButtonState();
+        }
+
+        private void BrowseLocalModelBtn_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Chọn file model GGUF",
+                Filter = "GGUF model (*.gguf)|*.gguf|Tất cả (*.*)|*.*",
+                InitialDirectory = LocalLlamaPaths.ModelsDirectory
+            };
+
+            if (System.IO.Directory.Exists(LocalLlamaPaths.ModelsDirectory))
+            {
+                dlg.InitialDirectory = LocalLlamaPaths.ModelsDirectory;
+            }
+
+            if (dlg.ShowDialog() == true)
+            {
+                localModelPathBox.Text = dlg.FileName;
+                RefreshLocalLlamaGuideText();
+            }
+        }
+
+        private void OpenAiFolderBtn_Click(object sender, RoutedEventArgs e)
+        {
+            LocalLlamaPaths.EnsureAiFoldersExist();
+            OpenUrlInBrowser(LocalLlamaPaths.AiRootDirectory, isFolder: true);
+        }
+
+        private void DownloadLlamaServerBtn_Click(object sender, RoutedEventArgs e)
+        {
+            OpenUrlInBrowser(LocalLlamaDownloadLinks.LlamaServerReleasesUrl);
+        }
+
+        private void DownloadQwenModelBtn_Click(object sender, RoutedEventArgs e)
+        {
+            OpenUrlInBrowser(LocalLlamaDownloadLinks.Qwen3_4bGgufUrl);
+        }
+
+        private void DownloadQwenSearchBtn_Click(object sender, RoutedEventArgs e)
+        {
+            OpenUrlInBrowser(LocalLlamaDownloadLinks.QwenGgufSearchUrl);
+        }
+
+        /// <summary>Mở URL hoặc thư mục bằng app mặc định của Windows.</summary>
+        private static void OpenUrlInBrowser(string target, bool isFolder = false)
+        {
+            if (string.IsNullOrWhiteSpace(target))
+            {
+                return;
+            }
+
+            try
+            {
+                Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                string label = isFolder ? "thư mục" : "trang web";
+                MessageBox.Show(
+                    "Không mở được " + label + ":\n" + target + "\n\n" + ex.Message,
+                    "Lỗi",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+        }
+
+        private async void TestLocalBtn_Click(object sender, RoutedEventArgs e)
+        {
+            _testCts?.Cancel();
+            _testCts = new CancellationTokenSource();
+
+            testLocalBtn.IsEnabled = false;
+            testLocalResultText.Text = "⏳ Đang khởi động…";
+            testLocalResultText.Foreground = Brushes.Gray;
+
+            var temp = BuildCurrentSettings();
+            var progress = new Progress<string>(msg =>
+            {
+                testLocalResultText.Text = msg;
+            });
+
+            try
+            {
+                string answer = await _localLlama.AskAsync(
+                    temp,
+                    "Bạn là trợ lý gia phả Việt Nam.",
+                    "Trả lời ngắn gọn bằng tiếng Việt: Xin chào!",
+                    null,
+                    progress,
+                    _testCts.Token);
+
+                testLocalResultText.Text = "✅ OK — " + Truncate(answer, 80);
+                testLocalResultText.Foreground = new SolidColorBrush(Color.FromRgb(0, 128, 0));
+            }
+            catch (OperationCanceledException)
+            {
+                testLocalResultText.Text = "Đã hủy.";
+                testLocalResultText.Foreground = Brushes.Gray;
+            }
+            catch (Exception ex)
+            {
+                testLocalResultText.Text = "❌ " + ex.Message.Split('\n')[0];
+                testLocalResultText.Foreground = Brushes.Red;
+            }
+            finally
+            {
+                testLocalBtn.IsEnabled = true;
+                RefreshLocalLlamaGuideText();
+            }
+        }
+
+        private static string Truncate(string text, int max)
+        {
+            if (string.IsNullOrEmpty(text) || text.Length <= max)
+            {
+                return text ?? "";
+            }
+
+            return text.Substring(0, max) + "…";
         }
 
         private void ApiKeyBox_PasswordChanged(object sender, RoutedEventArgs e)
@@ -366,7 +521,19 @@ namespace vietnamgiapha.AI
 
         private AiSettings BuildCurrentSettings()
         {
-            bool useLocal = localModeRadio.IsChecked == true;
+            string backendMode;
+            if (localLlamaModeRadio.IsChecked == true)
+            {
+                backendMode = AiBackendModes.LocalLlama;
+            }
+            else if (apiModeRadio.IsChecked == true)
+            {
+                backendMode = AiBackendModes.CloudApi;
+            }
+            else
+            {
+                backendMode = AiBackendModes.RuleEngine;
+            }
 
             int provIdx = providerCombo.SelectedIndex;
             string provKey = provIdx >= 0 && provIdx < AiProviderConfig.Providers.Count
@@ -379,15 +546,20 @@ namespace vietnamgiapha.AI
                 ? modelCombo.Text
                 : (modelCombo.SelectedItem as string ?? "gemini-2.0-flash");
 
+            bool isCloud = backendMode == AiBackendModes.CloudApi;
+
             return new AiSettings
             {
+                BackendMode = backendMode,
                 Provider = provKey,
                 Model = model,
                 IsEnabled = enabledCheck.IsChecked == true,
-                UseLocalRuleEngine = useLocal,
-                ApiKey = useLocal ? null : apiKey,
-                // Giữ nguyên EncryptedApiKey để Save() biết cần ghi file .key
-                EncryptedApiKey = (!useLocal && !string.IsNullOrEmpty(apiKey)) ? "__dpapi__" : null
+                UseLocalRuleEngine = backendMode == AiBackendModes.RuleEngine,
+                LocalLlamaModelPath = localModelPathBox?.Text?.Trim(),
+                LocalLlamaPort = _current != null ? _current.LocalLlamaPort : 0,
+                UseLlmForIntentParse = _current != null ? _current.UseLlmForIntentParse : true,
+                ApiKey = isCloud ? apiKey : null,
+                EncryptedApiKey = (isCloud && !string.IsNullOrEmpty(apiKey)) ? "__dpapi__" : null
             };
         }
 
@@ -395,18 +567,25 @@ namespace vietnamgiapha.AI
         {
             bool isApiMode = apiModeRadio.IsChecked == true;
             string key = _keyVisible ? apiKeyVisible.Text : apiKeyBox.Password;
-            // Nút test chỉ khả dụng khi ở chế độ API và có key
             testBtn.IsEnabled = isApiMode && !string.IsNullOrWhiteSpace(key);
+            if (testLocalBtn != null)
+            {
+                testLocalBtn.IsEnabled = localLlamaModeRadio.IsChecked == true;
+            }
         }
 
         private static AiSettings CloneSettings(AiSettings s)
         {
             return new AiSettings
             {
+                BackendMode = s.BackendMode,
                 Provider = s.Provider,
                 Model = s.Model,
                 IsEnabled = s.IsEnabled,
                 UseLocalRuleEngine = s.UseLocalRuleEngine,
+                LocalLlamaModelPath = s.LocalLlamaModelPath,
+                LocalLlamaPort = s.LocalLlamaPort,
+                UseLlmForIntentParse = s.UseLlmForIntentParse,
                 ApiKey = s.ApiKey,
                 EncryptedApiKey = s.EncryptedApiKey
             };

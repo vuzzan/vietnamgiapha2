@@ -5,8 +5,6 @@ VisualStudioVersion = 17.7.34009.444
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "vngp21", "vngp21\vngp21.csproj", "{C4DA87AC-EEFD-4CC8-8D79-EBF48FB93D47}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmithHtmlEditor", "SmithHtmlEditor\SmithHtmlEditor.csproj", "{BA4F4AAE-F7E6-FC1E-5905-D4380610734E}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		All|Any CPU = All|Any CPU
@@ -29,18 +27,6 @@ Global
 		{C4DA87AC-EEFD-4CC8-8D79-EBF48FB93D47}.Release|Any CPU.Build.0 = Release|Any CPU
 		{C4DA87AC-EEFD-4CC8-8D79-EBF48FB93D47}.Release|x86.ActiveCfg = Release|Any CPU
 		{C4DA87AC-EEFD-4CC8-8D79-EBF48FB93D47}.Release|x86.Build.0 = Release|Any CPU
-		{BA4F4AAE-F7E6-FC1E-5905-D4380610734E}.All|Any CPU.ActiveCfg = Debug|x86
-		{BA4F4AAE-F7E6-FC1E-5905-D4380610734E}.All|Any CPU.Build.0 = Debug|x86
-		{BA4F4AAE-F7E6-FC1E-5905-D4380610734E}.All|x86.ActiveCfg = Debug|x86
-		{BA4F4AAE-F7E6-FC1E-5905-D4380610734E}.All|x86.Build.0 = Debug|x86
-		{BA4F4AAE-F7E6-FC1E-5905-D4380610734E}.Debug|Any CPU.ActiveCfg = Debug|x86
-		{BA4F4AAE-F7E6-FC1E-5905-D4380610734E}.Debug|Any CPU.Build.0 = Debug|x86
-		{BA4F4AAE-F7E6-FC1E-5905-D4380610734E}.Debug|x86.ActiveCfg = Debug|x86
-		{BA4F4AAE-F7E6-FC1E-5905-D4380610734E}.Debug|x86.Build.0 = Debug|x86
-		{BA4F4AAE-F7E6-FC1E-5905-D4380610734E}.Release|Any CPU.ActiveCfg = Release|x86
-		{BA4F4AAE-F7E6-FC1E-5905-D4380610734E}.Release|Any CPU.Build.0 = Release|x86
-		{BA4F4AAE-F7E6-FC1E-5905-D4380610734E}.Release|x86.ActiveCfg = Release|x86
-		{BA4F4AAE-F7E6-FC1E-5905-D4380610734E}.Release|x86.Build.0 = Release|x86
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
